@@ -2533,3 +2533,12 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   line-height: 1;
   vertical-align: -0.12em;
 }
+
+.zx-ico-sm {
+  font-size: 1.05em;
+}
+
+.zx-ico-lg {
+  font-size: 1.6em;
+  vertical-align: -0.16em;
+}

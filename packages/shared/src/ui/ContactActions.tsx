@@ -135,14 +135,14 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
   return (
     <>
       <a className="zx-btn" href={`mailto:${c.email}`}>
-        <span className="zx-ico" aria-hidden="true">
+        <span className="zx-ico zx-ico-lg" aria-hidden="true">
           ✉
         </span>{' '}
         邮件
       </a>
       {c.wechat && (
         <button type="button" className="zx-btn" onClick={onWechat} title={`微信号:${c.wechat}`}>
-          <span className="zx-ico" aria-hidden="true">
+          <span className="zx-ico zx-ico-sm" aria-hidden="true">
             💬
           </span>{' '}
           微信 · {c.wechat}
@@ -150,7 +150,7 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
       )}
       {hasPhone && (
         <button type="button" className="zx-btn" onClick={() => void onPhone()} title="点击拨打 / 复制">
-          <span className="zx-ico" aria-hidden="true">
+          <span className="zx-ico zx-ico-lg" aria-hidden="true">
             ☎
           </span>{' '}
           电话
