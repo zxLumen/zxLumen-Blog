@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import "@zx/shared/styles.css";
-import { Shell } from "@zx/shared/ui";
 import { NAV, SITE_META, THEME_INIT_SCRIPT } from "@zx/shared";
 import { isAdmin } from "@/lib/auth";
 import { isTestMode } from "@/lib/env";
 import { EnvSwitch } from "@/components/EnvSwitch";
+import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: SITE_META.title,
@@ -23,9 +23,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
-        <Shell nav={nav} extra={admin ? <EnvSwitch testMode={testMode} /> : null}>
+        <AppShell nav={nav} extra={admin ? <EnvSwitch testMode={testMode} /> : null}>
           {children}
-        </Shell>
+        </AppShell>
       </body>
     </html>
   );

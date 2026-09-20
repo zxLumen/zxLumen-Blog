@@ -3,17 +3,28 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { PROFILE } from '../content.js'
 import { ThemePicker } from './ThemePicker.js'
-import type { NavItem } from './types.js'
+import type { LinkComponent, NavItem } from './types.js'
 
 interface TopbarProps {
   nav: NavItem[]
   activeHref?: string
+  /** 由 App 注入的当前路径(Next usePathname);缺省时用 window.location */
+  pathname?: string
+  /** 注入式链接组件(如 Next 的 Link),缺省用原生 <a> */
+  link?: LinkComponent
   extra?: React.ReactNode
 }
 
-export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
-  const [pathname, setPathname] = useState(activeHref)
+export function Topbar({
+  nav,
+  activeHref = '/',
+  pathname: pathnameProp,
+  link,
+  extra,
+}: TopbarProps) {
+  const [winPath, setWinPath] = useState(activeHref)
   const [activeHash, setActiveHash] = useState('')
+  const pathname = pathnameProp ?? winPath
 
   // 导航里指向页内区块的 id(projects/usage/about/guestbook)
   const sectionIds = useMemo(
@@ -21,24 +32,36 @@ export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
     [nav],
   )
 
-  // 计算当前高亮:按路径 + 视口内所在区块
+  // 按路径 + 视口内所在区块计算高亮
   const compute = useCallback(() => {
-    const path = window.location.pathname || '/'
-    setPathname(path)
+    const p = pathnameProp ?? (window.location.pathname || '/')
+    if (!pathnameProp) setWinPath(p)
     let hash = ''
-    if (path === '/') {
+    if (p === '/') {
       for (const id of sectionIds) {
         const el = document.getElementById(id)
         if (el && el.getBoundingClientRect().top <= 130) hash = '#' + id
       }
     }
     setActiveHash(hash)
-  }, [sectionIds])
+  }, [sectionIds, pathnameProp])
 
   const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+
+  // 路由变化后(含客户端导航):滚动到 hash 或顶部;先用 URL hash 兜底高亮,避免先闪 home
   useIsoLayoutEffect(() => {
-    compute()
-  }, [compute])
+    const id = (window.location.hash || '').replace(/^#/, '')
+    if (id) {
+      const el = document.getElementById(id)
+      el?.scrollIntoView({ behavior: 'auto', block: 'start' })
+      if (sectionIds.includes(id)) setActiveHash('#' + id)
+      else setActiveHash('')
+    } else {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+      setActiveHash('')
+    }
+    // 之后的 scroll 事件会让 compute() 依据实际位置refine
+  }, [pathname, sectionIds])
 
   useEffect(() => {
     let raf = 0
@@ -62,12 +85,11 @@ export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
     }
   }, [compute])
 
-  // 同路由导航(首页 / 及其锚点)在客户端处理,避免整页刷新
+  // 同路由(首页 / 及其锚点)在客户端处理;跨路由交给注入的 Link 客户端导航
   function onNavClick(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
     const [pathPart, hash] = href.split('#')
     const targetPath = pathPart || '/'
-    if (targetPath !== (window.location.pathname || '/')) return // 跨路由:交给浏览器
-
+    if (targetPath !== pathname) return
     e.preventDefault()
     if (hash) {
       document.getElementById(hash)?.scrollIntoView({ behavior: 'auto', block: 'start' })
@@ -89,22 +111,37 @@ export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
     return pathname === href || pathname.startsWith(href + '/')
   }
 
+  const Comp = (link ?? 'a') as unknown as React.ComponentType<{
+    href: string
+    className?: string
+    onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void
+    scroll?: boolean
+    children: React.ReactNode
+  }>
+  const linkExtra = link ? { scroll: false } : {}
+
   return (
     <header className="zx-topbar">
       <div className="zx-topbar-in">
-        <a className="zx-logo" href="/" onClick={(e) => onNavClick(e, '/')}>
+        <Comp
+          className="zx-logo"
+          href="/"
+          onClick={(e) => onNavClick(e, '/')}
+          {...linkExtra}
+        >
           <span className="z">❯</span> {PROFILE.shell}
-        </a>
+        </Comp>
         <nav className="zx-nav">
           {nav.map((item) => (
-            <a
+            <Comp
               key={item.href}
               href={item.href}
               onClick={(e) => onNavClick(e, item.href)}
               className={isActive(item.href) ? 'is-active' : undefined}
+              {...linkExtra}
             >
               {item.label}
-            </a>
+            </Comp>
           ))}
         </nav>
         {extra}
