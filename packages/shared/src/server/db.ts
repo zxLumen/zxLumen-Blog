@@ -16,6 +16,8 @@ export interface NewCommentInput {
   parent_id?: number | null
   is_admin?: number
   ip?: string
+  /** 访客匿名 ID(仅服务端使用,不下发前端),用于让作者看到自己的私密留言 */
+  author_cid?: string
 }
 
 export interface NewUsageInput {
@@ -30,7 +32,13 @@ export interface NewUsageInput {
 export interface Db {
   listPublicComments(limit?: number): CommentRow[]
   listAllComments(limit?: number): CommentRow[]
-  listThreadPage(opts?: { page?: number; pageSize?: number; includePrivate?: boolean }): PagedComments
+  listThreadPage(opts?: {
+    page?: number
+    pageSize?: number
+    includePrivate?: boolean
+    /** 访客匿名 ID:额外放行该访客自己的私密留言 */
+    viewerCid?: string
+  }): PagedComments
   getComment(id: number): CommentRow | null
   addComment(input: NewCommentInput): CommentRow
   deleteComment(id: number): boolean
@@ -63,7 +71,9 @@ export function openDb(path: string): Db {
   )
   if (!cols.has('parent_id')) db.exec('ALTER TABLE comments ADD COLUMN parent_id INTEGER DEFAULT NULL')
   if (!cols.has('is_admin')) db.exec('ALTER TABLE comments ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0')
+  if (!cols.has('author_cid')) db.exec("ALTER TABLE comments ADD COLUMN author_cid TEXT DEFAULT ''")
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_comments_cid ON comments(author_cid)')
 
   const mapUsage = (r: Record<string, unknown>): UsageRow => ({
     id: r.id as number,
@@ -95,13 +105,21 @@ export function openDb(path: string): Db {
         .all(limit) as CommentRow[]
     },
 
-    listThreadPage({ page = 1, pageSize = 20, includePrivate = false } = {}) {
+    listThreadPage({ page = 1, pageSize = 20, includePrivate = false, viewerCid = '' } = {}) {
       const size = Math.min(100, Math.max(1, Math.floor(pageSize)))
-      const vis = includePrivate ? '' : `AND visibility='public'`
+      // 站长看全部;访客看公开 + 自己发的私密;其余仅公开
+      const mine = !includePrivate && !!viewerCid
+      const vis = includePrivate
+        ? ''
+        : mine
+          ? `AND (visibility='public' OR author_cid = ?)`
+          : `AND visibility='public'`
+      const visArgs = mine ? [viewerCid] : []
+
       const total = (
         db
           .prepare(`SELECT COUNT(*) AS n FROM comments WHERE parent_id IS NULL ${vis}`)
-          .get() as { n: number }
+          .get(...visArgs) as { n: number }
       ).n
       const totalPages = Math.max(1, Math.ceil(total / size))
       const cur = Math.min(Math.max(1, Math.floor(page)), totalPages)
@@ -113,7 +131,7 @@ export function openDb(path: string): Db {
             `SELECT id FROM comments WHERE parent_id IS NULL ${vis}
              ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
           )
-          .all(size, offset) as { id: number }[]
+          .all(...visArgs, size, offset) as { id: number }[]
       ).map((r) => r.id)
 
       if (rootIds.length === 0) {
@@ -132,7 +150,7 @@ export function openDb(path: string): Db {
            WHERE id IN (SELECT id FROM tree) ${vis}
            ORDER BY created_at ASC, id ASC`,
         )
-        .all(...rootIds) as CommentRow[]
+        .all(...rootIds, ...visArgs) as CommentRow[]
 
       return { rows, total, page: cur, pageSize: size, totalPages }
     },
@@ -148,8 +166,8 @@ export function openDb(path: string): Db {
       const parent_id = typeof input.parent_id === 'number' ? input.parent_id : null
       const info = db
         .prepare(
-          `INSERT INTO comments (author, author_link, body, visibility, parent_id, is_admin, ip, created_at)
-           VALUES (@author, @author_link, @body, @visibility, @parent_id, @is_admin, @ip, @created_at)`,
+          `INSERT INTO comments (author, author_link, body, visibility, parent_id, is_admin, ip, author_cid, created_at)
+           VALUES (@author, @author_link, @body, @visibility, @parent_id, @is_admin, @ip, @author_cid, @created_at)`,
         )
         .run({
           author: input.author,
@@ -159,6 +177,7 @@ export function openDb(path: string): Db {
           parent_id,
           is_admin: input.is_admin ? 1 : 0,
           ip: input.ip ?? '',
+          author_cid: input.author_cid ?? '',
           created_at,
         })
       return {

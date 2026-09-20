@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto'
+import { cookies } from 'next/headers'
 import { isAdmin } from '@/lib/auth'
 import { getActiveDb } from '@/lib/env'
 import { rateLimit, readJson, clientIp } from '@/lib/db'
@@ -5,6 +7,20 @@ import { getAdminNick } from '@/lib/settings'
 import type { Visibility } from '@zx/shared'
 
 export const dynamic = 'force-dynamic'
+
+/** 访客匿名 ID cookie:httpOnly,仅服务端可见,用于让作者看到自己的私密留言 */
+const CID_COOKIE = 'zx_cid'
+
+function cidCookie(cid: string): string {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
+  return `${CID_COOKIE}=${cid}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${secure}`
+}
+
+async function resolveCid(): Promise<{ cid: string; isNew: boolean }> {
+  const raw = (await cookies()).get(CID_COOKIE)?.value ?? ''
+  if (raw) return { cid: raw, isNew: false }
+  return { cid: randomBytes(16).toString('hex'), isNew: true }
+}
 
 /** 归一化昵称用于比较:去空白 + 转小写 */
 const normNick = (s: string) => s.replace(/\s+/g, '').toLowerCase()
@@ -20,6 +36,7 @@ interface Body {
 export async function GET(req: Request) {
   const db = await getActiveDb()
   const admin = await isAdmin()
+  const { cid, isNew } = await resolveCid()
   const url = new URL(req.url)
   const page = Number(url.searchParams.get('page') || 1)
   const pageSize = Number(url.searchParams.get('pageSize') || 20)
@@ -27,8 +44,11 @@ export async function GET(req: Request) {
     page: Number.isFinite(page) ? page : 1,
     pageSize: Number.isFinite(pageSize) ? pageSize : 20,
     includePrivate: admin,
+    viewerCid: cid,
   })
-  return Response.json(data)
+  const res = Response.json(data)
+  if (isNew) res.headers.append('Set-Cookie', cidCookie(cid))
+  return res
 }
 
 export async function POST(req: Request) {
@@ -68,6 +88,7 @@ export async function POST(req: Request) {
     if (!parent) return Response.json({ error: '回复目标不存在' }, { status: 400 })
   }
 
+  const { cid, isNew } = await resolveCid()
   const comment = db.addComment({
     author,
     author_link: link,
@@ -76,6 +97,9 @@ export async function POST(req: Request) {
     parent_id,
     is_admin: admin ? 1 : 0,
     ip,
+    author_cid: cid,
   })
-  return Response.json({ comment }, { status: 201 })
+  const res = Response.json({ comment }, { status: 201 })
+  if (isNew) res.headers.append('Set-Cookie', cidCookie(cid))
+  return res
 }

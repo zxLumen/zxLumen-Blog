@@ -133,7 +133,8 @@ export function GuestbookSection({
     writeCookie(NICK_COOKIE, name)
   }
 
-  const visible = items.filter((c) => c.visibility === 'public' || isAdmin)
+  // 可见性由服务端决定(公开 + 本人私密;站长看全部),前端不再二次过滤
+  const visible = items
   const byId = new Map<number, CommentRow>(visible.map((c) => [c.id, c]))
 
   function rootOf(c: CommentRow): CommentRow {

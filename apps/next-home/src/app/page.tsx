@@ -22,8 +22,14 @@ export default async function Home() {
     }
   }
 
+  const viewerCid = (await cookies()).get("zx_cid")?.value ?? "";
   const db = await getActiveDb();
-  const commentsPage = db.listThreadPage({ page: 1, pageSize: 5, includePrivate: admin });
+  const commentsPage = db.listThreadPage({
+    page: 1,
+    pageSize: 5,
+    includePrivate: admin,
+    viewerCid,
+  });
 
   // 优先 DeepSeek 平台真实用量;失败/未配置回退本地 usage 表(再空则前端用 mock)
   let usage: UsageRow[] | undefined;

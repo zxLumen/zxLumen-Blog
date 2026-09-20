@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS comments (
   parent_id   INTEGER DEFAULT NULL,
   is_admin    INTEGER NOT NULL DEFAULT 0,
   ip          TEXT DEFAULT '',
+  author_cid  TEXT DEFAULT '',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
