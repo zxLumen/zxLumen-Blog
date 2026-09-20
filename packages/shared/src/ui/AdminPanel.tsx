@@ -329,23 +329,21 @@ export function AdminPanel() {
     <div className="zx-container" style={{ paddingBlock: '2.5rem' }}>
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
-        <h1 className="zx-sec-title">站长后台</h1>
+        <div className="zx-tabs is-inline">
+          {(['comments', 'profile', 'token'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`zx-tab${tab === t ? ' is-active' : ''}`}
+              onClick={() => setTab(t)}
+            >
+              {t === 'comments' ? '留言' : t === 'profile' ? '个人信息' : 'Token 用量'}
+            </button>
+          ))}
+        </div>
         <button className="zx-btn zx-btn-sm zx-btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => void logout()}>
           退出登录
         </button>
-      </div>
-
-      <div className="zx-tabs" style={{ marginBottom: '1rem' }}>
-        {(['comments', 'profile', 'token'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            className={`zx-tab${tab === t ? ' is-active' : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {t === 'comments' ? '留言' : t === 'profile' ? '个人信息' : 'Token 用量'}
-          </button>
-        ))}
       </div>
 
       {tab === 'profile' && (
