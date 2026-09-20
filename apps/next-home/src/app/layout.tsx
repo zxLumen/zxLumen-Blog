@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "@zx/shared/styles.css";
-import { NAV, SITE_META, THEME_INIT_SCRIPT } from "@zx/shared";
+import { NAV, NAV_INIT_SCRIPT, SITE_META, THEME_INIT_SCRIPT } from "@zx/shared";
 import { isAdmin } from "@/lib/auth";
 import { isTestMode } from "@/lib/env";
 import { EnvSwitch } from "@/components/EnvSwitch";
@@ -20,7 +20,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="zh-CN" data-theme="github-light" data-layout="sidebar" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script
+          dangerouslySetInnerHTML={{ __html: `${THEME_INIT_SCRIPT};${NAV_INIT_SCRIPT}` }}
+        />
       </head>
       <body>
         <AppShell nav={nav} extra={admin ? <EnvSwitch testMode={testMode} /> : null}>

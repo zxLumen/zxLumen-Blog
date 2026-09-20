@@ -15,6 +15,13 @@ interface TopbarProps {
   extra?: React.ReactNode
 }
 
+/** 由 href 推导航标识:home / projects / usage / about / guestbook / admin */
+function navKey(href: string): string {
+  if (href.includes('#')) return href.split('#')[1]
+  if (href === '/') return 'home'
+  return href.replace(/^\//, '').split('/')[0] || 'home'
+}
+
 export function Topbar({
   nav,
   activeHref = '/',
@@ -26,10 +33,24 @@ export function Topbar({
   const [activeHash, setActiveHash] = useState('')
   const pathname = pathnameProp ?? winPath
 
-  // 导航里指向页内区块的 id(projects/usage/about/guestbook)
   const sectionIds = useMemo(
     () => nav.map((n) => (n.href.includes('#') ? n.href.split('#')[1] : '')).filter(Boolean),
     [nav],
+  )
+
+  // 设置 <html data-nav>(CSS 据此高亮;首帧由内联脚本先设好)
+  const setNavAttr = useCallback(
+    (p: string, hash: string) => {
+      let v = 'home'
+      if (p !== '/') {
+        v = p.replace(/^\//, '').split('/')[0] || 'home'
+      } else {
+        const id = (hash || '').replace(/^#/, '')
+        v = sectionIds.includes(id) ? id : 'home'
+      }
+      document.documentElement.dataset.nav = v
+    },
+    [sectionIds],
   )
 
   // 按路径 + 视口内所在区块计算高亮
@@ -44,26 +65,27 @@ export function Topbar({
       }
     }
     setActiveHash(hash)
-  }, [sectionIds, pathnameProp])
+    setNavAttr(p, hash)
+  }, [sectionIds, pathnameProp, setNavAttr])
 
   const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-  // 路由变化后(含客户端导航):滚动到 hash 或顶部;先用 URL hash 兜底高亮,避免先闪 home
+  // 路由变化后(含客户端导航):滚动到 hash 或顶部;先用 URL hash 定高亮,避免先闪 home
   useIsoLayoutEffect(() => {
     const id = (window.location.hash || '').replace(/^#/, '')
     if (id) {
-      if (sectionIds.includes(id)) setActiveHash('#' + id)
-      else setActiveHash('')
-      const scroll = () => document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' })
+      setActiveHash(sectionIds.includes(id) ? '#' + id : '')
+      setNavAttr(pathname, sectionIds.includes(id) ? '#' + id : '')
+      const scroll = () =>
+        document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' })
       scroll()
-      // 布局稳定后再定位一次,提升刷新恢复的可靠性
       const raf = requestAnimationFrame(scroll)
       return () => cancelAnimationFrame(raf)
     }
     window.scrollTo({ top: 0, behavior: 'auto' })
     setActiveHash('')
-    // 之后的 scroll 事件会让 compute() 依据实际位置refine
-  }, [pathname, sectionIds])
+    setNavAttr(pathname, '')
+  }, [pathname, sectionIds, setNavAttr])
 
   useEffect(() => {
     let raf = 0
@@ -92,7 +114,6 @@ export function Topbar({
   useEffect(() => {
     if (pathname !== '/') return
     if (activeHash) sawHashRef.current = true
-    // 初始化尚未把 URL 的 hash 反映到状态前,不要清除它(否则刷新会掉回 home)
     if (!sawHashRef.current && !activeHash && window.location.hash) return
     const target = pathname + (activeHash || '')
     if (window.location.pathname + window.location.hash !== target) {
@@ -110,25 +131,19 @@ export function Topbar({
       document.getElementById(hash)?.scrollIntoView({ behavior: 'auto', block: 'start' })
       window.history.pushState(null, '', href)
       setActiveHash('#' + hash)
+      document.documentElement.dataset.nav = hash
     } else {
       window.scrollTo({ top: 0, behavior: 'auto' })
       window.history.pushState(null, '', targetPath)
       setActiveHash('')
+      document.documentElement.dataset.nav = 'home'
     }
-  }
-
-  const isActive = (href: string) => {
-    if (href.includes('#')) {
-      const id = href.split('#')[1]
-      return pathname === '/' && activeHash === '#' + id
-    }
-    if (href === '/') return pathname === '/' && activeHash === ''
-    return pathname === href || pathname.startsWith(href + '/')
   }
 
   const Comp = (link ?? 'a') as unknown as React.ComponentType<{
     href: string
     className?: string
+    'data-nav'?: string
     onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void
     scroll?: boolean
     children: React.ReactNode
@@ -138,12 +153,7 @@ export function Topbar({
   return (
     <header className="zx-topbar">
       <div className="zx-topbar-in">
-        <Comp
-          className="zx-logo"
-          href="/"
-          onClick={(e) => onNavClick(e, '/')}
-          {...linkExtra}
-        >
+        <Comp className="zx-logo" href="/" onClick={(e) => onNavClick(e, '/')} {...linkExtra}>
           <span className="z">❯</span> {PROFILE.shell}
         </Comp>
         <nav className="zx-nav">
@@ -151,8 +161,8 @@ export function Topbar({
             <Comp
               key={item.href}
               href={item.href}
+              data-nav={navKey(item.href)}
               onClick={(e) => onNavClick(e, item.href)}
-              className={isActive(item.href) ? 'is-active' : undefined}
               {...linkExtra}
             >
               {item.label}

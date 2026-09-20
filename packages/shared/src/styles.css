@@ -652,7 +652,13 @@ pre {
   background: var(--bg-2);
 }
 
-.zx-nav a.is-active {
+/* 选中态由 <html data-nav="x"> 驱动(首帧即正确,避免先闪 home) */
+html[data-nav='home'] .zx-nav a[data-nav='home'],
+html[data-nav='projects'] .zx-nav a[data-nav='projects'],
+html[data-nav='usage'] .zx-nav a[data-nav='usage'],
+html[data-nav='about'] .zx-nav a[data-nav='about'],
+html[data-nav='guestbook'] .zx-nav a[data-nav='guestbook'],
+html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   color: var(--accent);
   border-color: var(--line-strong);
   background: var(--bg-2);

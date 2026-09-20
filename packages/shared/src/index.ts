@@ -23,6 +23,7 @@ export {
   TIMELINE,
   PROJECTS,
   NAV,
+  NAV_INIT_SCRIPT,
   SITE_META,
 } from './content.js'
 export type { LinkItem, TechItem, TimelineEntry, Project } from './content.js'

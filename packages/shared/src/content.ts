@@ -129,6 +129,21 @@ export const NAV = [
   { label: 'guestbook', href: '/#guestbook' },
 ]
 
+const NAV_SECTION_IDS = NAV.filter((n) => n.href.includes('#')).map((n) => n.href.split('#')[1])
+
+/**
+ * 首帧前根据 pathname/hash 设置 <html data-nav>,让侧栏选中态即时正确(无 home 闪烁)。
+ * 与主题初始化脚本合并输出为一个 <script>。
+ */
+export const NAV_INIT_SCRIPT = `(function(){try{
+var p=location.pathname||'/';var h=(location.hash||'').replace(/^#/,'');
+var ids=${JSON.stringify(NAV_SECTION_IDS)};
+var v;
+if(p==='/'){v=(ids.indexOf(h)>=0)?h:'home';}
+else{var seg=p.replace(/^\\//,'').split('/')[0];v=seg||'home';}
+document.documentElement.dataset.nav=v;
+}catch(e){}})()`
+
 export const SITE_META = {
   title: 'liuzixiang · 个人主页',
   description: '全栈工程师刘子祥的个人主页:项目 / DeepSeek 用量统计 / 简历 / 留言板。',
