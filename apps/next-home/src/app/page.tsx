@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { HomePage } from "@zx/shared/ui";
 import { getActiveDb } from "@/lib/env";
 import { isAdmin } from "@/lib/auth";
-import { getAdminNick } from "@/lib/settings";
+import { getAdminNick, getClientContacts } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,7 @@ export default async function Home() {
       usage={usage}
       isAdmin={admin}
       initialAuthor={initialAuthor}
+      contacts={getClientContacts()}
     />
   );
 }

@@ -54,7 +54,9 @@ export interface Contacts {
   email: string
   /** 微信号(点击复制/跳转添加) */
   wechat?: string
-  /** 电话(倒序存储,避免明文出现在源码/打包产物中;运行时还原) */
+  /** 是否配置了电话(号码本身不下发,点击时向 /api/contact/phone 获取) */
+  hasPhone?: boolean
+  /** 电话(倒序存储,仅服务端 fallback 使用,不下发前端) */
   phoneReversed?: string
 }
 

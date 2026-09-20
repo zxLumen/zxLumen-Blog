@@ -1,9 +1,42 @@
 import crypto from 'node:crypto'
-import { PROFILE } from '@zx/shared'
+import { CONTACTS, PROFILE } from '@zx/shared'
+import type { Contacts } from '@zx/shared'
 import { ADMIN_PASSWORD, getDb } from './db'
 
 export const ADMIN_NICK_KEY = 'admin_nick'
 const ADMIN_PASS_KEY = 'admin_pass'
+const K_EMAIL = 'contact_email'
+const K_WECHAT = 'contact_wechat'
+const K_PHONE = 'contact_phone'
+
+const reverse = (s: string) => [...s].reverse().join('')
+
+/** 联系方式(存主库 meta,默认取 shared 的 CONTACTS);phone 为明文 */
+export function getContactSettings() {
+  const db = getDb()
+  return {
+    email: db.getMeta(K_EMAIL) ?? CONTACTS.email,
+    wechat: db.getMeta(K_WECHAT) ?? CONTACTS.wechat ?? '',
+    phone: db.getMeta(K_PHONE) ?? (CONTACTS.phoneReversed ? reverse(CONTACTS.phoneReversed) : ''),
+  }
+}
+
+export function setContactSettings(c: { email?: string; wechat?: string; phone?: string }) {
+  const db = getDb()
+  if (c.email !== undefined) db.setMeta(K_EMAIL, c.email)
+  if (c.wechat !== undefined) db.setMeta(K_WECHAT, c.wechat)
+  if (c.phone !== undefined) db.setMeta(K_PHONE, c.phone)
+}
+
+/** 传给前端渲染用:只给 email/wechat 与"是否有电话"标记,不下发号码 */
+export function getClientContacts(): Contacts {
+  const { email, wechat, phone } = getContactSettings()
+  return {
+    email,
+    wechat: wechat || undefined,
+    hasPhone: !!phone,
+  }
+}
 
 /** 站长昵称(存主库 meta,默认取 PROFILE.name) */
 export function getAdminNick(): string {

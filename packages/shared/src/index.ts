@@ -25,8 +25,17 @@ export {
   NAV,
   NAV_INIT_SCRIPT,
   SITE_META,
+  CONTACTS,
 } from './content.js'
-export type { LinkItem, TechItem, TimelineEntry, Project } from './content.js'
+export type {
+  LinkItem,
+  TechItem,
+  TimelineEntry,
+  Project,
+  Profile,
+  SiteMeta,
+  Contacts,
+} from './content.js'
 
 // 计价与统计
 export {

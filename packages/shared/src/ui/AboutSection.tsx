@@ -1,10 +1,10 @@
 'use client'
 
-import { PROFILE, TECH, TIMELINE } from '../content.js'
+import { PROFILE, TECH, TIMELINE, type Contacts } from '../content.js'
 import { Section } from './Section.js'
 import { ContactActions } from './ContactActions.js'
 
-export function AboutSection() {
+export function AboutSection({ contacts }: { contacts?: Contacts }) {
   return (
     <Section id="about" tag="// ABOUT" num="03" title="关于 / 简历">
       <div className="zx-about-grid">
@@ -17,7 +17,7 @@ export function AboutSection() {
             {PROFILE.location} · {PROFILE.email}
           </p>
           <div className="zx-cta">
-            <ContactActions />
+            <ContactActions contacts={contacts} />
             <a className="zx-btn" href="/resume.pdf" download>
               下载简历 ↓
             </a>

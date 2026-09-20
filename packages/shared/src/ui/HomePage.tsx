@@ -1,5 +1,6 @@
 'use client'
 
+import type { Contacts } from '../content.js'
 import type { CommentRow, PagedComments, UsageRow } from '../schema.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
@@ -14,6 +15,7 @@ interface HomePageProps {
   isAdmin?: boolean
   apiBase?: string
   initialAuthor?: string
+  contacts?: Contacts
   onSubmitComment?: (input: NewComment) => Promise<CommentRow> | CommentRow
 }
 
@@ -24,6 +26,7 @@ export function HomePage({
   isAdmin,
   apiBase,
   initialAuthor,
+  contacts,
   onSubmitComment,
 }: HomePageProps) {
   return (
@@ -31,7 +34,7 @@ export function HomePage({
       <Hero />
       <ProjectsSection />
       <UsageSection rows={usage} />
-      <AboutSection />
+      <AboutSection contacts={contacts} />
       <GuestbookSection
         page={commentsPage}
         submit={onSubmitComment}

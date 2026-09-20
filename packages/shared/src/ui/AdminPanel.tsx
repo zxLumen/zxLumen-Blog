@@ -24,6 +24,11 @@ export function AdminPanel() {
   const [nick, setNick] = useState('')
   const [nickBusy, setNickBusy] = useState(false)
 
+  const [cEmail, setCEmail] = useState('')
+  const [cWechat, setCWechat] = useState('')
+  const [cPhone, setCPhone] = useState('')
+  const [contactBusy, setContactBusy] = useState(false)
+
   const [curPw, setCurPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [newPw2, setNewPw2] = useState('')
@@ -56,8 +61,14 @@ export function AdminPanel() {
   const loadSettings = useCallback(async () => {
     const sres = await fetch('/api/admin/settings', { credentials: 'same-origin' })
     if (sres.ok) {
-      const s = (await sres.json()) as { nick?: string }
+      const s = (await sres.json()) as {
+        nick?: string
+        contacts?: { email?: string; wechat?: string; phone?: string }
+      }
       setNick(s.nick ?? '')
+      setCEmail(s.contacts?.email ?? '')
+      setCWechat(s.contacts?.wechat ?? '')
+      setCPhone(s.contacts?.phone ?? '')
     }
   }, [])
 
@@ -78,6 +89,26 @@ export function AdminPanel() {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '保存失败' })
     } finally {
       setNickBusy(false)
+    }
+  }
+
+  async function saveContacts() {
+    setContactBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ contacts: { email: cEmail, wechat: cWechat, phone: cPhone } }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(d.error || '保存失败')
+      setMsg({ kind: 'ok', text: '联系方式已保存(前台立即生效)' })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '保存失败' })
+    } finally {
+      setContactBusy(false)
     }
   }
 
@@ -229,6 +260,43 @@ export function AdminPanel() {
             disabled={nickBusy}
           >
             {nickBusy ? '保存中…' : '保存'}
+          </button>
+        </div>
+      </div>
+
+      <div className="zx-panel" style={{ marginBottom: '1rem' }}>
+        <h3>
+          联系方式 <span>前台「关于」与页脚展示;电话不显示号码</span>
+        </h3>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            className="zx-input"
+            style={{ maxWidth: 220 }}
+            value={cEmail}
+            placeholder="邮箱"
+            onChange={(e) => setCEmail(e.target.value)}
+          />
+          <input
+            className="zx-input"
+            style={{ maxWidth: 180 }}
+            value={cWechat}
+            placeholder="微信号"
+            onChange={(e) => setCWechat(e.target.value)}
+          />
+          <input
+            className="zx-input"
+            style={{ maxWidth: 180 }}
+            value={cPhone}
+            placeholder="电话(仅用于拨号/复制,不显示)"
+            onChange={(e) => setCPhone(e.target.value)}
+          />
+          <button
+            className="zx-btn zx-btn-sm zx-btn-primary"
+            type="button"
+            onClick={() => void saveContacts()}
+            disabled={contactBusy}
+          >
+            {contactBusy ? '保存中…' : '保存联系方式'}
           </button>
         </div>
       </div>

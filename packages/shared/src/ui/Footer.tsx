@@ -1,9 +1,9 @@
 'use client'
 
-import { PROFILE } from '../content.js'
+import { PROFILE, type Contacts } from '../content.js'
 import { ContactActions } from './ContactActions.js'
 
-export function Footer() {
+export function Footer({ contacts }: { contacts?: Contacts }) {
   const year = new Date().getFullYear()
   return (
     <footer className="zx-footer">
@@ -12,7 +12,7 @@ export function Footer() {
           © {year} {PROFILE.name} · {PROFILE.handle}
         </span>
         <span className="zx-footer-contact">
-          <span className="zx-muted">联系:</span> <ContactActions variant="compact" />
+          <span className="zx-muted">联系:</span> <ContactActions contacts={contacts} variant="compact" />
         </span>
         <span className="zx-muted">
           built with <span className="zx-accent">React</span> · self-hosted

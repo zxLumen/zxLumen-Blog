@@ -3,6 +3,7 @@ import "@zx/shared/styles.css";
 import { NAV, NAV_INIT_SCRIPT, SITE_META, THEME_INIT_SCRIPT } from "@zx/shared";
 import { isAdmin } from "@/lib/auth";
 import { isTestMode } from "@/lib/env";
+import { getClientContacts } from "@/lib/settings";
 import { EnvSwitch } from "@/components/EnvSwitch";
 import { AppShell } from "@/components/AppShell";
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const admin = await isAdmin();
   const testMode = await isTestMode();
+  const contacts = getClientContacts();
   const nav = admin ? [...NAV, { label: "admin", href: "/admin" }] : NAV;
 
   return (
@@ -25,7 +27,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body>
-        <AppShell nav={nav} extra={admin ? <EnvSwitch testMode={testMode} /> : null}>
+        <AppShell
+          nav={nav}
+          contacts={contacts}
+          extra={admin ? <EnvSwitch testMode={testMode} /> : null}
+        >
           {children}
         </AppShell>
       </body>

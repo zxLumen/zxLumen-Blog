@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.1] - 2026-09-20
+
+### 新增
+
+- **`/admin` 支持设置联系方式**(邮箱 / 微信 / 电话),前台「关于」与页脚**即时生效**(存主库 `meta`)
+
+### 变更
+
+- 电话**不再随页面下发**:点击「☎ 电话」时向后端 `/api/contact/phone` 获取(带限流),确保号码不出现在 HTML / RSC 数据 / 打包产物中(移动端 `tel:` 拨号,桌面端复制)
+
+[0.3.1]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.3.1
+
 ## [0.3.0] - 2026-09-20
 
 ### 新增
