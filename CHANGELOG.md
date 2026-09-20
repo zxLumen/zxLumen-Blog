@@ -2,6 +2,21 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.1] - 2026-09-20
+
+### 变更
+
+- 履历时间修正:腾讯任职与「音频管线」项目结束时间更新为 `2025.10`
+- 项目卡新增**时间区间**展示(按简历补齐各项目起止)
+- 简历 PDF 更新(腾讯 `2025.04 – 2025.10`)
+
+### 说明
+
+- **个人信息相关文件不再纳入版本库**:`resume/resume.md`、生成的 `resume.html` / `resume.pdf`、`public/resume.pdf` 已加入 `.gitignore`;仅保留生成脚本 `resume.py` 与样式 `resume.css`
+- 部署时 `public/resume.pdf` 需**单独提供**(不随仓库分发)
+
+[0.2.1]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.2.1
+
 ## [0.2.0] - 2026-09-20
 
 自 `v0.1.0` 以来:留言体验、后台与导航大幅完善;填入真实简历内容。

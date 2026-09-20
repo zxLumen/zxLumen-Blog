@@ -26,6 +26,8 @@ export interface Project {
   tech: string[]
   /** 状态:online 已投产 / demo 演示中 / building 建设中 / archived 归档 */
   status: 'online' | 'demo' | 'building' | 'archived'
+  /** 时间区间,如 '2025.04 — 2025.10' */
+  period?: string
   /** 部署在你自己服务器上的子域名,如 demo1.yourdomain.com(无域名时留空) */
   demoUrl?: string
   repoUrl?: string
@@ -78,7 +80,7 @@ export const TECH: TechItem[] = [
 
 export const TIMELINE: TimelineEntry[] = [
   {
-    period: '2025.04 — 至今',
+    period: '2025.04 — 2025.10',
     title: '后端研发工程师',
     org: '腾讯 · TEG 数据平台部',
     desc: '负责音频预处理算子与主管线编排:基于 Ray 的管线框架,消息队列/存储链路优化;已完成 17 个算子、4 条主管线并投产。',
@@ -100,6 +102,7 @@ export const TIMELINE: TimelineEntry[] = [
 export const PROJECTS: Project[] = [
   {
     id: 'audio-pipeline',
+    period: '2025.04 — 2025.10',
     name: '音频预处理管线 / 主管线框架',
     desc: '腾讯 TEG:音频算子研发与主管线编排,基于 Ray 构建管线框架,替代 Spark 投产链路,支持多优先级插队与资源混部。',
     tech: ['Python', 'Ray', 'MLOps', 'Model Scheduler', 'MQProxy'],
@@ -112,6 +115,7 @@ export const PROJECTS: Project[] = [
   },
   {
     id: 'windmill',
+    period: '2023.07 — 2023.10',
     name: 'Windmill — 工业大模型服务',
     desc: '百度 ACG:大模型应用服务化框架(RayServe + FastAPI + Websocket),支持 APP/Host 分离部署与低代码大模型应用构建。',
     tech: ['LLMOps', 'Ray Serve', 'FastAPI', 'LangChain', 'Langflow'],
@@ -124,6 +128,7 @@ export const PROJECTS: Project[] = [
   },
   {
     id: 'soe',
+    period: '2023.04 — 2023.07',
     name: 'SOE — 工业仿真优化系统',
     desc: '百度 ACG:数采 + 模型推理 + 控制的通用仿真优化系统,负责推理系统设计与研发,应用于中海油、隆鑫发动机检测等。',
     tech: ['Python', 'Ray', 'Nats', 'Streamz', 'MQTT', 'K8s'],
@@ -135,6 +140,7 @@ export const PROJECTS: Project[] = [
   },
   {
     id: 'ifactory',
+    period: '2022.01 — 2023.04',
     name: 'iFactory Suites — 生产过程优化套件',
     desc: '百度 KG:MPO-Tools + MPO-Service + MPO-Plant 工业优化套件,提供核心算子、模型服务与跨产线自学习,多工业领域投产。',
     tech: ['Python', 'Django', 'MLOps', 'Kafka', 'Docker'],
@@ -145,6 +151,7 @@ export const PROJECTS: Project[] = [
   },
   {
     id: 'social-graph',
+    period: '2020.05 — 2022.01',
     name: '互动关系网络模型优化',
     desc: '百度 BDG:用户互动关系网络的模型与性能优化,引入 Metapath2vec 与分布式游走,支撑 10 亿+ 用户、600 亿+ 关系。',
     tech: ['Paddle', 'PGL', 'GraphLearning', 'MapReduce', 'Embedding'],
@@ -157,6 +164,7 @@ export const PROJECTS: Project[] = [
   },
   {
     id: 'asr-aec',
+    period: '2018.07 — 2020.05',
     name: '语音算法:ASR / AEC / 声纹',
     desc: '百度 DuerOS:回声消除(AEC)、ASR 解码器 C++→C 迁移与优化、无感知声纹注册,应用于耳机/车载支架/音箱等产品。',
     tech: ['C/C++', 'Kaldi', 'AEC', 'ASR', 'Speaker Recognition'],

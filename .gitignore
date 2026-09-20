@@ -31,3 +31,9 @@ npm-debug.log*
 .turbo/
 .vercel/
 out/
+
+# 个人简历(含个人信息,不入库;仅保留生成脚本 resume.py / 样式 resume.css)
+apps/next-home/resume/resume.md
+apps/next-home/resume/resume.html
+apps/next-home/resume/resume.pdf
+apps/next-home/public/resume.pdf

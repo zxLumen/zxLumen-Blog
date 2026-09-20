@@ -68,6 +68,19 @@ curl -X POST https://你的域名/api/usage \
   -d '{"model":"deepseek-chat","input_tokens":1000,"output_tokens":500}'
 ```
 
+## 5.1 提供简历 PDF(不入库,需单独上传)
+
+出于隐私,`public/resume.pdf` **不纳入版本库**。部署后需手动放置,否则「下载简历」会 404:
+
+```bash
+# 在你本机,把简历 PDF 上传到服务器项目目录
+scp ./resume.pdf root@你的服务器:/root/zxLumen-Blog/apps/next-home/public/resume.pdf
+# 若用 Docker 构建:构建前确保该文件已在 apps/next-home/public/ 下
+```
+
+> 生成方式(可选):仓库内 `apps/next-home/resume/` 提供 `resume.py` + `resume.css`;
+> 自备 Markdown 源后运行 `python resume.py resume.md --chrome-path "<Chrome 路径>"` 生成 PDF。
+
 ## 6. 备份
 
 ```bash

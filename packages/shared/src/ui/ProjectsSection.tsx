@@ -16,9 +16,16 @@ function ProjectCard({ project, idx }: { project: Project; idx: number }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
         <h3 style={{ margin: 0 }}>{project.name}</h3>
       </div>
-      <span className="zx-status" data-status={project.status}>
-        {STATUS_LABEL[project.status]}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+        <span className="zx-status" data-status={project.status}>
+          {STATUS_LABEL[project.status]}
+        </span>
+        {project.period && (
+          <span className="zx-mono zx-muted" style={{ fontSize: '0.68rem' }}>
+            {project.period}
+          </span>
+        )}
+      </div>
       <p style={{ marginTop: '0.7rem' }}>{project.desc}</p>
 
       {project.highlights && project.highlights.length > 0 && (
