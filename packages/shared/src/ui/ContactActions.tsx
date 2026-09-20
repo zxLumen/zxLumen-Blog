@@ -9,7 +9,7 @@ interface ContactActionsProps {
   variant?: 'full' | 'compact'
 }
 
-const POP_W = 220
+const POP_W = 330
 const POP_GAP = 8
 
 export function ContactActions({ contacts, variant = 'full' }: ContactActionsProps) {

@@ -28,6 +28,8 @@ export function AdminPanel() {
   const [cWechat, setCWechat] = useState('')
   const [cPhone, setCPhone] = useState('')
   const [contactBusy, setContactBusy] = useState(false)
+  const [qrUrl, setQrUrl] = useState('/wechat.png')
+  const [qrBusy, setQrBusy] = useState(false)
 
   const [curPw, setCurPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -70,7 +72,47 @@ export function AdminPanel() {
       setCWechat(s.contacts?.wechat ?? '')
       setCPhone(s.contacts?.phone ?? '')
     }
+    const qres = await fetch('/api/admin/wechat-qr', { credentials: 'same-origin' })
+    if (qres.ok) {
+      const q = (await qres.json()) as { hasQr?: boolean; ver?: string | null }
+      setQrUrl(q.hasQr ? `/api/contact/wechat-qr?v=${q.ver}` : '/wechat.png')
+    }
   }, [])
+
+  async function uploadQr(file: File) {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      setMsg({ kind: 'err', text: '仅支持 PNG/JPEG/WebP' })
+      return
+    }
+    if (file.size > 800 * 1024) {
+      setMsg({ kind: 'err', text: '图片需 ≤ 800KB' })
+      return
+    }
+    setQrBusy(true)
+    setMsg(null)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result))
+        r.onerror = () => reject(new Error('读取文件失败'))
+        r.readAsDataURL(file)
+      })
+      const res = await fetch('/api/admin/wechat-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ dataUrl }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string; url?: string }
+      if (!res.ok) throw new Error(d.error || '上传失败')
+      setQrUrl(`${d.url}&t=${Date.now()}`)
+      setMsg({ kind: 'ok', text: '二维码已更新,前台即时生效' })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '上传失败' })
+    } finally {
+      setQrBusy(false)
+    }
+  }
 
   async function saveNick() {
     setNickBusy(true)
@@ -298,6 +340,30 @@ export function AdminPanel() {
           >
             {contactBusy ? '保存中…' : '保存联系方式'}
           </button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.9rem', flexWrap: 'wrap' }}>
+          <img
+            src={qrUrl}
+            alt="微信二维码预览"
+            style={{ width: 120, borderRadius: 8, border: '1px solid var(--line)', display: 'block' }}
+          />
+          <label className="zx-btn zx-btn-sm" style={{ cursor: 'pointer' }}>
+            {qrBusy ? '上传中…' : '上传 / 更新二维码'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              style={{ display: 'none' }}
+              disabled={qrBusy}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void uploadQr(f)
+                e.currentTarget.value = ''
+              }}
+            />
+          </label>
+          <span className="zx-muted zx-mono" style={{ fontSize: '0.7rem' }}>
+            PNG/JPEG/WebP · ≤800KB · 上传即生效
+          </span>
         </div>
       </div>
 

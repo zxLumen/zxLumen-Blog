@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.3] - 2026-09-20
+
+### 新增
+
+- **`/admin` 支持上传/更新微信二维码**:PNG/JPEG/WebP、≤800KB,存数据库,前台 URL 带版本号**即时生效**(URL 走 `/api/contact/wechat-qr`,长缓存);不再需要手动上传 `wechat.png`
+
+### 变更
+
+- 微信二维码浮窗尺寸放大到原来的 **1.5 倍**
+
+[0.4.3]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.4.3
+
 ## [0.4.2] - 2026-09-20
 
 ### 变更

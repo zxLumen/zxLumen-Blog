@@ -8,6 +8,28 @@ const ADMIN_PASS_KEY = 'admin_pass'
 const K_EMAIL = 'contact_email'
 const K_WECHAT = 'contact_wechat'
 const K_PHONE = 'contact_phone'
+const K_QR_DATA = 'wechat_qr_data'
+const K_QR_TYPE = 'wechat_qr_type'
+const K_QR_VER = 'wechat_qr_ver'
+
+/** 微信二维码(存主库 meta,base64) */
+export function getWechatQr(): { base64: string; type: string; ver: string } | null {
+  const db = getDb()
+  const base64 = db.getMeta(K_QR_DATA)
+  if (!base64) return null
+  return {
+    base64,
+    type: db.getMeta(K_QR_TYPE) || 'image/png',
+    ver: db.getMeta(K_QR_VER) || '0',
+  }
+}
+
+export function setWechatQr(base64: string, type: string) {
+  const db = getDb()
+  db.setMeta(K_QR_DATA, base64)
+  db.setMeta(K_QR_TYPE, type)
+  db.setMeta(K_QR_VER, Date.now().toString(36))
+}
 
 const reverse = (s: string) => [...s].reverse().join('')
 
@@ -31,10 +53,11 @@ export function setContactSettings(c: { email?: string; wechat?: string; phone?:
 /** 传给前端渲染用:只给 email/wechat 与"是否有电话"标记,不下发号码 */
 export function getClientContacts(): Contacts {
   const { email, wechat, phone } = getContactSettings()
+  const qr = getWechatQr()
   return {
     email,
     wechat: wechat || undefined,
-    wechatQr: CONTACTS.wechatQr,
+    wechatQr: qr ? `/api/contact/wechat-qr?v=${qr.ver}` : CONTACTS.wechatQr,
     hasPhone: !!phone,
   }
 }
