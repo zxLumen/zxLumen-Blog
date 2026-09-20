@@ -1,0 +1,14 @@
+**/node_modules
+**/.next
+**/.output
+**/.nitro
+**/.tanstack
+**/dist
+**/data
+**/backups
+**/.git
+**/*.log
+**/.env
+**/.env.local
+docker/.env
+.DS_Store

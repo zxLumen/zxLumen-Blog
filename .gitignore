@@ -1,0 +1,33 @@
+# deps
+node_modules/
+
+# builds
+dist/
+build/
+.next/
+.vinxi/
+.output/
+.nitro/
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+
+# db (local dev; prod uses docker volume)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# os / editor
+.DS_Store
+
+# logs
+*.log
+npm-debug.log*
+
+# misc
+.turbo/
+.vercel/
+out/

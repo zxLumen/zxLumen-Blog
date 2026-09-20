@@ -1,0 +1,9 @@
+{
+  "name": "zxlumen-blog",
+  "private": true,
+  "version": "0.1.0",
+  "description": "个人主页:Next.js 16 + SQLite,自托管部署",
+  "scripts": {
+    "shared:build": "cd packages/shared && npm run build"
+  }
+}
