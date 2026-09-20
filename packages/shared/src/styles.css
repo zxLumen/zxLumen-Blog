@@ -2542,3 +2542,43 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   font-size: 1.6em;
   vertical-align: -0.16em;
 }
+
+/* ---------- 用量筛选(整体 / 多模型) ---------- */
+
+.zx-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1.1rem;
+}
+
+.zx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.zx-chip:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+.zx-chip.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 14px -4px var(--glow);
+}
+
+.zx-chip .zx-legend-dot {
+  width: 8px;
+  height: 8px;
+}
