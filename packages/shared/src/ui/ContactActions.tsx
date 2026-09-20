@@ -1,6 +1,7 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { CONTACTS, type Contacts } from '../content.js'
 
 interface ContactActionsProps {
@@ -8,10 +9,18 @@ interface ContactActionsProps {
   variant?: 'full' | 'compact'
 }
 
+const POP_W = 220
+const POP_GAP = 8
+
 export function ContactActions({ contacts, variant = 'full' }: ContactActionsProps) {
   const c = contacts ?? CONTACTS
   const [toast, setToast] = useState('')
+  const [pop, setPop] = useState<{ left: number; top: number } | null>(null)
+  const [mounted, setMounted] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => setMounted(true), [])
 
   function flash(msg: string) {
     setToast(msg)
@@ -28,19 +37,57 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
     }
   }
 
+  // 点击微信:复制微信号 + 在点击处右上角弹出二维码浮窗
+  function onWechat(e: React.MouseEvent) {
+    if (c.wechat) void copy(c.wechat, '微信号已复制,请在微信中搜索添加')
+    if (!c.wechatQr) return
+
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const x = e.clientX
+    const y = e.clientY
+    const estH = POP_W * (1131 / 888) + 16 // 按图片比例估算高度
+
+    let left = x + POP_GAP
+    let top = y - estH - POP_GAP // 浮窗出现在点击点"右上"→ 底边贴近点击点上方
+    if (left + POP_W > vw - 8) left = Math.max(8, x - POP_GAP - POP_W)
+    if (top < 8) top = Math.min(vh - estH - 8, y + POP_GAP)
+    setPop({ left, top })
+  }
+
+  // 点击其它位置 / Esc / 滚动 → 关闭浮窗
+  useEffect(() => {
+    if (!pop) return
+    const onDown = (e: MouseEvent) => {
+      if (popRef.current?.contains(e.target as Node)) return
+      setPop(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPop(null)
+    }
+    const close = () => setPop(null)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [pop])
+
   async function onPhone() {
     if (!c.hasPhone && !(c.phoneReversed && c.phoneReversed.length)) return
-    // 号码不预置在页面;点击时才向后端获取
-    let phone = c.phoneReversed ? [...c.phoneReversed].reverse().join('') : ''
-    if (!phone) {
-      try {
-        const res = await fetch('/api/contact/phone', { credentials: 'same-origin' })
-        if (!res.ok) throw new Error()
-        phone = ((await res.json()) as { phone?: string }).phone || ''
-      } catch {
-        flash('获取电话失败,请改用邮件/微信')
-        return
-      }
+    let phone = ''
+    try {
+      const res = await fetch('/api/contact/phone', { credentials: 'same-origin' })
+      if (!res.ok) throw new Error()
+      phone = ((await res.json()) as { phone?: string }).phone || ''
+    } catch {
+      flash('获取电话失败,请改用邮件/微信')
+      return
     }
     if (!phone) return flash('暂未提供电话')
     const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
@@ -48,13 +95,22 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
     else void copy(phone, '电话已复制到剪贴板')
   }
 
-  function onWechat() {
-    if (!c.wechat) return
-    void copy(c.wechat, '微信号已复制,请在微信中搜索添加')
-  }
-
   const hasPhone = !!c.hasPhone || !!c.phoneReversed
   const toastEl = toast ? <div className="zx-toast">{toast}</div> : null
+
+  const qrPop =
+    pop && mounted && c.wechatQr
+      ? createPortal(
+          <div
+            ref={popRef}
+            className="zx-wechat-pop"
+            style={{ position: 'fixed', left: pop.left, top: pop.top, width: POP_W }}
+          >
+            <img src={c.wechatQr} alt="微信二维码" />
+          </div>,
+          document.body,
+        )
+      : null
 
   if (variant === 'compact') {
     return (
@@ -71,6 +127,7 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
           </button>
         )}
         {toastEl}
+        {qrPop}
       </span>
     )
   }
@@ -91,6 +148,7 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
         </button>
       )}
       {toastEl}
+      {qrPop}
     </>
   )
 }

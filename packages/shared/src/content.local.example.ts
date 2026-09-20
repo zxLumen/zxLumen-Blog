@@ -73,6 +73,7 @@ export const SITE_META: SiteMeta = {
 export const CONTACTS: Contacts = {
   email: 'you@example.com',
   wechat: 'your_wechat_id',
+  wechatQr: '/wechat.png',
   // 电话倒序存储(示例):13800138000 → 00083001183
   phoneReversed: '00083001183',
 }

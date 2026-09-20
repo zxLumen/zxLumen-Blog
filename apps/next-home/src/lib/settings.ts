@@ -34,6 +34,7 @@ export function getClientContacts(): Contacts {
   return {
     email,
     wechat: wechat || undefined,
+    wechatQr: CONTACTS.wechatQr,
     hasPhone: !!phone,
   }
 }

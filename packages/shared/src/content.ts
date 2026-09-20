@@ -52,8 +52,10 @@ export interface SiteMeta {
 
 export interface Contacts {
   email: string
-  /** 微信号(点击复制/跳转添加) */
+  /** 微信号(点击复制) */
   wechat?: string
+  /** 微信二维码图片地址(点击微信时弹出的浮窗展示) */
+  wechatQr?: string
   /** 是否配置了电话(号码本身不下发,点击时向 /api/contact/phone 获取) */
   hasPhone?: boolean
   /** 电话(倒序存储,仅服务端 fallback 使用,不下发前端) */

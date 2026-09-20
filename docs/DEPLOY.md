@@ -78,6 +78,9 @@ scp ./resume.pdf root@你的服务器:/root/zxLumen-Blog/apps/next-home/public/r
 
 # 2) 个人资料(否则将使用占位示例,站点显示 "Your Name")
 scp ./content.local.ts root@你的服务器:/root/zxLumen-Blog/packages/shared/src/content.local.ts
+
+# 3) 微信二维码(点击「微信」时弹出的浮窗图,否则图裂)
+scp ./wechat.png root@你的服务器:/root/zxLumen-Blog/apps/next-home/public/wechat.png
 ```
 
 > `content.local.ts` 由 `packages/shared/src/content.local.example.ts` 复制而来并填入你的真实资料;

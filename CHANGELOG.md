@@ -2,6 +2,15 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.2] - 2026-09-20
+
+### 变更
+
+- 点击「微信」按钮:复制微信号的同时,在**点击处右上角弹出微信二维码浮窗**;点击其它位置 / `Esc` / 滚动即关闭
+- 新增 `Contacts.wechatQr`;二维码 `public/wechat.png` **不入库**,部署时需手动上传(见 `docs/DEPLOY.md`)
+
+[0.4.2]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.4.2
+
 ## [0.4.1] - 2026-09-20
 
 ### 修复

@@ -2507,3 +2507,21 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 .zx-pop-fixed {
   right: auto;
 }
+
+/* ---------- 微信二维码浮窗 ---------- */
+
+.zx-wechat-pop {
+  z-index: 600;
+  padding: 0.5rem;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.9);
+  animation: zx-rise 0.18s ease both;
+}
+
+.zx-wechat-pop img {
+  width: 100%;
+  display: block;
+  border-radius: calc(var(--radius) - 2px);
+}
