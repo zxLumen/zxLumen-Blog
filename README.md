@@ -57,12 +57,24 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 - **联系我**(关于页与页脚):**邮件**(mailto)、**微信**(复制微信号 + 点击处弹出二维码浮窗)、**电话**(移动端 `tel:` 拨号 / 桌面端复制;**号码不下发页面**)
 - **留言板**:公开 / 仅站长可见;**回复**(单层缩进 + `回复 @昵称`);**页码分页**(每页 5/10/20/50/100);昵称 cookie 记忆;`/admin` 可删除(递归整棵回复)
 - **admin** `/admin`:会话登录、站长昵称、修改密码、联系方式(邮箱/微信/电话/二维码上传)、留言管理
-- **测试模式**:整站 LIVE / TEST 切换(独立测试库 + 全部主题/布局),仅站长可见
+- **测试模式**:整站 LIVE / TEST 切换(独立测试库 + 全部主题/布局/功能),仅站长可见
 
-### 主题 / 布局的"正式集"
-在 `packages/shared/src/theme.ts` 里维护:
-- `LIVE_THEME_IDS` / `LIVE_LAYOUT_IDS`:正式环境放行的集合(测试模式自动放行全部)
+### 主题 / 布局 / 功能的"正式集"
+在 `packages/shared` 里维护:
+- `LIVE_THEME_IDS` / `LIVE_LAYOUT_IDS`:正式环境放行的主题/布局(测试模式自动放行全部)
+- `LIVE_FEATURES`(`src/features.ts`):正式环境放行的**功能**(测试模式自动放行全部)
 - 新增主题:在 `THEMES` 注册 + 在 `styles.css` 加一段 token 块
+
+## 开发流程:TEST 先行 → 验证 → 同步 LIVE
+
+站内有 **LIVE(正常模式)/ TEST(测试模式)** 两套环境(右上角仅站长可见的切换器)。
+
+1. **改动默认只在 TEST 模式生效**(门控见 `FEATURE_IDS` / `LIVE_FEATURES`),LIVE 保持现状
+2. 在 TEST 模式(独立测试库)自测并交站长验收
+3. 确认 OK 后执行"**同步**":把特性 id 加进 `LIVE_FEATURES`,
+   提交 `feat(...): 同步 <特性> 到正常模式`
+
+新功能如何加门控,见 `AGENTS.md`。
 
 ## API
 
@@ -80,6 +92,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 | GET/POST | `/api/admin/settings` | 站长昵称 + 联系方式 |
 | POST | `/api/admin/password` | 修改密码 |
 | GET/POST | `/api/admin/wechat-qr` | 查询/上传微信二维码 |
+| GET | `/api/env` | 查询当前模式 `{ test }` |
 | POST | `/api/env` | 切换 LIVE / TEST(仅站长);`{reset:true}` 清空测试库 |
 
 上报细节见 `docs/REPORTING.md`。

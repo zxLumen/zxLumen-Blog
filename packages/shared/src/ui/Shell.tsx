@@ -6,6 +6,7 @@ import { Footer } from './Footer.js'
 import { HelpHint } from './HelpHint.js'
 import type { Contacts } from '../content.js'
 import type { LayoutId } from '../theme.js'
+import type { FeatureId } from '../features.js'
 import type { LinkComponent, NavItem } from './types.js'
 
 interface ShellProps {
@@ -17,6 +18,8 @@ interface ShellProps {
   /** 允许的主题 / 布局(按模式:正式为精简集,测试为全集) */
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
+  /** 允许的功能(按模式:正式为白名单,测试为全集) */
+  allowedFeatures?: FeatureId[]
   extra?: React.ReactNode
   children: React.ReactNode
 }
@@ -30,11 +33,16 @@ export function Shell({
   contacts,
   allowedThemeIds,
   allowedLayoutIds,
+  allowedFeatures,
   extra,
   children,
 }: ShellProps) {
   return (
-    <PreferencesProvider allowedThemeIds={allowedThemeIds} allowedLayoutIds={allowedLayoutIds}>
+    <PreferencesProvider
+      allowedThemeIds={allowedThemeIds}
+      allowedLayoutIds={allowedLayoutIds}
+      allowedFeatures={allowedFeatures}
+    >
       <div className="zx-app">
         <Topbar nav={nav} activeHref={activeHref} pathname={pathname} link={link} extra={extra} />
         <main className="zx-main">{children}</main>

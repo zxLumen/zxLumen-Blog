@@ -9,6 +9,8 @@ import {
   LAYOUT_IDS,
   LIVE_THEME_IDS,
   LIVE_LAYOUT_IDS,
+  FEATURE_IDS,
+  LIVE_FEATURES,
 } from "@zx/shared";
 import { isAdmin } from "@/lib/auth";
 import { isTestMode } from "@/lib/env";
@@ -27,9 +29,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const testMode = await isTestMode();
   const contacts = getClientContacts();
 
-  // 正式环境只放行精简集;测试模式放行全部主题/布局
+  // 正式环境只放行精简集;测试模式放行全部主题/布局/功能
   const allowedThemeIds = testMode ? THEME_IDS : LIVE_THEME_IDS;
   const allowedLayoutIds = testMode ? LAYOUT_IDS : LIVE_LAYOUT_IDS;
+  const allowedFeatures = testMode ? [...FEATURE_IDS] : LIVE_FEATURES;
 
   const nav = admin ? [...NAV, { label: "admin", href: "/admin" }] : NAV;
   const initScript = `${themeInitScript(allowedThemeIds, allowedLayoutIds)};${NAV_INIT_SCRIPT}`;
@@ -45,6 +48,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           contacts={contacts}
           allowedThemeIds={allowedThemeIds}
           allowedLayoutIds={allowedLayoutIds}
+          allowedFeatures={allowedFeatures}
           extra={admin ? <EnvSwitch testMode={testMode} /> : null}
         >
           {children}

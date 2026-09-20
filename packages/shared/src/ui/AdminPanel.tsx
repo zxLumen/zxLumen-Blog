@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { CommentRow, PagedComments } from '../schema.js'
 import { fmtDateTime } from '../format.js'
 import { Pagination } from './Pagination.js'
+import { useFeature } from './theme-context.js'
 
 async function loadPageData(page: number, pageSize: number): Promise<PagedComments> {
   const res = await fetch(`/api/admin/comments?page=${page}&pageSize=${pageSize}`, {
@@ -43,7 +44,8 @@ export function AdminPanel() {
   const [dsToken, setDsToken] = useState('')
   const [dsBusy, setDsBusy] = useState(false)
   const [tab, setTab] = useState<'comments' | 'profile' | 'token'>('comments')
-  const [testMode, setTestMode] = useState<boolean | null>(null)
+  // 功能门控:Tab 分栏为 TEST-only,晋升后加入 LIVE_FEATURES 即对正式模式生效
+  const showTabs = useFeature('admin-tabs')
 
   const [curPw, setCurPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -209,14 +211,6 @@ export function AdminPanel() {
 
   useEffect(() => {
     void (async () => {
-      let test = false
-      try {
-        const r = await fetch('/api/env', { credentials: 'same-origin' })
-        if (r.ok) test = ((await r.json()) as { test?: boolean }).test === true
-      } catch {
-        /* ignore */
-      }
-      setTestMode(test)
       await loadPage(1, 5)
       await loadSettings()
     })()
@@ -338,7 +332,7 @@ export function AdminPanel() {
     <div className="zx-container" style={{ paddingBlock: '2.5rem' }}>
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
-        {testMode ? (
+        {showTabs ? (
           <div className="zx-tabs is-inline">
             {(['comments', 'profile', 'token'] as const).map((t) => (
               <button
@@ -359,7 +353,7 @@ export function AdminPanel() {
         </button>
       </div>
 
-      {(!testMode || tab === 'profile') && (
+      {(!showTabs || tab === 'profile') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           站长昵称 <span>留言/回复时自动使用</span>
@@ -385,7 +379,7 @@ export function AdminPanel() {
       </div>
       )}
 
-      {(!testMode || tab === 'profile') && (
+      {(!showTabs || tab === 'profile') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           联系方式 <span>前台「关于」与页脚展示;电话不显示号码</span>
@@ -448,7 +442,7 @@ export function AdminPanel() {
       </div>
       )}
 
-      {(!testMode || tab === 'token') && (
+      {(!showTabs || tab === 'token') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           DeepSeek 用量 <span>平台私有接口 · 需登录会话令牌</span>
@@ -511,7 +505,7 @@ export function AdminPanel() {
       </div>
       )}
 
-      {(!testMode || tab === 'profile') && (
+      {(!showTabs || tab === 'profile') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           修改密码 <span>存于数据库,优先于环境变量</span>
@@ -553,7 +547,7 @@ export function AdminPanel() {
       </div>
       )}
 
-      {(!testMode || tab === 'comments') && (
+      {(!showTabs || tab === 'comments') && (
       <>
       {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
 

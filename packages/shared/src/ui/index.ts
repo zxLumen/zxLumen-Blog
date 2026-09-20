@@ -1,4 +1,5 @@
-export { PreferencesProvider, usePrefs, useTheme } from './theme-context.js'
+export { PreferencesProvider, usePrefs, useTheme, useFeature } from './theme-context.js'
+export type { FeatureId } from '../features.js'
 export { ThemePicker } from './ThemePicker.js'
 export { ThemeGrid, LayoutGrid } from './PickGrid.js'
 export { Typewriter } from './Typewriter.js'

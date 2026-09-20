@@ -1,0 +1,88 @@
+# AGENTS.md
+
+本仓库(zxLumen-Blog)的协作规范。**所有改动必须遵守下面的工作流。**
+
+## 仓库结构
+
+- `apps/next-home`:Next.js 16 应用(端口 3000)
+- `packages/shared`:设计系统(主题/布局)+ 共享 React 组件 + 类型 + SQLite 数据层(`@zx/shared`)
+- `docker/`:Dockerfile / compose / Caddyfile / 备份脚本
+- `docs/`:部署、上报等文档
+
+## 常用命令
+
+```bash
+# 改 shared 后必须重新编译(会生成缺失的 content.local.ts 占位)
+cd packages/shared && npm run build
+
+# 本地开发
+cd apps/next-home && npm run dev      # http://localhost:3000
+
+# 校验(提交前跑)
+cd apps/next-home && npm run lint && npm run build
+```
+
+> 需要 Node 20+(推荐 22 LTS)。
+
+## 工作流:TEST 先行 → 验证 → 同步 LIVE(**重要**)
+
+站内有 **LIVE(正常模式)/ TEST(测试模式)** 两套环境(右上角仅站长可见的切换器):
+
+- **TEST** 使用独立测试库(`DB_TEST_PATH`),放行**全部**主题/布局/功能
+- **LIVE** 使用线上库(`DB_PATH`),**只放行白名单**内的内容
+
+规则:
+
+1. 任何新功能 / 改动,**默认只在 TEST 模式生效**,LIVE 保持现状。
+2. 在 TEST 模式(网页上切换,或临时实例带 `zx_env=test` cookie)自测后,交由站长验收。
+3. 站长确认 OK 后,执行"**同步/晋升**":让 LIVE 也启用,提交信息用
+   `feat(...): 同步 <特性> 到正常模式`。
+
+### 白名单门控(与主题/布局同款)
+
+| 维度 | 全部集合 | 正式放行集 | 位置 |
+|---|---|---|---|
+| 主题 | `THEME_IDS` | `LIVE_THEME_IDS` | `packages/shared/src/theme.ts` |
+| 布局 | `LAYOUT_IDS` | `LIVE_LAYOUT_IDS` | `packages/shared/src/theme.ts` |
+| 功能 | `FEATURE_IDS` | `LIVE_FEATURES` | `packages/shared/src/features.ts` |
+
+模式判定:
+
+- 服务端:`isTestMode()`;功能门控用 `featureOn(id)`
+  (`apps/next-home/src/lib/env.ts`)
+- 客户端:白名单随服务端下发 —— `layout.tsx` 计算 `allowedFeatures`
+  (`testMode ? [...FEATURE_IDS] : LIVE_FEATURES`)→ `AppShell` → `Shell` →
+  `PreferencesProvider`;组件内用 **`useFeature(id)`** 判断
+
+### 新增一个 TEST-only 功能
+
+1. 在 `packages/shared/src/features.ts` 的 `FEATURE_IDS` 注册 id(如 `'foo'`)
+2. 客户端:`const on = useFeature('foo')`,按 `on` 渲染
+   (需要服务端/接口层拦截时:在路由里 `await featureOn('foo')`)
+3. `cd packages/shared && npm run build`
+4. 在 TEST 模式验证;`npm run lint && npm run build`
+5. **同步**:把 `'foo'` 加进 `LIVE_FEATURES`,提交 `feat(...): 同步 foo 到正常模式`
+
+> `GET /api/env` 返回 `{ test }`,也可用于简单的模式判断;但组件内优先用 `useFeature`。
+
+## 隐私:以下文件不入库(部署需单独提供)
+
+- `packages/shared/src/content.local.ts`(真实资料;有 `content.local.example.ts` 占位)
+- `apps/next-home/public/resume.pdf`、`public/wechat.png`
+- `apps/next-home/resume/resume.md|html|pdf`(仅 `resume.py`/`resume.css` 入库)
+
+## Git 规范
+
+- 原子提交,Conventional Commits,**中文 subject**(如 `feat(admin): ...`)
+- 小改动先攒着,发版时统一打 tag
+- 只有明确要求才提交 / 推送
+
+## 环境变量
+
+`DB_PATH` / `DB_TEST_PATH` / `ADMIN_PASSWORD` / `SESSION_SECRET` / `REPORT_TOKEN`,
+见各 `.env.example`。默认值可跑 demo,**上线前务必修改**。
+
+## Next.js 版本
+
+本仓库的 Next.js 与训练数据可能不同,写代码前先读 `apps/next-home/AGENTS.md` 指向的
+`node_modules/next/dist/docs/`。注意 `apps/next-home/AGENTS.md` 为 `next dev` 自动生成/维护。
