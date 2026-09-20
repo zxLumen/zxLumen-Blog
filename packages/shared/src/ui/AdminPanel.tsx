@@ -217,8 +217,7 @@ export function AdminPanel() {
         /* ignore */
       }
       setTestMode(test)
-      // 正式模式不分页(一次拉全);测试模式分页
-      await loadPage(1, test ? 5 : 1000)
+      await loadPage(1, 5)
       await loadSettings()
     })()
   }, [loadPage, loadSettings])
@@ -339,24 +338,28 @@ export function AdminPanel() {
     <div className="zx-container" style={{ paddingBlock: '2.5rem' }}>
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
-        <div className="zx-tabs is-inline">
-          {(['comments', 'profile', 'token'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`zx-tab${tab === t ? ' is-active' : ''}`}
-              onClick={() => setTab(t)}
-            >
-              {t === 'comments' ? '留言' : t === 'profile' ? '个人信息' : 'Token 用量'}
-            </button>
-          ))}
-        </div>
+        {testMode ? (
+          <div className="zx-tabs is-inline">
+            {(['comments', 'profile', 'token'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`zx-tab${tab === t ? ' is-active' : ''}`}
+                onClick={() => setTab(t)}
+              >
+                {t === 'comments' ? '留言' : t === 'profile' ? '个人信息' : 'Token 用量'}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <h1 className="zx-sec-title">留言管理</h1>
+        )}
         <button className="zx-btn zx-btn-sm zx-btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => void logout()}>
           退出登录
         </button>
       </div>
 
-      {tab === 'profile' && (
+      {(!testMode || tab === 'profile') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           站长昵称 <span>留言/回复时自动使用</span>
@@ -382,7 +385,7 @@ export function AdminPanel() {
       </div>
       )}
 
-      {tab === 'profile' && (
+      {(!testMode || tab === 'profile') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           联系方式 <span>前台「关于」与页脚展示;电话不显示号码</span>
@@ -445,7 +448,7 @@ export function AdminPanel() {
       </div>
       )}
 
-      {tab === 'token' && (
+      {(!testMode || tab === 'token') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           DeepSeek 用量 <span>平台私有接口 · 需登录会话令牌</span>
@@ -508,7 +511,7 @@ export function AdminPanel() {
       </div>
       )}
 
-      {tab === 'profile' && (
+      {(!testMode || tab === 'profile') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           修改密码 <span>存于数据库,优先于环境变量</span>
@@ -550,7 +553,7 @@ export function AdminPanel() {
       </div>
       )}
 
-      {tab === 'comments' && (
+      {(!testMode || tab === 'comments') && (
       <>
       {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
 
@@ -604,7 +607,6 @@ export function AdminPanel() {
         ))}
       </div>
 
-      {testMode !== false && (
       <Pagination
         page={listPage}
         totalPages={totalPages}
@@ -614,7 +616,6 @@ export function AdminPanel() {
         onPage={(p) => void loadPage(p, pageSize)}
         onPageSize={(s) => void loadPage(1, s)}
       />
-      )}
       </>
       )}
     </div>
