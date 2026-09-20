@@ -19,6 +19,9 @@ export function AboutSection() {
             <a className="zx-btn" href={`mailto:${PROFILE.email}`}>
               联系我 →
             </a>
+            <a className="zx-btn" href="/resume.pdf" download>
+              下载简历 ↓
+            </a>
             <a className="zx-btn zx-btn-ghost" href="/#guestbook">
               留言
             </a>

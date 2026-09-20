@@ -24,7 +24,7 @@ export interface Project {
   desc: string
   /** 技术栈 badge */
   tech: string[]
-  /** 状态:online 可访问 / demo 演示中 / building 建设中 / archived 归档 */
+  /** 状态:online 已投产 / demo 演示中 / building 建设中 / archived 归档 */
   status: 'online' | 'demo' | 'building' | 'archived'
   /** 部署在你自己服务器上的子域名,如 demo1.yourdomain.com(无域名时留空) */
   demoUrl?: string
@@ -35,89 +35,148 @@ export interface Project {
 }
 
 // ===========================================================================
-// ⚠️ 下面全是你的真实资料占位,next 里程碑会替换成你的内容
+// 资料内容(依据简历整理;可随时更新)
 // ===========================================================================
 
 export const PROFILE = {
   name: '刘子祥',
   handle: 'liuzixiang',
   shell: 'lz@zx.dev',
-  title: '全栈工程师 · 独立开发者',
-  location: '中国 · 上海',
-  email: 'you@example.com',
+  title: '后端研发工程师 · MLOps / LLMOps',
+  location: '中国 · 北京',
+  email: '422206217@qq.com',
   bioLines: [
-    '一只热衷于全栈开发与 AI 应用折腾的工程♂徒。',
-    '信仰:写好代码,睡好觉,把想法做成能摸的产品。',
-    '主力语言 TypeScript,容器与自托管重度用户。',
+    '6 年互联网研发经验,先后任职百度(DuerOS · KG · BDG · ACG)与腾讯 TEG 数据平台部。',
+    '专注后端与 AI 工程化:MLOps / LLMOps、Ray、模型调度与推理服务、大模型应用。',
+    '主语言 Python,喜欢把算法与工程打通,让模型稳定高效地跑在生产线上。',
   ],
-  statusLine: '开源 · 自部署 · AI×接口',
+  statusLine: 'Python · MLOps/LLMOps · Ray · 模型服务',
 }
 
 export const LINKS: LinkItem[] = [
-  { label: 'github', url: 'https://github.com/liuzixiang' },
-  { label: 'email', url: 'mailto:you@example.com' },
-  { label: 'blog', url: '' },
-  { label: 'resume', url: '/about' },
+  { label: 'email', url: 'mailto:422206217@qq.com' },
+  { label: 'resume', url: '/resume.pdf' },
+  { label: 'github', url: '' },
 ]
 
+const T = (name: string, level: number, tags: string[]): TechItem => ({ name, level, tags })
+
 export const TECH: TechItem[] = [
-  { name: 'TypeScript', level: 0.9, tags: ['node', 'browser', 'types'] },
-  { name: 'React / Next.js', level: 0.85, tags: ['ui', 'ssr', 'fullstack'] },
-  { name: 'Vue / Nuxt', level: 0.7, tags: ['ui', 'ssr'] },
-  { name: 'Node.js / Bun', level: 0.85, tags: ['backend', 'api'] },
-  { name: 'SQLite / Postgres', level: 0.8, tags: ['db', 'sql'] },
-  { name: 'Docker / 自托管', level: 0.85, tags: ['vps', 'compose', 'nginx'] },
-  { name: 'DeepSeek / LLM API', level: 0.8, tags: ['ai', 'prompt', 'cost'] },
+  T('Python', 0.95, ['精通', 'backend']),
+  T('MLOps / LLMOps', 0.9, ['精通', 'model-scheduler']),
+  T('Ray / Ray Serve', 0.85, ['精通', 'distributed']),
+  T('FastAPI / Django / Gunicorn', 0.85, ['精通', 'service']),
+  T('Redis / MySQL', 0.8, ['熟悉', 'storage']),
+  T('Kafka / MQTT / Nats', 0.78, ['熟悉', 'messaging']),
+  T('Docker / K8s', 0.8, ['熟悉', 'deploy']),
+  T('Grafana / Prometheus', 0.72, ['熟悉', 'observability']),
+  T('LangChain / Langflow', 0.8, ['熟悉', 'llm-app']),
+  T('C / C++ / 声学算法', 0.7, ['熟悉', 'Kaldi', 'AEC', 'ASR']),
+  T('Java / Golang', 0.5, ['了解']),
+  T('Deep Learning / ML', 0.6, ['了解', 'Data Science']),
 ]
 
 export const TIMELINE: TimelineEntry[] = [
   {
-    period: '2023 — now',
-    title: '全栈开发 / 独立项目',
-    org: '自由职业 & 自建服务',
-    desc: '开发并自托管多个线上服务,涉猎 AI 应用、工具站与自动化脚本。',
+    period: '2025.04 — 至今',
+    title: '后端研发工程师',
+    org: '腾讯 · TEG 数据平台部',
+    desc: '负责音频预处理算子与主管线编排:基于 Ray 的管线框架,消息队列/存储链路优化;已完成 17 个算子、4 条主管线并投产。',
   },
   {
-    period: '20xx — 20xx',
-    title: '职位名',
-    org: '公司名',
-    desc: 'TODO: 补一段简短的工作/项目经历。',
+    period: '2018.07 — 2023.10',
+    title: '后端 / 算法研发工程师',
+    org: '百度(DuerOS · KG · BDG · ACG)',
+    desc: '语音算法(AEC/ASR/声纹)、互动关系网络与图学习、工业优化套件、工业大模型服务(度安安等)的设计与核心研发。',
   },
   {
-    period: '20xx — 20xx',
-    title: '学历',
-    org: '学校',
-    desc: 'TODO: 补充教育经历。',
+    period: '2014.09 — 2018.07',
+    title: '计算机科学与技术 · 本科',
+    org: '山东理工大学',
+    desc: '集训队 2014 级队长;ICPC 亚洲区域赛金牌、CCPC 银牌、CCCC 团体天梯赛一等奖等,获国家奖学金。',
   },
 ]
 
 export const PROJECTS: Project[] = [
   {
-    id: 'zx-home',
-    name: 'zx.dev — 本页',
-    desc: '你现在看的这个人主页:Next.js / TanStack 双战场,SQLite 留言 + DeepSeek 用量面板,自托管部署。',
-    tech: ['TypeScript', 'SQLite', '自托管'],
+    id: 'audio-pipeline',
+    name: '音频预处理管线 / 主管线框架',
+    desc: '腾讯 TEG:音频算子研发与主管线编排,基于 Ray 构建管线框架,替代 Spark 投产链路,支持多优先级插队与资源混部。',
+    tech: ['Python', 'Ray', 'MLOps', 'Model Scheduler', 'MQProxy'],
     status: 'online',
     featured: true,
-    demoUrl: '/',
     highlights: [
-      { label: 'themes', value: '03' },
-      { label: '留言入库', value: 'SQLite' },
+      { label: '算子 / 管线', value: '17 / 4' },
+      { label: '日产能', value: '+2~4x' },
     ],
   },
   {
-    id: 'demo-app',
-    name: 'Demo App(占位)',
-    desc: 'TODO: 你的第一个项目,一句话介绍它解决什么问题。部署后填 demoUrl。',
-    tech: ['TODO'],
-    status: 'building',
+    id: 'windmill',
+    name: 'Windmill — 工业大模型服务',
+    desc: '百度 ACG:大模型应用服务化框架(RayServe + FastAPI + Websocket),支持 APP/Host 分离部署与低代码大模型应用构建。',
+    tech: ['LLMOps', 'Ray Serve', 'FastAPI', 'LangChain', 'Langflow'],
+    status: 'online',
+    featured: true,
+    highlights: [
+      { label: '大模型 APP', value: '20+' },
+      { label: '定制应用', value: '200+' },
+    ],
   },
   {
-    id: 'demo-app2',
-    name: 'Another Project(占位)',
-    desc: 'TODO: 第二个项目介绍。',
-    tech: ['TODO'],
-    status: 'building',
+    id: 'soe',
+    name: 'SOE — 工业仿真优化系统',
+    desc: '百度 ACG:数采 + 模型推理 + 控制的通用仿真优化系统,负责推理系统设计与研发,应用于中海油、隆鑫发动机检测等。',
+    tech: ['Python', 'Ray', 'Nats', 'Streamz', 'MQTT', 'K8s'],
+    status: 'online',
+    highlights: [
+      { label: '发布会', value: '2023 云智大会' },
+      { label: '场景', value: '中海油 / 隆鑫' },
+    ],
+  },
+  {
+    id: 'ifactory',
+    name: 'iFactory Suites — 生产过程优化套件',
+    desc: '百度 KG:MPO-Tools + MPO-Service + MPO-Plant 工业优化套件,提供核心算子、模型服务与跨产线自学习,多工业领域投产。',
+    tech: ['Python', 'Django', 'MLOps', 'Kafka', 'Docker'],
+    status: 'online',
+    highlights: [
+      { label: '领域', value: '轧钢/水冷/冲压/镀锌/制丝' },
+    ],
+  },
+  {
+    id: 'social-graph',
+    name: '互动关系网络模型优化',
+    desc: '百度 BDG:用户互动关系网络的模型与性能优化,引入 Metapath2vec 与分布式游走,支撑 10 亿+ 用户、600 亿+ 关系。',
+    tech: ['Paddle', 'PGL', 'GraphLearning', 'MapReduce', 'Embedding'],
+    status: 'online',
+    featured: true,
+    highlights: [
+      { label: 'AUC', value: '+2.2%' },
+      { label: '规模', value: '600亿+ 关系' },
+    ],
+  },
+  {
+    id: 'asr-aec',
+    name: '语音算法:ASR / AEC / 声纹',
+    desc: '百度 DuerOS:回声消除(AEC)、ASR 解码器 C++→C 迁移与优化、无感知声纹注册,应用于耳机/车载支架/音箱等产品。',
+    tech: ['C/C++', 'Kaldi', 'AEC', 'ASR', 'Speaker Recognition'],
+    status: 'archived',
+    highlights: [
+      { label: '识别时间', value: '-30%' },
+      { label: 'AEC CPU', value: '-8%' },
+    ],
+  },
+  {
+    id: 'zx-home',
+    name: '本页 · 个人主页',
+    desc: '自托管个人主页:Next.js + SQLite,多主题/布局、留言板(回复分页)、DeepSeek 用量面板、站长后台与测试模式。',
+    tech: ['Next.js', 'TypeScript', 'SQLite', 'Docker', 'Caddy'],
+    status: 'online',
+    demoUrl: '/',
+    highlights: [
+      { label: '主题', value: '6' },
+      { label: '自托管', value: 'VPS' },
+    ],
   },
 ]
 
@@ -145,7 +204,8 @@ document.documentElement.dataset.nav=v;
 }catch(e){}})()`
 
 export const SITE_META = {
-  title: 'liuzixiang · 个人主页',
-  description: '全栈工程师刘子祥的个人主页:项目 / DeepSeek 用量统计 / 简历 / 留言板。',
-  keywords: ['liuzixiang', '全栈工程师', '个人主页', 'deepseek', 'token'],
+  title: '刘子祥 · 后端研发工程师',
+  description:
+    '刘子祥,后端研发工程师,6 年互联网研发经验(腾讯 / 百度),专注 MLOps / LLMOps、Ray 与模型服务。',
+  keywords: ['刘子祥', '后端研发工程师', 'Python', 'MLOps', 'LLMOps', 'Ray', '个人主页'],
 }

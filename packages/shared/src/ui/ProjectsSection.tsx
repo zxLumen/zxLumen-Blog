@@ -45,12 +45,15 @@ function ProjectCard({ project, idx }: { project: Project; idx: number }) {
       </div>
 
       <div className="zx-card-actions">
-        {project.demoUrl ? (
-          <a className="zx-btn zx-btn-sm" href={project.demoUrl} target={project.demoUrl.startsWith('http') ? '_blank' : undefined} rel="noreferrer">
+        {project.demoUrl && (
+          <a
+            className="zx-btn zx-btn-sm"
+            href={project.demoUrl}
+            target={project.demoUrl.startsWith('http') ? '_blank' : undefined}
+            rel="noreferrer"
+          >
             试用 →
           </a>
-        ) : (
-          <span className="zx-badge zx-muted">demo 待部署</span>
         )}
         {project.repoUrl && (
           <a className="zx-btn zx-btn-sm zx-btn-ghost" href={project.repoUrl} target="_blank" rel="noreferrer">
