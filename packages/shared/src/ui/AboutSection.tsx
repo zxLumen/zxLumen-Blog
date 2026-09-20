@@ -6,10 +6,7 @@ import { Section } from './Section.js'
 export function AboutSection() {
   return (
     <Section id="about" tag="// ABOUT" num="03" title="关于 / 简历">
-      <div
-        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '2rem' }}
-        className="zx-about-grid"
-      >
+      <div className="zx-about-grid">
         <div className="zx-bio">
           <div className="zx-kicker">{PROFILE.statusLine}</div>
           {PROFILE.bioLines.map((l) => (

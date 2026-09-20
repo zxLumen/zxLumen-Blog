@@ -289,10 +289,7 @@ export function GuestbookSection({
 
   return (
     <Section id="guestbook" tag="// GUESTBOOK" num="04" title="留言板">
-      <div
-        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.1fr)', gap: '2rem' }}
-        className="zx-guestbook-grid"
-      >
+      <div className="zx-guestbook-grid">
         <form className="zx-form" onSubmit={onSubmitTop} noValidate>
           <div className="zx-row">
             <div className="zx-field">

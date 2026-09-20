@@ -61,15 +61,7 @@ export function UsageSection({ rows }: { rows?: UsageRow[] }) {
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)',
-          gap: '1.1rem',
-          marginBottom: '1.1rem',
-        }}
-        className="zx-usage-charts"
-      >
+      <div className="zx-usage-charts">
         <div className="zx-panel">
           <h3>
             DAILY_TOKENS <span>近 30 天 · input + output</span>

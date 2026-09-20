@@ -1319,6 +1319,38 @@ pre {
 .zx-form {
   display: grid;
   gap: 0.9rem;
+  align-content: start;
+}
+
+/* 留言板 / 关于 / 用量 的两栏网格(反拉伸,窄屏单列) */
+.zx-guestbook-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.zx-about-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.zx-usage-charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 1.1rem;
+  margin-bottom: 1.1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .zx-guestbook-grid,
+  .zx-about-grid,
+  .zx-usage-charts {
+    grid-template-columns: 1fr;
+  }
 }
 
 .zx-row {
