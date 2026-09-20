@@ -1,9 +1,13 @@
 import { isAdmin } from '@/lib/auth'
 import { getActiveDb } from '@/lib/env'
 import { rateLimit, readJson, clientIp } from '@/lib/db'
+import { getAdminNick } from '@/lib/settings'
 import type { Visibility } from '@zx/shared'
 
 export const dynamic = 'force-dynamic'
+
+/** 归一化昵称用于比较:去空白 + 转小写 */
+const normNick = (s: string) => s.replace(/\s+/g, '').toLowerCase()
 
 interface Body {
   author?: string
@@ -43,6 +47,11 @@ export async function POST(req: Request) {
   }
   if (link && !/^https?:\/\//i.test(link)) {
     return Response.json({ error: '链接需以 http(s):// 开头' }, { status: 400 })
+  }
+
+  // 非管理员不得冒用站长昵称
+  if (!admin && normNick(author) === normNick(getAdminNick())) {
+    return Response.json({ error: '该昵称为站长保留,请换一个昵称' }, { status: 403 })
   }
 
   const db = await getActiveDb()
