@@ -37,3 +37,6 @@ apps/next-home/resume/resume.md
 apps/next-home/resume/resume.html
 apps/next-home/resume/resume.pdf
 apps/next-home/public/resume.pdf
+
+# 个人资料(真实内容不入库;仓库仅保留 content.local.example.ts)
+packages/shared/src/content.local.ts

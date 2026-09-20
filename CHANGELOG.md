@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.2] - 2026-09-20
+
+### 安全 / 隐私
+
+- **个人资料移出仓库**:真实内容改放不入库的 `packages/shared/src/content.local.ts`;仓库仅保留占位 `content.local.example.ts`,构建前自动生成缺失的本地文件
+- **从 git 历史中清除** `public/resume.pdf`(含手机号);简历 md/html/pdf 与 `public/resume.pdf` 均加入 `.gitignore`
+- 部署说明补充:需单独提供 `public/resume.pdf` 与 `content.local.ts`
+
+> 注:公开仓库的旧对象可能被 GitHub 缓存一段时间;如需彻底清除缓存视图,可联系 GitHub 支持。
+
+[0.2.2]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.2.2
+
 ## [0.2.1] - 2026-09-20
 
 ### 变更
