@@ -2,6 +2,29 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.0] - 2026-09-20
+
+自 `v0.1.0` 以来:留言体验、后台与导航大幅完善;填入真实简历内容。
+
+### 新增
+
+- **留言分页改版**:页码 + 每页下拉(5/10/20/50/100,默认 5)+ 「共 N 条」+「前往 X 页」;按**顶层留言线程级**分页,回复不拆分
+- **网页改密码**:`/admin` 可修改站长密码,scrypt 加盐哈希存库,**优先于环境变量** `ADMIN_PASSWORD`
+- **测试库 mock 脚本**:`npm run seed:test`(仅写测试库)
+- **地址栏跟随**:首页滚动时 `#hash` 实时同步当前区块(`replaceState`)
+- **内容更新**:依据简历更新资料、技能、时间线与重点项目;关于页新增「**下载简历**」
+
+### 修复
+
+- 修复留言板左侧表单被右侧内容拉伸变形(网格改 CSS 类 + 反拉伸)
+- 禁止非管理员冒用站长昵称(去空白/大小写归一化校验)
+- 管理员会话改为 **HMAC 签名 cookie**,重启/清库后保持登录
+- 侧栏导航改为 **scroll-spy** 高亮,并新增首帧 `html[data-nav]`(消除刷新/跳转先闪 home)
+- 同路由与跨路由导航改**客户端处理/客户端路由**,消除点 `home` 的白屏刷新
+- 关闭锚点平滑滚动(点击导航瞬时跳转);修复刷新带 hash 页面掉回 home
+
+[0.2.0]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.2.0
+
 ## [0.1.0] - 2026-09-20
 
 首个可运行版本:个人主页(Next.js + SQLite,自托管)。
@@ -19,4 +42,4 @@
 - **测试模式**:整站 LIVE / TEST 切换(独立测试库),仅站长可用;一键清空测试库
 - **部署**:多阶段 Dockerfile、docker-compose(app + Caddy 自动 HTTPS)、Caddyfile(含子域名模板)、SQLite 备份脚本、部署与上报文档
 
-[0.1.0]: https://github.com/ALeiQ/zxLumen-Blog/releases/tag/v0.1.0
+[0.1.0]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.1.0
