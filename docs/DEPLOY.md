@@ -70,13 +70,18 @@ curl -X POST https://你的域名/api/usage \
 
 ## 5.1 提供简历 PDF(不入库,需单独上传)
 
-出于隐私,`public/resume.pdf` **不纳入版本库**。部署后需手动放置,否则「下载简历」会 404:
+出于隐私,**个人资料与简历 PDF 均不纳入版本库**,部署前需在服务器上放置:
 
 ```bash
-# 在你本机,把简历 PDF 上传到服务器项目目录
+# 1) 简历 PDF(否则「下载简历」404)
 scp ./resume.pdf root@你的服务器:/root/zxLumen-Blog/apps/next-home/public/resume.pdf
-# 若用 Docker 构建:构建前确保该文件已在 apps/next-home/public/ 下
+
+# 2) 个人资料(否则将使用占位示例,站点显示 "Your Name")
+scp ./content.local.ts root@你的服务器:/root/zxLumen-Blog/packages/shared/src/content.local.ts
 ```
+
+> `content.local.ts` 由 `packages/shared/src/content.local.example.ts` 复制而来并填入你的真实资料;
+> 构建(shared)前若缺失会自动用示例生成占位。
 
 > 生成方式(可选):仓库内 `apps/next-home/resume/` 提供 `resume.py` + `resume.css`;
 > 自备 Markdown 源后运行 `python resume.py resume.md --chrome-path "<Chrome 路径>"` 生成 PDF。
