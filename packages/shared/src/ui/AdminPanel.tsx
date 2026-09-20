@@ -31,7 +31,7 @@ export function AdminPanel() {
 
   const [total, setTotal] = useState(0)
   const [listPage, setListPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(5)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
 
@@ -83,7 +83,7 @@ export function AdminPanel() {
 
   useEffect(() => {
     void (async () => {
-      await loadPage(1, 20)
+      await loadPage(1, 5)
       await loadSettings()
     })()
   }, [loadPage, loadSettings])

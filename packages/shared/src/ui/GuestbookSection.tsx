@@ -67,7 +67,7 @@ export function GuestbookSection({
   const [items, setItems] = useState<CommentRow[]>(initialPage?.rows ?? [])
   const [total, setTotal] = useState(initialPage?.total ?? 0)
   const [pageNum, setPageNum] = useState(initialPage?.page ?? 1)
-  const [pageSize, setPageSize] = useState(initialPage?.pageSize ?? 20)
+  const [pageSize, setPageSize] = useState(initialPage?.pageSize ?? 5)
   const [totalPages, setTotalPages] = useState(initialPage?.totalPages ?? 1)
   const [loading, setLoading] = useState(false)
   const firstRun = useRef(true)

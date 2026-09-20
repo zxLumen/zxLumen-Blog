@@ -21,7 +21,7 @@ export default async function Home() {
   }
 
   const db = await getActiveDb();
-  const commentsPage = db.listThreadPage({ page: 1, pageSize: 20, includePrivate: admin });
+  const commentsPage = db.listThreadPage({ page: 1, pageSize: 5, includePrivate: admin });
   const usage = db.listUsage(30);
 
   return (
