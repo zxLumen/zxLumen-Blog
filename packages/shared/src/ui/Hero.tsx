@@ -6,11 +6,13 @@ import { usePrefs } from './theme-context.js'
 import { Typewriter } from './Typewriter.js'
 
 interface HeroProps {
-  /** 主 CTA 链接 / 次 CTA 链接 */
+  /** 主 CTA 链接 / 次 CTA 链接 / 第三 CTA 链接 */
   primaryHref?: string
   primaryLabel?: string
   secondaryHref?: string
   secondaryLabel?: string
+  tertiaryHref?: string
+  tertiaryLabel?: string
 }
 
 /** 隐藏彩蛋:快速连点 ASCII 框 4 次进入 admin */
@@ -22,6 +24,8 @@ export function Hero({
   primaryLabel = '查看项目 →',
   secondaryHref = '/#usage',
   secondaryLabel = '用量面板',
+  tertiaryHref = '/#about',
+  tertiaryLabel = '关于 / 简历',
 }: HeroProps) {
   const { themeMeta: meta } = usePrefs()
   const clicks = useRef<number[]>([])
@@ -55,6 +59,9 @@ export function Hero({
             </a>
             <a className="zx-btn zx-btn-ghost" href={secondaryHref}>
               {secondaryLabel}
+            </a>
+            <a className="zx-btn zx-btn-ghost" href={tertiaryHref}>
+              {tertiaryLabel}
             </a>
           </div>
         </div>
