@@ -1,0 +1,25 @@
+# 主页根域名(需先把 A 记录指向服务器 IP)
+{$DOMAIN} {
+	encode zstd gzip
+
+	# 安全响应头
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy app:3000
+}
+
+# 未来项目 demo:每个子域名一条,反代到对应容器
+# 记得把 demo 服务加入 compose 的 web 网络
+#
+# demo1.{$DOMAIN} {
+# 	reverse_proxy demo1:8080
+# }
+#
+# demo2.{$DOMAIN} {
+# 	reverse_proxy demo2:8080
+# }

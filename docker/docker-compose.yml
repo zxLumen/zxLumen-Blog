@@ -1,0 +1,54 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: zx-home:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_PATH: /data/zx.db
+      NODE_ENV: production
+    volumes:
+      - zx-data:/data
+    expose:
+      - "3000"
+    networks:
+      - web
+
+  # 其他项目 demo:加到同一网络,在 Caddyfile 里按子域名反代
+  # demo1:
+  #   image: your-demo-image:latest
+  #   restart: unless-stopped
+  #   expose:
+  #     - "8080"
+  #   networks:
+  #     - web
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+
+volumes:
+  zx-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  web:
+    driver: bridge
