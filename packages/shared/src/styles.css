@@ -2525,3 +2525,11 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   display: block;
   border-radius: calc(var(--radius) - 2px);
 }
+
+/* 按钮内小图标(表情/箭头)放大 */
+.zx-ico {
+  display: inline-block;
+  font-size: 1.35em;
+  line-height: 1;
+  vertical-align: -0.12em;
+}

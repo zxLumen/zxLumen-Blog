@@ -21,11 +21,11 @@ export function AboutSection({ contacts }: { contacts?: Contacts }) {
             <ContactActions contacts={contacts} />
             {github && (
               <a className="zx-btn zx-btn-ghost" href={github} target="_blank" rel="noreferrer">
-                GitHub ↗
+                GitHub <span className="zx-ico" aria-hidden="true">↗</span>
               </a>
             )}
             <a className="zx-btn" href="/resume.pdf" download>
-              下载简历 ↓
+              下载简历 <span className="zx-ico" aria-hidden="true">↓</span>
             </a>
             <a className="zx-btn zx-btn-ghost" href="/#guestbook">
               留言
