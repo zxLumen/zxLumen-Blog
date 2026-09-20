@@ -27,7 +27,7 @@ export const PROFILE: Profile = {
 export const LINKS: LinkItem[] = [
   { label: 'email', url: 'mailto:you@example.com' },
   { label: 'resume', url: '/resume.pdf' },
-  { label: 'github', url: '' },
+  { label: 'github', url: 'https://github.com/yourname' },
 ]
 
 const T = (name: string, level: number, tags: string[]): TechItem => ({ name, level, tags })

@@ -1,10 +1,11 @@
 'use client'
 
-import { PROFILE, TECH, TIMELINE, type Contacts } from '../content.js'
+import { LINKS, PROFILE, TECH, TIMELINE, type Contacts } from '../content.js'
 import { Section } from './Section.js'
 import { ContactActions } from './ContactActions.js'
 
 export function AboutSection({ contacts }: { contacts?: Contacts }) {
+  const github = LINKS.find((l) => l.label === 'github')?.url
   return (
     <Section id="about" tag="// ABOUT" num="03" title="关于 / 简历">
       <div className="zx-about-grid">
@@ -18,6 +19,11 @@ export function AboutSection({ contacts }: { contacts?: Contacts }) {
           </p>
           <div className="zx-cta">
             <ContactActions contacts={contacts} />
+            {github && (
+              <a className="zx-btn zx-btn-ghost" href={github} target="_blank" rel="noreferrer">
+                GitHub ↗
+              </a>
+            )}
             <a className="zx-btn" href="/resume.pdf" download>
               下载简历 ↓
             </a>
