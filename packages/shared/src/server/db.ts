@@ -36,10 +36,14 @@ export interface Db {
     page?: number
     pageSize?: number
     includePrivate?: boolean
-    /** 访客匿名 ID:额外放行该访客自己的私密留言 */
+    /** 访客匿名 ID:额外放行该访客自己的私密留言,并标记 mine */
     viewerCid?: string
+    /** 返回 author_cid(仅站长接口使用) */
+    withCid?: boolean
   }): PagedComments
   getComment(id: number): CommentRow | null
+  /** 取某条留言的作者匿名 ID(仅服务端使用) */
+  getCommentCid(id: number): string | null
   addComment(input: NewCommentInput): CommentRow
   deleteComment(id: number): boolean
   listUsage(days?: number): UsageRow[]
@@ -56,6 +60,7 @@ export interface Db {
 const nowIso = () => new Date().toISOString().replace('T', ' ').slice(0, 19)
 
 const COMMENT_COLS = `id, author, author_link, body, visibility, parent_id, is_admin, created_at`
+const COMMENT_COLS_CID = `id, author, author_link, body, visibility, parent_id, is_admin, author_cid, created_at`
 
 /** 打开(必要时创建)SQLite 数据库并初始化 schema + 轻量迁移 */
 export function openDb(path: string): Db {
@@ -105,7 +110,13 @@ export function openDb(path: string): Db {
         .all(limit) as CommentRow[]
     },
 
-    listThreadPage({ page = 1, pageSize = 20, includePrivate = false, viewerCid = '' } = {}) {
+    listThreadPage({
+      page = 1,
+      pageSize = 20,
+      includePrivate = false,
+      viewerCid = '',
+      withCid = false,
+    } = {}) {
       const size = Math.min(100, Math.max(1, Math.floor(pageSize)))
       // 站长看全部;访客看公开 + 自己发的私密;其余仅公开
       const mine = !includePrivate && !!viewerCid
@@ -139,18 +150,26 @@ export function openDb(path: string): Db {
       }
 
       const ph = rootIds.map(() => '?').join(',')
-      const rows = db
+      // 需要 author_cid 时多取一列:站长接口原样返回,访客侧仅用于计算 mine 后剔除
+      const cols = withCid || mine ? COMMENT_COLS_CID : COMMENT_COLS
+      const raw = db
         .prepare(
           `WITH RECURSIVE tree(id) AS (
              SELECT id FROM comments WHERE id IN (${ph})
              UNION ALL
              SELECT c.id FROM comments c JOIN tree t ON c.parent_id = t.id
            )
-           SELECT ${COMMENT_COLS} FROM comments
+           SELECT ${cols} FROM comments
            WHERE id IN (SELECT id FROM tree) ${vis}
            ORDER BY created_at ASC, id ASC`,
         )
-        .all(...rootIds, ...visArgs) as CommentRow[]
+        .all(...rootIds, ...visArgs) as (CommentRow & { author_cid?: string })[]
+
+      let rows: CommentRow[] = raw
+      if (mine) {
+        // 标记"本人所发",并剔除 author_cid,避免泄露给前端
+        rows = raw.map(({ author_cid, ...rest }) => ({ ...rest, mine: author_cid === viewerCid }))
+      }
 
       return { rows, total, page: cur, pageSize: size, totalPages }
     },
@@ -158,6 +177,13 @@ export function openDb(path: string): Db {
     getComment(id) {
       const r = db.prepare(`SELECT ${COMMENT_COLS} FROM comments WHERE id = ?`).get(id)
       return (r as CommentRow) ?? null
+    },
+
+    getCommentCid(id) {
+      const r = db.prepare(`SELECT author_cid FROM comments WHERE id = ?`).get(id) as
+        | { author_cid: string | null }
+        | undefined
+      return r ? (r.author_cid ?? '') : null
     },
 
     addComment(input) {

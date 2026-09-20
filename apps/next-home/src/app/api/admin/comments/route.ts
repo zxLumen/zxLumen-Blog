@@ -15,6 +15,7 @@ export async function GET(req: Request) {
     page: Number.isFinite(page) ? page : 1,
     pageSize: Number.isFinite(pageSize) ? pageSize : 20,
     includePrivate: true,
+    withCid: true,
   })
   return Response.json(data)
 }

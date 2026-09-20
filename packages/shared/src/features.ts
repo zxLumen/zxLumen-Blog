@@ -9,6 +9,8 @@
 export const FEATURE_IDS = [
   // admin 顶部 Tab 分栏:留言 / 个人信息 / Token 用量
   'admin-tabs',
+  // 访客删除自己发过的留言(按匿名 ID 校验)
+  'self-delete',
 ] as const
 
 export type FeatureId = (typeof FEATURE_IDS)[number]

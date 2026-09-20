@@ -5,6 +5,7 @@ import type { CommentRow, PagedComments } from '../schema.js'
 import { fmtDateTime } from '../format.js'
 import { Section } from './Section.js'
 import { Pagination } from './Pagination.js'
+import { useFeature } from './theme-context.js'
 
 export interface NewComment {
   author: string
@@ -63,6 +64,8 @@ export function GuestbookSection({
   initialAuthor = '',
 }: GuestbookProps) {
   const apiBase = apiBaseProp.replace(/\/$/, '')
+  // 访客删除自己的留言:TEST-only 新功能
+  const canSelfDelete = useFeature('self-delete')
 
   const [items, setItems] = useState<CommentRow[]>(initialPage?.rows ?? [])
   const [total, setTotal] = useState(initialPage?.total ?? 0)
@@ -220,9 +223,13 @@ export function GuestbookSection({
   }
 
   async function onDelete(id: number) {
-    if (!confirm(`删除留言 #${id}(含其全部回复)?`)) return
+    const text = isAdmin
+      ? `删除留言 #${id}(含其全部回复)?`
+      : `删除你的留言 #${id}(含其下全部回复)?`
+    if (!confirm(text)) return
+    const endpoint = isAdmin ? `${apiBase}/admin/delete` : `${apiBase}/comments/delete`
     try {
-      const res = await fetch(`${apiBase}/admin/delete`, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -252,7 +259,9 @@ export function GuestbookSection({
         <span className="zx-c-author">{c.author}</span>
       )}
       {!!c.is_admin && <span className="zx-admin-tag">站长</span>}
-      {c.visibility === 'private' && <span className="zx-private-tag">仅站长可见</span>}
+      {c.visibility === 'private' && (
+        <span className="zx-private-tag">{c.mine ? '私密 · 仅你与站长可见' : '仅站长可见'}</span>
+      )}
       <span className="zx-c-time">{fmtDateTime(c.created_at)}</span>
       <span className="zx-c-actions">
         {replyTo !== c.id && (
@@ -260,7 +269,7 @@ export function GuestbookSection({
             回复
           </button>
         )}
-        {isAdmin && (
+        {(isAdmin || (c.mine && canSelfDelete)) && (
           <button type="button" className="zx-linkbtn" onClick={() => void onDelete(c.id)}>
             删除
           </button>

@@ -82,6 +82,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 |---|---|---|
 | GET | `/api/comments?page=&pageSize=` | 留言分页(线程级);登录站长则含私密 |
 | POST | `/api/comments` | 新增留言 / 回复(`parent_id`、`visibility`) |
+| POST | `/api/comments/delete` | 删除自己的留言(按匿名 ID 校验;TEST-only) |
 | GET | `/api/usage?days=30` | 用量记录 |
 | POST | `/api/usage` | 上报用量,需头 `X-Report-Token` |
 | GET | `/api/contact/phone` | 获取电话(限流;号码不预置页面) |

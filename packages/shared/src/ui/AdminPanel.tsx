@@ -567,6 +567,7 @@ export function AdminPanel() {
                 #{c.id} · {fmtDateTime(c.created_at)}
               </span>
               {c.ip && <span className="zx-c-time">ip {c.ip}</span>}
+              {c.author_cid && <span className="zx-c-time">cid {c.author_cid}</span>}
               <button
                 className="zx-btn zx-btn-sm zx-btn-ghost"
                 style={{ marginLeft: 'auto' }}
@@ -586,6 +587,7 @@ export function AdminPanel() {
                   <span className="zx-c-time">
                     #{r.id} · {fmtDateTime(r.created_at)}
                   </span>
+                  {r.author_cid && <span className="zx-c-time">cid {r.author_cid}</span>}
                   <button
                     className="zx-btn zx-btn-sm zx-btn-ghost"
                     style={{ marginLeft: 'auto' }}

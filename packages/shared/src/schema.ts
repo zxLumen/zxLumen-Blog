@@ -43,6 +43,10 @@ export interface CommentRow {
   parent_id?: number | null
   is_admin?: number
   ip?: string
+  /** 访客匿名 ID:仅站长接口返回(前端其他场景不下发) */
+  author_cid?: string
+  /** 是否为当前访客本人所发(用于显示"删除"按钮) */
+  mine?: boolean
   created_at: string
 }
 
