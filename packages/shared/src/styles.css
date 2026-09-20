@@ -369,7 +369,7 @@
 
 html {
   color-scheme: dark;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 [data-mode='light'] {
