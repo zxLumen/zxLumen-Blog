@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.1] - 2026-09-20
+
+### 修复
+
+- **修复主题/布局下拉在 SIDEBAR 下显示不全**:改回 **portal + fixed** 定位,自动选择「右侧 / 下方」展开,不再被容器 `overflow` 裁剪;跟随滚动/resize 重定位,支持 `Esc` 关闭
+
+[0.4.1]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.4.1
+
 ## [0.4.0] - 2026-09-20
 
 ### 新增

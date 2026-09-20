@@ -2502,3 +2502,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   box-shadow: 0 0 24px -6px var(--glow), 0 20px 50px -24px rgba(0, 0, 0, 0.9);
   animation: zx-rise 0.2s ease both;
 }
+
+/* 门户 + fixed 定位的下拉:不依赖容器定位,不受 overflow 裁剪 */
+.zx-pop-fixed {
+  right: auto;
+}
