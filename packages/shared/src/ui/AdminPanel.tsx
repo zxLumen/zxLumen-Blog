@@ -42,6 +42,7 @@ export function AdminPanel() {
   const [ds, setDs] = useState<DsStatus | null>(null)
   const [dsToken, setDsToken] = useState('')
   const [dsBusy, setDsBusy] = useState(false)
+  const [tab, setTab] = useState<'comments' | 'profile' | 'token'>('comments')
 
   const [curPw, setCurPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -328,11 +329,26 @@ export function AdminPanel() {
     <div className="zx-container" style={{ paddingBlock: '2.5rem' }}>
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
-        <h1 className="zx-sec-title">留言管理</h1>
+        <h1 className="zx-sec-title">站长后台</h1>
         <button className="zx-btn zx-btn-sm zx-btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => void logout()}>
           退出登录
         </button>
       </div>
+
+      <div className="zx-tabs" style={{ marginBottom: '1rem' }}>
+        {(['comments', 'profile', 'token'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={`zx-tab${tab === t ? ' is-active' : ''}`}
+            onClick={() => setTab(t)}
+          >
+            {t === 'comments' ? '留言' : t === 'profile' ? '个人信息' : 'Token 用量'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'profile' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           站长昵称 <span>留言/回复时自动使用</span>
@@ -356,7 +372,9 @@ export function AdminPanel() {
           </button>
         </div>
       </div>
+      )}
 
+      {tab === 'profile' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           联系方式 <span>前台「关于」与页脚展示;电话不显示号码</span>
@@ -417,7 +435,9 @@ export function AdminPanel() {
           </span>
         </div>
       </div>
+      )}
 
+      {tab === 'token' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           DeepSeek 用量 <span>平台私有接口 · 需登录会话令牌</span>
@@ -478,7 +498,9 @@ export function AdminPanel() {
         </p>
         {ds?.lastError && <div className="zx-msg err">{ds.lastError}</div>}
       </div>
+      )}
 
+      {tab === 'profile' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           修改密码 <span>存于数据库,优先于环境变量</span>
@@ -518,7 +540,10 @@ export function AdminPanel() {
           </button>
         </div>
       </div>
+      )}
 
+      {tab === 'comments' && (
+      <>
       {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
 
       <p className="zx-muted zx-mono" style={{ fontSize: '0.75rem' }}>
@@ -580,6 +605,8 @@ export function AdminPanel() {
         onPage={(p) => void loadPage(p, pageSize)}
         onPageSize={(s) => void loadPage(1, s)}
       />
+      </>
+      )}
     </div>
   )
 }
