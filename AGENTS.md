@@ -65,6 +65,11 @@ cd apps/next-home && npm run lint && npm run build
 
 > `GET /api/env` 返回 `{ test }`,也可用于简单的模式判断;但组件内优先用 `useFeature`。
 
+### 在 TEST 模式模拟多个访客
+右上角 `MOCK` 切换器(仅测试模式)可设定访客匿名 ID(`zx_mock`),以不同用户视角浏览/留言,
+用于验证"私密仅本人与站长可见""访客删除自己的留言"等。模拟时该请求按普通访客处理
+(不享受站长特权);`恢复本人` 清除。也可直接调 `POST /api/admin/mock` `{ cid }`。
+
 ## 隐私:以下文件不入库(部署需单独提供)
 
 - `packages/shared/src/content.local.ts`(真实资料;有 `content.local.example.ts` 占位)

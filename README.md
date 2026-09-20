@@ -58,6 +58,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 - **留言板**:公开 / 仅站长可见;**回复**(单层缩进 + `回复 @昵称`);**页码分页**(每页 5/10/20/50/100);昵称 cookie 记忆;`/admin` 可删除(递归整棵回复)
 - **admin** `/admin`:会话登录、站长昵称、修改密码、联系方式(邮箱/微信/电话/二维码上传)、留言管理
 - **测试模式**:整站 LIVE / TEST 切换(独立测试库 + 全部主题/布局/功能),仅站长可见
+- **模拟访客(TEST)**:测试模式下右上角 `MOCK` 可切换多个匿名身份,以不同访客视角浏览/留言(验证私密可见性、自删等)
 
 ### 主题 / 布局 / 功能的"正式集"
 在 `packages/shared` 里维护:
@@ -95,6 +96,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 | GET/POST | `/api/admin/wechat-qr` | 查询/上传微信二维码 |
 | GET | `/api/env` | 查询当前模式 `{ test }` |
 | POST | `/api/env` | 切换 LIVE / TEST(仅站长);`{reset:true}` 清空测试库 |
+| POST | `/api/admin/mock` | 设置/清除"模拟访客"身份(仅站长 + 测试模式) |
 
 上报细节见 `docs/REPORTING.md`。
 

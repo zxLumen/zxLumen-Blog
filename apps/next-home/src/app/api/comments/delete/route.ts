@@ -1,7 +1,6 @@
-import { cookies } from 'next/headers'
 import { getActiveDb, featureOn } from '@/lib/env'
 import { readJson } from '@/lib/db'
-import { CID_COOKIE } from '@/lib/clientid'
+import { effectiveCid } from '@/lib/clientid'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +17,7 @@ export async function POST(req: Request) {
   const id = typeof data?.id === 'number' ? data.id : null
   if (id === null) return Response.json({ error: '缺少 id' }, { status: 400 })
 
-  const cid = (await cookies()).get(CID_COOKIE)?.value ?? ''
+  const cid = await effectiveCid()
   if (!cid) return Response.json({ error: '只能删除自己的留言' }, { status: 403 })
 
   const db = await getActiveDb()

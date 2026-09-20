@@ -3,13 +3,15 @@ import type { UsageRow } from "@zx/shared";
 import { HomePage } from "@zx/shared/ui";
 import { getActiveDb } from "@/lib/env";
 import { isAdmin } from "@/lib/auth";
+import { effectiveCid, isMockActive } from "@/lib/clientid";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
 import { fetchUsage } from "@/lib/deepseek";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const admin = await isAdmin();
+  // 模拟访客时,首页按普通访客视角渲染(不显示站长特权)
+  const admin = (await isAdmin()) && !(await isMockActive());
   let initialAuthor = "";
   if (admin) {
     initialAuthor = getAdminNick();
@@ -22,7 +24,7 @@ export default async function Home() {
     }
   }
 
-  const viewerCid = (await cookies()).get("zx_cid")?.value ?? "";
+  const viewerCid = await effectiveCid();
   const db = await getActiveDb();
   const commentsPage = db.listThreadPage({
     page: 1,

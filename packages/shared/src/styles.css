@@ -2266,6 +2266,66 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   text-underline-offset: 3px;
 }
 
+/* ---------- 模拟访客(仅测试模式) ---------- */
+
+.zx-admintools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.zx-mock {
+  position: relative;
+}
+
+.zx-mock > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.zx-mock > summary::-webkit-details-marker {
+  display: none;
+}
+
+.zx-mockpanel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 50;
+  width: min(260px, 80vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.5);
+}
+
+.zx-mock-title {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--fg-muted);
+}
+
+.zx-mock-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.zx-mock-row .zx-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.zx-mock-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 /* ---------- 回复对象提示 ---------- */
 
 .zx-reply-to {

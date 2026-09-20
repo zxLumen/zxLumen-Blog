@@ -2,7 +2,7 @@ import { isAdmin } from '@/lib/auth'
 import { getActiveDb } from '@/lib/env'
 import { rateLimit, readJson, clientIp } from '@/lib/db'
 import { getAdminNick } from '@/lib/settings'
-import { cidCookie, resolveCid } from '@/lib/clientid'
+import { cidCookie, isMockActive, resolveCid } from '@/lib/clientid'
 import type { Visibility } from '@zx/shared'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +20,8 @@ interface Body {
 
 export async function GET(req: Request) {
   const db = await getActiveDb()
-  const admin = await isAdmin()
+  // 模拟访客时按普通访客视角(不享受站长特权)
+  const admin = (await isAdmin()) && !(await isMockActive())
   const { cid, isNew } = await resolveCid()
   const url = new URL(req.url)
   const page = Number(url.searchParams.get('page') || 1)
@@ -45,7 +46,8 @@ export async function POST(req: Request) {
   const data = await readJson<Body>(req)
   if (!data) return Response.json({ error: '请求体无效' }, { status: 400 })
 
-  const admin = await isAdmin()
+  // 模拟访客时按普通访客身份(不享受站长特权、不能用站长昵称)
+  const admin = (await isAdmin()) && !(await isMockActive())
   const author = (data.author ?? '').trim()
   const body = (data.body ?? '').trim()
   const link = (data.author_link ?? '').trim()

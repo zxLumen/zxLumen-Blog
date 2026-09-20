@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import "@zx/shared/styles.css";
 import {
   NAV,
@@ -16,7 +17,9 @@ import { isAdmin } from "@/lib/auth";
 import { isTestMode } from "@/lib/env";
 import { getClientContacts } from "@/lib/settings";
 import { EnvSwitch } from "@/components/EnvSwitch";
+import { MockUserSwitch } from "@/components/MockUserSwitch";
 import { AppShell } from "@/components/AppShell";
+import { MOCK_COOKIE } from "@/lib/clientid";
 
 export const metadata: Metadata = {
   title: SITE_META.title,
@@ -37,6 +40,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const nav = admin ? [...NAV, { label: "admin", href: "/admin" }] : NAV;
   const initScript = `${themeInitScript(allowedThemeIds, allowedLayoutIds)};${NAV_INIT_SCRIPT}`;
 
+  const mockCid = testMode ? ((await cookies()).get(MOCK_COOKIE)?.value ?? "") : "";
+  const adminTools = admin ? (
+    <div className="zx-admintools">
+      <EnvSwitch testMode={testMode} />
+      {testMode && <MockUserSwitch current={mockCid} />}
+    </div>
+  ) : null;
+
   return (
     <html lang="zh-CN" data-theme="github-light" data-layout="sidebar" suppressHydrationWarning>
       <head>
@@ -49,7 +60,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           allowedThemeIds={allowedThemeIds}
           allowedLayoutIds={allowedLayoutIds}
           allowedFeatures={allowedFeatures}
-          extra={admin ? <EnvSwitch testMode={testMode} /> : null}
+          extra={adminTools}
         >
           {children}
         </AppShell>
