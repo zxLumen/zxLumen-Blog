@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3000",
     "backup": "node scripts/backup.mjs",
+    "seed:test": "node scripts/seed-test.mjs",
     "lint": "eslint"
   },
   "dependencies": {
