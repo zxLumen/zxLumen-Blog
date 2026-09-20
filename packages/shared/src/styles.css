@@ -2275,55 +2275,48 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   flex-wrap: wrap;
 }
 
-.zx-mock {
-  position: relative;
-}
-
-.zx-mock > summary {
-  list-style: none;
-  cursor: pointer;
-}
-
-.zx-mock > summary::-webkit-details-marker {
-  display: none;
-}
-
-.zx-mockpanel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.4rem);
-  z-index: 50;
-  width: min(260px, 80vw);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.7rem;
-  background: var(--bg-2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.5);
-}
-
-.zx-mock-title {
+.zx-mocksel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-family: var(--font-mono);
-  font-size: 0.66rem;
-  color: var(--fg-muted);
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.5rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.zx-mock-row {
-  display: flex;
-  gap: 0.4rem;
+.zx-mocksel:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
 }
 
-.zx-mock-row .zx-input {
-  flex: 1;
-  min-width: 0;
+.zx-mocksel.is-on {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
 }
 
-.zx-mock-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+.zx-mocksel select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  outline: none;
+  max-width: 11rem;
+}
+
+.zx-mocksel select option {
+  color: var(--fg);
+  background: var(--bg-2);
 }
 
 /* ---------- 回复对象提示 ---------- */

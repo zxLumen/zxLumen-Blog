@@ -17,5 +17,7 @@ export async function GET(req: Request) {
     includePrivate: true,
     withCid: true,
   })
-  return Response.json(data)
+  const res = Response.json(data)
+  res.headers.set('Cache-Control', 'no-store')
+  return res
 }

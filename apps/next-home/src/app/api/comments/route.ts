@@ -33,6 +33,8 @@ export async function GET(req: Request) {
     viewerCid: cid,
   })
   const res = Response.json(data)
+  // 内容随查看者身份(公开/本人私密)而变,禁止任何缓存
+  res.headers.set('Cache-Control', 'no-store')
   if (isNew) res.headers.append('Set-Cookie', cidCookie(cid))
   return res
 }

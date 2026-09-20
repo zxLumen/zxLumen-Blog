@@ -97,6 +97,7 @@ export function GuestbookSection({
       try {
         const res = await fetch(`${apiBase}/comments?page=${p}&pageSize=${size}`, {
           credentials: 'same-origin',
+          cache: 'no-store',
         })
         const d = (await res.json()) as PagedComments
         setItems(d.rows ?? [])

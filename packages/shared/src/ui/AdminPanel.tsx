@@ -9,6 +9,7 @@ import { useFeature } from './theme-context.js'
 async function loadPageData(page: number, pageSize: number): Promise<PagedComments> {
   const res = await fetch(`/api/admin/comments?page=${page}&pageSize=${pageSize}`, {
     credentials: 'same-origin',
+    cache: 'no-store',
   })
   if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error(`加载失败 (${res.status})`)
