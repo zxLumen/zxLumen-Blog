@@ -1,6 +1,7 @@
 // 个人资料示例 / 占位。构建前会自动复制为 content.local.ts(不入库)。
 // 想自定义:直接编辑生成的 content.local.ts(它被 .gitignore 忽略,不会提交)。
 import type {
+  Contacts,
   LinkItem,
   Profile,
   Project,
@@ -67,4 +68,11 @@ export const SITE_META: SiteMeta = {
   title: 'Your Name · 个人主页',
   description: '一句话站点描述。',
   keywords: ['yourname', '个人主页'],
+}
+
+export const CONTACTS: Contacts = {
+  email: 'you@example.com',
+  wechat: 'your_wechat_id',
+  // 电话倒序存储(示例):13800138000 → 00083001183
+  phoneReversed: '00083001183',
 }

@@ -2,6 +2,7 @@
 
 import { PROFILE, TECH, TIMELINE } from '../content.js'
 import { Section } from './Section.js'
+import { ContactActions } from './ContactActions.js'
 
 export function AboutSection() {
   return (
@@ -16,9 +17,7 @@ export function AboutSection() {
             {PROFILE.location} · {PROFILE.email}
           </p>
           <div className="zx-cta">
-            <a className="zx-btn" href={`mailto:${PROFILE.email}`}>
-              联系我 →
-            </a>
+            <ContactActions />
             <a className="zx-btn" href="/resume.pdf" download>
               下载简历 ↓
             </a>

@@ -50,6 +50,14 @@ export interface SiteMeta {
   keywords: string[]
 }
 
+export interface Contacts {
+  email: string
+  /** 微信号(点击复制/跳转添加) */
+  wechat?: string
+  /** 电话(倒序存储,避免明文出现在源码/打包产物中;运行时还原) */
+  phoneReversed?: string
+}
+
 // 个人资料(来自不入库的 content.local.ts)
 import * as local from './content.local.js'
 
@@ -59,6 +67,7 @@ export const TECH: TechItem[] = local.TECH
 export const TIMELINE: TimelineEntry[] = local.TIMELINE
 export const PROJECTS: Project[] = local.PROJECTS
 export const SITE_META: SiteMeta = local.SITE_META
+export const CONTACTS: Contacts = local.CONTACTS
 
 export const NAV = [
   { label: 'home', href: '/' },
