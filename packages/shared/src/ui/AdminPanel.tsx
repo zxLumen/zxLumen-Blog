@@ -24,6 +24,11 @@ export function AdminPanel() {
   const [nick, setNick] = useState('')
   const [nickBusy, setNickBusy] = useState(false)
 
+  const [curPw, setCurPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [newPw2, setNewPw2] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+
   const [total, setTotal] = useState(0)
   const [listPage, setListPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -82,6 +87,31 @@ export function AdminPanel() {
       await loadSettings()
     })()
   }, [loadPage, loadSettings])
+
+  async function savePassword() {
+    if (newPw !== newPw2) return setMsg({ kind: 'err', text: '两次输入的新密码不一致' })
+    if (newPw.length < 4) return setMsg({ kind: 'err', text: '新密码至少 4 位' })
+    setPwBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ current: curPw, next: newPw }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(d.error || '修改失败')
+      setCurPw('')
+      setNewPw('')
+      setNewPw2('')
+      setMsg({ kind: 'ok', text: '密码已更新(存于数据库,优先于环境变量)' })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '修改失败' })
+    } finally {
+      setPwBusy(false)
+    }
+  }
 
   async function login(e: React.FormEvent) {
     e.preventDefault()
@@ -199,6 +229,46 @@ export function AdminPanel() {
             disabled={nickBusy}
           >
             {nickBusy ? '保存中…' : '保存'}
+          </button>
+        </div>
+      </div>
+
+      <div className="zx-panel" style={{ marginBottom: '1rem' }}>
+        <h3>
+          修改密码 <span>存于数据库,优先于环境变量</span>
+        </h3>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            className="zx-input"
+            type="password"
+            style={{ maxWidth: 180 }}
+            value={curPw}
+            placeholder="当前密码"
+            onChange={(e) => setCurPw(e.target.value)}
+          />
+          <input
+            className="zx-input"
+            type="password"
+            style={{ maxWidth: 180 }}
+            value={newPw}
+            placeholder="新密码"
+            onChange={(e) => setNewPw(e.target.value)}
+          />
+          <input
+            className="zx-input"
+            type="password"
+            style={{ maxWidth: 180 }}
+            value={newPw2}
+            placeholder="确认新密码"
+            onChange={(e) => setNewPw2(e.target.value)}
+          />
+          <button
+            className="zx-btn zx-btn-sm zx-btn-primary"
+            type="button"
+            onClick={() => void savePassword()}
+            disabled={pwBusy}
+          >
+            {pwBusy ? '保存中…' : '更新密码'}
           </button>
         </div>
       </div>

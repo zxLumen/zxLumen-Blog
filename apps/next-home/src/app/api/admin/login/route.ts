@@ -1,12 +1,13 @@
 import { cookies } from 'next/headers'
-import { ADMIN_PASSWORD, getDb, readJson } from '@/lib/db'
+import { getDb, readJson } from '@/lib/db'
+import { verifyAdminPassword } from '@/lib/settings'
 import { ADMIN_COOKIE, adminCookieOptions, newAdminToken } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   const data = await readJson<{ password?: string }>(req)
-  if (data?.password !== ADMIN_PASSWORD) {
+  if (!data?.password || !verifyAdminPassword(data.password)) {
     return Response.json({ error: '密码错误' }, { status: 401 })
   }
   const token = newAdminToken()
