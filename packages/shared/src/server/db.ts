@@ -96,7 +96,7 @@ export function openDb(path: string): Db {
     },
 
     listThreadPage({ page = 1, pageSize = 20, includePrivate = false } = {}) {
-      const size = Math.min(100, Math.max(1, Math.floor(pageSize)))
+      const size = Math.min(1000, Math.max(1, Math.floor(pageSize)))
       const vis = includePrivate ? '' : `AND visibility='public'`
       const total = (
         db

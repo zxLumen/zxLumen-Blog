@@ -5,6 +5,11 @@ import { getTestDb, readJson } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
+export async function GET() {
+  const { isTestMode } = await import('@/lib/env')
+  return Response.json({ test: await isTestMode() })
+}
+
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
 

@@ -43,6 +43,7 @@ export function AdminPanel() {
   const [dsToken, setDsToken] = useState('')
   const [dsBusy, setDsBusy] = useState(false)
   const [tab, setTab] = useState<'comments' | 'profile' | 'token'>('comments')
+  const [testMode, setTestMode] = useState<boolean | null>(null)
 
   const [curPw, setCurPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -208,7 +209,16 @@ export function AdminPanel() {
 
   useEffect(() => {
     void (async () => {
-      await loadPage(1, 5)
+      let test = false
+      try {
+        const r = await fetch('/api/env', { credentials: 'same-origin' })
+        if (r.ok) test = ((await r.json()) as { test?: boolean }).test === true
+      } catch {
+        /* ignore */
+      }
+      setTestMode(test)
+      // 正式模式不分页(一次拉全);测试模式分页
+      await loadPage(1, test ? 5 : 1000)
       await loadSettings()
     })()
   }, [loadPage, loadSettings])
@@ -594,6 +604,7 @@ export function AdminPanel() {
         ))}
       </div>
 
+      {testMode !== false && (
       <Pagination
         page={listPage}
         totalPages={totalPages}
@@ -603,6 +614,7 @@ export function AdminPanel() {
         onPage={(p) => void loadPage(p, pageSize)}
         onPageSize={(s) => void loadPage(1, s)}
       />
+      )}
       </>
       )}
     </div>
