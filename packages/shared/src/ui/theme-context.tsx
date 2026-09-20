@@ -12,76 +12,144 @@ import {
 import {
   DEFAULT_LAYOUT,
   DEFAULT_THEME,
+  LAYOUTS,
   THEMES,
-  THEME_IDS,
   THEME_STORAGE_KEY,
+  LAYOUT_STORAGE_KEY,
   getTheme,
-  isValidTheme,
+  type Layout,
+  type LayoutId,
   type Theme,
 } from '../theme.js'
 
 interface PrefsValue {
   theme: string
+  layout: LayoutId
   themeMeta: Theme
+  layoutMeta: Layout
+  themes: Theme[]
+  layouts: Layout[]
   setTheme: (id: string) => void
+  setLayout: (id: LayoutId) => void
   cycleTheme: (dir: 1 | -1) => void
 }
 
 const PrefsContext = createContext<PrefsValue | null>(null)
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-function applyTheme(id: string) {
-  const t = getTheme(id)
-  const d = document.documentElement
-  d.dataset.theme = t.id
-  d.dataset.texture = t.texture
-  d.dataset.mode = t.mode
-  // 布局固定为 SIDEBAR
-  d.dataset.layout = DEFAULT_LAYOUT
-}
+export function PreferencesProvider({
+  allowedThemeIds,
+  allowedLayoutIds,
+  children,
+}: {
+  allowedThemeIds: string[]
+  allowedLayoutIds: LayoutId[]
+  children: React.ReactNode
+}) {
+  const themes = useMemo(
+    () => THEMES.filter((t) => allowedThemeIds.includes(t.id)),
+    [allowedThemeIds],
+  )
+  const layouts = useMemo(
+    () => LAYOUTS.filter((l) => allowedLayoutIds.includes(l.id)),
+    [allowedLayoutIds],
+  )
 
-export function PreferencesProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState(DEFAULT_THEME)
+  const [theme, setThemeState] = useState(
+    themes.some((t) => t.id === DEFAULT_THEME) ? DEFAULT_THEME : (themes[0]?.id ?? DEFAULT_THEME),
+  )
+  const [layout, setLayoutState] = useState<LayoutId>(
+    layouts.some((l) => l.id === DEFAULT_LAYOUT) ? DEFAULT_LAYOUT : (layouts[0]?.id ?? DEFAULT_LAYOUT),
+  )
 
-  // 首帧前恢复偏好(避免闪烁;同时在 Next dev StrictMode 重挂载后重设)
+  const applyTheme = useCallback((id: string) => {
+    const t = getTheme(id)
+    const d = document.documentElement
+    d.dataset.theme = t.id
+    d.dataset.texture = t.texture
+    d.dataset.mode = t.mode
+  }, [])
+
+  const applyLayout = useCallback((id: LayoutId) => {
+    document.documentElement.dataset.layout = id
+  }, [])
+
+  // 首帧恢复(受 allowed 限制)
   useIsoLayoutEffect(() => {
-    let saved: string | null = null
-    try {
-      saved = localStorage.getItem(THEME_STORAGE_KEY)
-    } catch {
-      /* ignore */
+    const read = (k: string) => {
+      try {
+        return localStorage.getItem(k)
+      } catch {
+        return null
+      }
     }
-    const next = isValidTheme(saved) ? (saved as string) : DEFAULT_THEME
-    setThemeState(next)
-    applyTheme(next)
-  }, [])
+    const savedTheme = read(THEME_STORAGE_KEY)
+    const nextTheme = savedTheme && themes.some((t) => t.id === savedTheme) ? savedTheme : themes[0].id
+    const savedLayout = read(LAYOUT_STORAGE_KEY)
+    const nextLayout =
+      savedLayout && layouts.some((l) => l.id === savedLayout)
+        ? (savedLayout as LayoutId)
+        : (layouts[0]?.id ?? DEFAULT_LAYOUT)
 
-  const setTheme = useCallback((id: string) => {
-    const next = isValidTheme(id) ? id : DEFAULT_THEME
-    setThemeState(next)
-    applyTheme(next)
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, next)
-    } catch {
-      /* ignore */
-    }
-  }, [])
+    setThemeState(nextTheme)
+    setLayoutState(nextLayout)
+    applyTheme(nextTheme)
+    applyLayout(nextLayout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themes, layouts])
+
+  const setTheme = useCallback(
+    (id: string) => {
+      if (!themes.some((t) => t.id === id)) return
+      setThemeState(id)
+      applyTheme(id)
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, id)
+      } catch {
+        /* ignore */
+      }
+    },
+    [themes, applyTheme],
+  )
+
+  const setLayout = useCallback(
+    (id: LayoutId) => {
+      if (!layouts.some((l) => l.id === id)) return
+      setLayoutState(id)
+      applyLayout(id)
+      try {
+        localStorage.setItem(LAYOUT_STORAGE_KEY, id)
+      } catch {
+        /* ignore */
+      }
+    },
+    [layouts, applyLayout],
+  )
 
   const cycleTheme = useCallback(
     (dir: 1 | -1) => {
-      const i = THEME_IDS.indexOf(theme)
-      const next = THEME_IDS[(i + dir + THEME_IDS.length) % THEME_IDS.length]
-      setTheme(next)
+      const i = themes.findIndex((t) => t.id === theme)
+      const next = themes[(i + dir + themes.length) % themes.length]
+      setTheme(next.id)
     },
-    [theme, setTheme],
+    [themes, theme, setTheme],
   )
 
-  // 快捷键:数字/字母 → 主题;[ ] 循环;Esc 关闭弹层
+  // 快捷键:数字/字母 → 主题;Shift+数字 → 布局(仅当有多个布局);[ ] 循环;Esc 关弹层
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null
       if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+
+      const digit = e.code?.startsWith('Digit') ? e.code.slice(5) : null
+      if (e.shiftKey) {
+        if (digit && layouts.length > 1) {
+          const l = layouts.find((x) => x.key === digit)
+          if (l) setLayout(l.id)
+        }
+        return
+      }
 
       if (e.key === '[') return cycleTheme(-1)
       if (e.key === ']') return cycleTheme(1)
@@ -89,23 +157,27 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
         document.querySelectorAll('.zx-pop').forEach((n) => n.dispatchEvent(new Event('zx-close')))
         return
       }
-
       const k = e.key.toLowerCase()
-      const t = THEMES.find((x) => x.key === k)
+      const t = themes.find((x) => x.key === k)
       if (t) setTheme(t.id)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [cycleTheme, setTheme])
+  }, [themes, layouts, theme, setTheme, setLayout, cycleTheme])
 
   const value = useMemo<PrefsValue>(
     () => ({
       theme,
+      layout,
       themeMeta: getTheme(theme),
+      layoutMeta: LAYOUTS.find((l) => l.id === layout) ?? LAYOUTS[0],
+      themes,
+      layouts,
       setTheme,
+      setLayout,
       cycleTheme,
     }),
-    [theme, setTheme, cycleTheme],
+    [theme, layout, themes, layouts, setTheme, setLayout, cycleTheme],
   )
 
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>

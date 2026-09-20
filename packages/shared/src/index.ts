@@ -4,7 +4,7 @@ export {
   THEME_IDS,
   DEFAULT_THEME,
   THEME_STORAGE_KEY,
-  THEME_INIT_SCRIPT,
+  themeInitScript,
   isValidTheme,
   getTheme,
   LAYOUTS,
@@ -12,6 +12,8 @@ export {
   DEFAULT_LAYOUT,
   LAYOUT_STORAGE_KEY,
   isValidLayout,
+  LIVE_THEME_IDS,
+  LIVE_LAYOUT_IDS,
 } from './theme.js'
 export type { Theme, Texture, Mode, Layout, LayoutId } from './theme.js'
 

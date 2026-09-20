@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import "@zx/shared/styles.css";
-import { NAV, NAV_INIT_SCRIPT, SITE_META, THEME_INIT_SCRIPT } from "@zx/shared";
+import {
+  NAV,
+  NAV_INIT_SCRIPT,
+  SITE_META,
+  themeInitScript,
+  THEME_IDS,
+  LAYOUT_IDS,
+  LIVE_THEME_IDS,
+  LIVE_LAYOUT_IDS,
+} from "@zx/shared";
 import { isAdmin } from "@/lib/auth";
 import { isTestMode } from "@/lib/env";
 import { getClientContacts } from "@/lib/settings";
@@ -17,19 +26,25 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const admin = await isAdmin();
   const testMode = await isTestMode();
   const contacts = getClientContacts();
+
+  // 正式环境只放行精简集;测试模式放行全部主题/布局
+  const allowedThemeIds = testMode ? THEME_IDS : LIVE_THEME_IDS;
+  const allowedLayoutIds = testMode ? LAYOUT_IDS : LIVE_LAYOUT_IDS;
+
   const nav = admin ? [...NAV, { label: "admin", href: "/admin" }] : NAV;
+  const initScript = `${themeInitScript(allowedThemeIds, allowedLayoutIds)};${NAV_INIT_SCRIPT}`;
 
   return (
     <html lang="zh-CN" data-theme="github-light" data-layout="sidebar" suppressHydrationWarning>
       <head>
-        <script
-          dangerouslySetInnerHTML={{ __html: `${THEME_INIT_SCRIPT};${NAV_INIT_SCRIPT}` }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: initScript }} />
       </head>
       <body>
         <AppShell
           nav={nav}
           contacts={contacts}
+          allowedThemeIds={allowedThemeIds}
+          allowedLayoutIds={allowedLayoutIds}
           extra={admin ? <EnvSwitch testMode={testMode} /> : null}
         >
           {children}

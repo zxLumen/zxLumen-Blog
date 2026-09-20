@@ -4,17 +4,12 @@ export type Mode = 'dark' | 'light'
 export interface Theme {
   id: string
   label: string
-  /** 一句话风格说明 */
   tagline: string
-  /** hero 首屏打字机文案 */
   heroLine: string
-  /** ascii 示意图 */
   motif: string
-  /** 快捷键(按展示顺序分配) */
   key: string
   texture: Texture
   mode: Mode
-  /** 主色,用于选择器色块 */
   swatch: [string, string, string]
 }
 
@@ -97,11 +92,7 @@ const MOTIF_WAVE = [
   '   ╰──────────────────╯ ',
 ].join('\n')
 
-// 未使用的 motif 保留,便于以后加回主题
-void MOTIF_BLOCK
-void MOTIF_CITY
-
-/* ---------- 6 套主题(快捷键 1–6) ---------- */
+/* ---------- 18 套主题:前 6 为正式集(键 1–6;正式环境仅放行这 6 个) ---------- */
 
 export const THEMES: Theme[] = [
   {
@@ -170,16 +161,161 @@ export const THEMES: Theme[] = [
     swatch: ['#07070b', '#00a2ff', '#ffd60a'],
     motif: MOTIF_FRAME,
   },
+  {
+    id: 'terminal',
+    label: 'TERMINAL',
+    tagline: '矩阵终端 · CRT 扫描线 · 荧光绿',
+    heroLine: '$ whoami — 全栈工程师 · 折腾永动机',
+    key: 'q',
+    texture: 'scanlines',
+    mode: 'dark',
+    swatch: ['#040b07', '#00ff7a', '#3dfcff'],
+    motif: MOTIF_BLOCK,
+  },
+  {
+    id: 'neon',
+    label: 'NEON',
+    tagline: '赛博霓虹 · 玻璃拟态 · 辉光粒子',
+    heroLine: '// pulse: 全栈工程师 · 正在点亮赛博空间',
+    key: 'w',
+    texture: 'aurora',
+    mode: 'dark',
+    swatch: ['#06020f', '#ff2bd6', '#00e5ff'],
+    motif: MOTIF_BOX,
+  },
+  {
+    id: 'amber',
+    label: 'AMBER',
+    tagline: '复古琥珀单色终端 · 旧显示器',
+    heroLine: '$ ssh zx@main — 启动琥珀模式',
+    key: 'e',
+    texture: 'scanlines',
+    mode: 'dark',
+    swatch: ['#120a02', '#ffb000', '#ff7a1a'],
+    motif: MOTIF_BLOCK,
+  },
+  {
+    id: 'cyber',
+    label: 'CYBERPUNK',
+    tagline: '警示黄 · 故障噪点 · 硬件朋克',
+    heroLine: '> 系统就绪 // 港区在线 // 别踩黄线',
+    key: 'r',
+    texture: 'noise',
+    mode: 'dark',
+    swatch: ['#0a0a08', '#f7ff00', '#ff2d95'],
+    motif: MOTIF_CITY,
+  },
+  {
+    id: 'tokyo',
+    label: 'TOKYO NIGHT',
+    tagline: '靛蓝夜色 · 城市霓虹 · 点阵',
+    heroLine: '24F — 俯瞰东京湾,代码与霓虹同频',
+    key: 't',
+    texture: 'dots',
+    mode: 'dark',
+    swatch: ['#0b1020', '#6b8afd', '#f7768e'],
+    motif: MOTIF_CITY,
+  },
+  {
+    id: 'gruvbox',
+    label: 'GRUVBOX',
+    tagline: '暖土retro · 琥珀与橄榄',
+    heroLine: '$ tmux attach — 回到温暖的终端',
+    key: 'y',
+    texture: 'noise',
+    mode: 'dark',
+    swatch: ['#1d2021', '#fabd2f', '#fe8019'],
+    motif: MOTIF_BLOCK,
+  },
+  {
+    id: 'solarized-dark',
+    label: 'SOLARIZED',
+    tagline: 'Solarized Dark · 护眼经典配色',
+    heroLine: '$ which precision | grep me',
+    key: 'u',
+    texture: 'none',
+    mode: 'dark',
+    swatch: ['#002b36', '#2aa198', '#b58900'],
+    motif: MOTIF_WAVE,
+  },
+  {
+    id: 'monokai',
+    label: 'MONOKAI',
+    tagline: 'Monokai · 高饱和语法高亮',
+    heroLine: '// hot off the compiler — 刚出编译器',
+    key: 'i',
+    texture: 'noise',
+    mode: 'dark',
+    swatch: ['#272822', '#a6e22e', '#f92672'],
+    motif: MOTIF_WAVE,
+  },
+  {
+    id: 'catppuccin',
+    label: 'CATPPUCCIN',
+    tagline: '柔和马卡龙 · 舒适养眼',
+    heroLine: '// mocha blend — 一杯猫唇咖啡的时间',
+    key: 'o',
+    texture: 'dots',
+    mode: 'dark',
+    swatch: ['#1e1e2e', '#cba6f7', '#89dceb'],
+    motif: MOTIF_BOX,
+  },
+  {
+    id: 'paper',
+    label: 'PAPER',
+    tagline: '米白纸张 · 墨黑 · 野蛮主义',
+    heroLine: 'IN PRINT — 把代码印在纸上',
+    key: 'p',
+    texture: 'grid',
+    mode: 'light',
+    swatch: ['#f4f0e6', '#c2410c', '#1d4ed8'],
+    motif: MOTIF_FRAME,
+  },
+  {
+    id: 'solarized-light',
+    label: 'SOLARIZED LT',
+    tagline: 'Solarized Light · 温纸护眼',
+    heroLine: '// daylight build — 白昼构建',
+    key: 'a',
+    texture: 'none',
+    mode: 'light',
+    swatch: ['#fdf6e3', '#268bd2', '#cb4b16'],
+    motif: MOTIF_WAVE,
+  },
+  {
+    id: 'nord-light',
+    label: 'NORD LIGHT',
+    tagline: '北欧浅蓝 · 清爽纸感',
+    heroLine: '// bright and tidy — 明亮而整洁',
+    key: 's',
+    texture: 'grid',
+    mode: 'light',
+    swatch: ['#eceff4', '#5e81ac', '#bf616a'],
+    motif: MOTIF_FRAME,
+  },
 ]
 
-/* ---------- 布局:只保留 SIDEBAR(第 3 个) ---------- */
+/* ---------- 10 套布局:正式集仅 SIDEBAR ---------- */
 
 export const LAYOUTS: Layout[] = [
+  { id: 'classic', label: 'CLASSIC', tagline: '经典:左文右 ASCII,卡片网格', key: '1' },
+  { id: 'centered', label: 'CENTERED', tagline: '居中:大字聚焦,单列', key: '2' },
   { id: 'sidebar', label: 'SIDEBAR', tagline: '侧栏:左侧竖排导航,IDE 感', key: '3' },
+  { id: 'window', label: 'WINDOW', tagline: '终端窗口:全站套进带红绿灯的窗口', key: '4' },
+  { id: 'hud', label: 'HUD', tagline: 'HUD:数据条 + 四角括号,科幻仪表', key: '5' },
+  { id: 'magazine', label: 'MAGAZINE', tagline: '杂志:超大标题 + 章节编号 + 宽留白', key: '6' },
+  { id: 'fullbleed', label: 'FULLBLEED', tagline: '全幅:通栏满屏,分节横线', key: '7' },
+  { id: 'bento', label: 'BENTO', tagline: '便当盒:分区块状拼贴', key: '8' },
+  { id: 'compact', label: 'COMPACT', tagline: '紧凑:小字号高密度,信息流', key: '9' },
+  { id: 'showcase', label: 'SHOWCASE', tagline: '展示:视觉优先,ASCII 主视觉', key: '0' },
 ]
 
 export const DEFAULT_THEME = 'github-light'
 export const DEFAULT_LAYOUT: LayoutId = 'sidebar'
+
+/** 正式环境放行的集合(测试模式放行全部) */
+export const LIVE_THEME_IDS = ['github-light', 'nord', 'synthwave', 'dracula', 'rose-pine', 'minimal']
+export const LIVE_LAYOUT_IDS: LayoutId[] = ['sidebar']
 
 export const THEME_IDS = THEMES.map((t) => t.id)
 export const LAYOUT_IDS = LAYOUTS.map((l) => l.id)
@@ -202,14 +338,16 @@ const THEME_MAP = THEMES.reduce<Record<string, { t: Texture; m: Mode }>>((acc, t
 }, {})
 
 /**
- * 内联到 <head> 的无闪烁脚本:首帧前把 theme/layout/texture/mode 写到 <html>。
- * 主题与布局都持久化在 localStorage。
+ * 首帧无闪烁脚本:只接受 allowed 集合内的主题/布局,其余回退默认。
+ * 由服务端按模式(正式/测试)生成 allowed 列表后注入 <head>。
  */
-export const THEME_INIT_SCRIPT = `(function(){try{
-var T=${JSON.stringify(THEME_IDS)},Tm=${JSON.stringify(THEME_MAP)},L=${JSON.stringify(LAYOUT_IDS)};
+export function themeInitScript(allowedThemes: string[], allowedLayouts: string[]): string {
+  return `(function(){try{
+var T=${JSON.stringify(allowedThemes)},Tm=${JSON.stringify(THEME_MAP)},L=${JSON.stringify(allowedLayouts)};
 var D=document.documentElement;
 var th=localStorage.getItem('${THEME_STORAGE_KEY}');if(T.indexOf(th)<0)th='${DEFAULT_THEME}';
 var ly=localStorage.getItem('${LAYOUT_STORAGE_KEY}');if(L.indexOf(ly)<0)ly='${DEFAULT_LAYOUT}';
 var info=Tm[th]||{t:'none',m:'dark'};
 D.dataset.theme=th;D.dataset.layout=ly;D.dataset.texture=info.t;D.dataset.mode=info.m;
 }catch(e){document.documentElement.dataset.theme='${DEFAULT_THEME}';document.documentElement.dataset.layout='${DEFAULT_LAYOUT}';document.documentElement.dataset.texture='none';document.documentElement.dataset.mode='dark'}})()`
+}
