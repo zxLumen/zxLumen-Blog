@@ -21,12 +21,12 @@ export default async function Home() {
   }
 
   const db = await getActiveDb();
-  const comments = admin ? db.listAllComments() : db.listPublicComments();
+  const commentsPage = db.listThreadPage({ page: 1, pageSize: 20, includePrivate: admin });
   const usage = db.listUsage(30);
 
   return (
     <HomePage
-      comments={comments}
+      commentsPage={commentsPage}
       usage={usage}
       isAdmin={admin}
       initialAuthor={initialAuthor}

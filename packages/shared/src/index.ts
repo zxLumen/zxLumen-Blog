@@ -42,7 +42,7 @@ export { genMockUsage, dailyAggregate, modelAggregate } from './mock.js'
 
 // 数据库 schema
 export { SCHEMA_SQL } from './schema.js'
-export type { CommentRow, UsageRow, Visibility } from './schema.js'
+export type { CommentRow, PagedComments, UsageRow, Visibility } from './schema.js'
 
 // 格式化
 export { fmtInt, fmtCompact, fmtCny, fmtDate, fmtDateTime } from './format.js'

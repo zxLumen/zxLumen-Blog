@@ -1,6 +1,6 @@
 'use client'
 
-import type { CommentRow, UsageRow } from '../schema.js'
+import type { CommentRow, PagedComments, UsageRow } from '../schema.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
 import { UsageSection } from './UsageSection.js'
@@ -8,7 +8,8 @@ import { AboutSection } from './AboutSection.js'
 import { GuestbookSection, type NewComment } from './GuestbookSection.js'
 
 interface HomePageProps {
-  comments?: CommentRow[]
+  /** 留言分页数据(第 1 页) */
+  commentsPage?: PagedComments
   usage?: UsageRow[]
   isAdmin?: boolean
   apiBase?: string
@@ -18,7 +19,7 @@ interface HomePageProps {
 
 /** 首页内容 */
 export function HomePage({
-  comments,
+  commentsPage,
   usage,
   isAdmin,
   apiBase,
@@ -32,7 +33,7 @@ export function HomePage({
       <UsageSection rows={usage} />
       <AboutSection />
       <GuestbookSection
-        initial={comments}
+        page={commentsPage}
         submit={onSubmitComment}
         isAdmin={isAdmin}
         apiBase={apiBase}

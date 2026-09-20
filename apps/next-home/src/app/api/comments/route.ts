@@ -17,10 +17,18 @@ interface Body {
   parent_id?: number | null
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const db = await getActiveDb()
   const admin = await isAdmin()
-  return Response.json({ comments: admin ? db.listAllComments() : db.listPublicComments() })
+  const url = new URL(req.url)
+  const page = Number(url.searchParams.get('page') || 1)
+  const pageSize = Number(url.searchParams.get('pageSize') || 20)
+  const data = db.listThreadPage({
+    page: Number.isFinite(page) ? page : 1,
+    pageSize: Number.isFinite(pageSize) ? pageSize : 20,
+    includePrivate: admin,
+  })
+  return Response.json(data)
 }
 
 export async function POST(req: Request) {

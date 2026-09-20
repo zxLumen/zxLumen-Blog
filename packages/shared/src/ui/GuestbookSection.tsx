@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import type { CommentRow } from '../schema.js'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CommentRow, PagedComments } from '../schema.js'
 import { fmtDateTime } from '../format.js'
 import { Section } from './Section.js'
+import { Pagination } from './Pagination.js'
 
 export interface NewComment {
   author: string
@@ -14,7 +15,8 @@ export interface NewComment {
 }
 
 interface GuestbookProps {
-  initial?: CommentRow[]
+  /** 初始分页数据(服务端渲染第 1 页) */
+  page?: PagedComments
   /** 自定义提交(默认 POST /api/comments) */
   submit?: (input: NewComment) => Promise<CommentRow> | CommentRow
   /** 已登录 admin:可看私密、可删除、回复为站长 */
@@ -54,14 +56,22 @@ async function defaultSubmit(apiBase: string, input: NewComment): Promise<Commen
 }
 
 export function GuestbookSection({
-  initial = [],
+  page: initialPage,
   submit,
   isAdmin = false,
   apiBase: apiBaseProp = '/api',
   initialAuthor = '',
 }: GuestbookProps) {
   const apiBase = apiBaseProp.replace(/\/$/, '')
-  const [items, setItems] = useState<CommentRow[]>(initial)
+
+  const [items, setItems] = useState<CommentRow[]>(initialPage?.rows ?? [])
+  const [total, setTotal] = useState(initialPage?.total ?? 0)
+  const [pageNum, setPageNum] = useState(initialPage?.page ?? 1)
+  const [pageSize, setPageSize] = useState(initialPage?.pageSize ?? 20)
+  const [totalPages, setTotalPages] = useState(initialPage?.totalPages ?? 1)
+  const [loading, setLoading] = useState(false)
+  const firstRun = useRef(true)
+
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
 
   // 顶层表单(昵称预填)
@@ -78,7 +88,36 @@ export function GuestbookSection({
   const [rPrivate, setRPrivate] = useState(false)
   const [rBusy, setRBusy] = useState(false)
 
-  // 无服务端预填时,从 cookie 兜底恢复
+  const load = useCallback(
+    async (p: number, size: number) => {
+      setLoading(true)
+      try {
+        const res = await fetch(`${apiBase}/comments?page=${p}&pageSize=${size}`, {
+          credentials: 'same-origin',
+        })
+        const d = (await res.json()) as PagedComments
+        setItems(d.rows ?? [])
+        setTotal(d.total ?? 0)
+        setPageNum(d.page ?? 1)
+        setPageSize(d.pageSize ?? size)
+        setTotalPages(d.totalPages ?? 1)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [apiBase],
+  )
+
+  // 页码/每页条数变化时加载(跳过首屏,首屏用服务端数据)
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false
+      return
+    }
+    void load(pageNum, pageSize)
+  }, [pageNum, pageSize, load])
+
+  // 无服务端预填时,从 cookie 兜底恢复昵称
   useEffect(() => {
     if (!initialAuthor) {
       const n = readCookie(NICK_COOKIE)
@@ -97,7 +136,6 @@ export function GuestbookSection({
   const visible = items.filter((c) => c.visibility === 'public' || isAdmin)
   const byId = new Map<number, CommentRow>(visible.map((c) => [c.id, c]))
 
-  // 沿 parent_id 向上找根节点(祖先不可见时就地为止),只做单层缩进
   function rootOf(c: CommentRow): CommentRow {
     let cur = c
     const seen = new Set<number>()
@@ -111,7 +149,6 @@ export function GuestbookSection({
   const roots = visible.filter((c) => rootOf(c).id === c.id).slice().reverse()
   const repliesFor = (id: number) => visible.filter((c) => c.id !== id && rootOf(c).id === id)
   const targetOf = (c: CommentRow) => (c.parent_id ? byId.get(c.parent_id) : null)
-  const canShow = (c: CommentRow) => c.visibility === 'public' || isAdmin
 
   async function send(input: NewComment): Promise<CommentRow> {
     return submit ? await submit(input) : await defaultSubmit(apiBase, input)
@@ -134,7 +171,6 @@ export function GuestbookSection({
         visibility: isPrivate ? 'private' : 'public',
         parent_id: null,
       })
-      if (canShow(saved)) setItems((prev) => [...prev, saved])
       rememberNick(a)
       setMsg({
         kind: 'ok',
@@ -143,6 +179,9 @@ export function GuestbookSection({
       setLink('')
       setBody('')
       setIsPrivate(false)
+      // 新留言在最新一页(第 1 页)
+      setPageNum(1)
+      await load(1, pageSize)
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '提交失败,请稍后重试' })
     } finally {
@@ -159,19 +198,19 @@ export function GuestbookSection({
 
     setRBusy(true)
     try {
-      const saved = await send({
+      await send({
         author: a,
         author_link: '',
         body: b,
         visibility: rPrivate ? 'private' : 'public',
         parent_id: parent.id,
       })
-      if (canShow(saved)) setItems((prev) => [...prev, saved])
       rememberNick(a)
       setReplyTo(null)
       setRBody('')
       setRPrivate(false)
       setMsg({ kind: 'ok', text: '回复成功' })
+      await load(pageNum, pageSize)
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '回复失败' })
     } finally {
@@ -189,19 +228,7 @@ export function GuestbookSection({
         body: JSON.stringify({ id }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || '删除失败')
-      // 本地移除该节点及其整棵子树
-      const removed = new Set<number>([id])
-      let changed = true
-      while (changed) {
-        changed = false
-        for (const c of items) {
-          if (c.parent_id && removed.has(c.parent_id) && !removed.has(c.id)) {
-            removed.add(c.id)
-            changed = true
-          }
-        }
-      }
-      setItems((prev) => prev.filter((c) => !removed.has(c.id)))
+      await load(pageNum, pageSize)
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '删除失败' })
     }
@@ -350,7 +377,8 @@ export function GuestbookSection({
 
         <div>
           <div className="zx-mono zx-muted" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>
-            // {roots.length} 条留言{isAdmin ? '(含私密)' : ''}
+            // {total} 条留言{isAdmin ? '(含私密)' : ''}
+            {loading ? ' · 加载中…' : ''}
           </div>
           <div className="zx-comments">
             {roots.length === 0 && <div className="zx-c-empty">还没有留言,来抢沙发 →</div>}
@@ -375,6 +403,19 @@ export function GuestbookSection({
               </div>
             ))}
           </div>
+
+          <Pagination
+            page={pageNum}
+            totalPages={totalPages}
+            total={total}
+            pageSize={pageSize}
+            disabled={loading}
+            onPage={(p) => setPageNum(p)}
+            onPageSize={(s) => {
+              setPageSize(s)
+              setPageNum(1)
+            }}
+          />
         </div>
       </div>
     </Section>

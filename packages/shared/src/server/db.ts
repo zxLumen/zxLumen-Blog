@@ -1,5 +1,11 @@
 import Database from 'better-sqlite3'
-import { SCHEMA_SQL, type CommentRow, type UsageRow, type Visibility } from '../schema.js'
+import {
+  SCHEMA_SQL,
+  type CommentRow,
+  type PagedComments,
+  type UsageRow,
+  type Visibility,
+} from '../schema.js'
 import { roundCny } from '../pricing.js'
 
 export interface NewCommentInput {
@@ -24,6 +30,7 @@ export interface NewUsageInput {
 export interface Db {
   listPublicComments(limit?: number): CommentRow[]
   listAllComments(limit?: number): CommentRow[]
+  listThreadPage(opts?: { page?: number; pageSize?: number; includePrivate?: boolean }): PagedComments
   getComment(id: number): CommentRow | null
   addComment(input: NewCommentInput): CommentRow
   deleteComment(id: number): boolean
@@ -86,6 +93,48 @@ export function openDb(path: string): Db {
            ORDER BY created_at ASC, id ASC LIMIT ?`,
         )
         .all(limit) as CommentRow[]
+    },
+
+    listThreadPage({ page = 1, pageSize = 20, includePrivate = false } = {}) {
+      const size = Math.min(100, Math.max(1, Math.floor(pageSize)))
+      const vis = includePrivate ? '' : `AND visibility='public'`
+      const total = (
+        db
+          .prepare(`SELECT COUNT(*) AS n FROM comments WHERE parent_id IS NULL ${vis}`)
+          .get() as { n: number }
+      ).n
+      const totalPages = Math.max(1, Math.ceil(total / size))
+      const cur = Math.min(Math.max(1, Math.floor(page)), totalPages)
+      const offset = (cur - 1) * size
+
+      const rootIds = (
+        db
+          .prepare(
+            `SELECT id FROM comments WHERE parent_id IS NULL ${vis}
+             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+          )
+          .all(size, offset) as { id: number }[]
+      ).map((r) => r.id)
+
+      if (rootIds.length === 0) {
+        return { rows: [], total, page: cur, pageSize: size, totalPages }
+      }
+
+      const ph = rootIds.map(() => '?').join(',')
+      const rows = db
+        .prepare(
+          `WITH RECURSIVE tree(id) AS (
+             SELECT id FROM comments WHERE id IN (${ph})
+             UNION ALL
+             SELECT c.id FROM comments c JOIN tree t ON c.parent_id = t.id
+           )
+           SELECT ${COMMENT_COLS} FROM comments
+           WHERE id IN (SELECT id FROM tree) ${vis}
+           ORDER BY created_at ASC, id ASC`,
+        )
+        .all(...rootIds) as CommentRow[]
+
+      return { rows, total, page: cur, pageSize: size, totalPages }
     },
 
     getComment(id) {

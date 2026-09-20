@@ -2272,3 +2272,86 @@ pre {
 .zx-reply-to-name {
   color: var(--accent-2);
 }
+
+/* ---------- 分页 ---------- */
+
+.zx-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1.2rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--fg-muted);
+}
+
+.zx-pager strong {
+  color: var(--fg);
+}
+
+.zx-pager-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.zx-pager-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.zx-pager-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.zx-pagebtn {
+  min-width: 1.8rem;
+  height: 1.8rem;
+  padding: 0 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.zx-pagebtn:hover:not(:disabled):not(.is-ellipsis) {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+.zx-pagebtn.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--bg-2);
+  box-shadow: 0 0 14px -4px var(--glow);
+}
+
+.zx-pagebtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.zx-pagebtn.is-ellipsis {
+  border-color: transparent;
+  cursor: default;
+}
+
+.zx-pager.is-disabled {
+  opacity: 0.6;
+}

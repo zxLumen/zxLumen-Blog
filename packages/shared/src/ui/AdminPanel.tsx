@@ -1,15 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import type { CommentRow } from '../schema.js'
+import type { CommentRow, PagedComments } from '../schema.js'
 import { fmtDateTime } from '../format.js'
+import { Pagination } from './Pagination.js'
 
-async function loadComments(): Promise<CommentRow[]> {
-  const res = await fetch('/api/admin/comments', { credentials: 'same-origin' })
+async function loadPageData(page: number, pageSize: number): Promise<PagedComments> {
+  const res = await fetch(`/api/admin/comments?page=${page}&pageSize=${pageSize}`, {
+    credentials: 'same-origin',
+  })
   if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error(`加载失败 (${res.status})`)
-  const data = (await res.json()) as { comments: CommentRow[] }
-  return data.comments ?? []
+  return (await res.json()) as PagedComments
 }
 
 export function AdminPanel() {
@@ -22,20 +24,35 @@ export function AdminPanel() {
   const [nick, setNick] = useState('')
   const [nickBusy, setNickBusy] = useState(false)
 
-  const refresh = useCallback(async () => {
+  const [total, setTotal] = useState(0)
+  const [listPage, setListPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [totalPages, setTotalPages] = useState(1)
+  const [loading, setLoading] = useState(false)
+
+  const loadPage = useCallback(async (p: number, size: number) => {
+    setLoading(true)
     try {
-      const list = await loadComments()
-      setComments(list)
-      const sres = await fetch('/api/admin/settings', { credentials: 'same-origin' })
-      if (sres.ok) {
-        const s = (await sres.json()) as { nick?: string }
-        setNick(s.nick ?? '')
-      }
+      const d = await loadPageData(p, size)
+      setComments(d.rows ?? [])
+      setTotal(d.total ?? 0)
+      setListPage(d.page ?? 1)
+      setPageSize(d.pageSize ?? size)
+      setTotalPages(d.totalPages ?? 1)
       setAuthed(true)
     } catch {
       setAuthed(false)
     } finally {
+      setLoading(false)
       setReady(true)
+    }
+  }, [])
+
+  const loadSettings = useCallback(async () => {
+    const sres = await fetch('/api/admin/settings', { credentials: 'same-origin' })
+    if (sres.ok) {
+      const s = (await sres.json()) as { nick?: string }
+      setNick(s.nick ?? '')
     }
   }, [])
 
@@ -60,8 +77,11 @@ export function AdminPanel() {
   }
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void (async () => {
+      await loadPage(1, 20)
+      await loadSettings()
+    })()
+  }, [loadPage, loadSettings])
 
   async function login(e: React.FormEvent) {
     e.preventDefault()
@@ -103,7 +123,7 @@ export function AdminPanel() {
         body: JSON.stringify({ id }),
       })
       if (!res.ok) throw new Error('删除失败')
-      await refresh()
+      await loadPage(listPage, pageSize)
       setMsg({ kind: 'ok', text: `已删除 #${id}` })
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '删除失败' })
@@ -186,7 +206,7 @@ export function AdminPanel() {
       {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
 
       <p className="zx-muted zx-mono" style={{ fontSize: '0.75rem' }}>
-        // {comments.length} 条(含私密与回复) · 已登录状态在所有页面生效
+        // {total} 条留言(含私密与回复){loading ? ' · 加载中…' : ''} · 已登录状态在所有页面生效
       </p>
 
       <div className="zx-comments">
@@ -234,6 +254,16 @@ export function AdminPanel() {
           </div>
         ))}
       </div>
+
+      <Pagination
+        page={listPage}
+        totalPages={totalPages}
+        total={total}
+        pageSize={pageSize}
+        disabled={loading}
+        onPage={(p) => void loadPage(p, pageSize)}
+        onPageSize={(s) => void loadPage(1, s)}
+      />
     </div>
   )
 }

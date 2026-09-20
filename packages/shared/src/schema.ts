@@ -45,6 +45,17 @@ export interface CommentRow {
   created_at: string
 }
 
+/** 按"顶层留言 + 其整棵回复子树"分页的结果 */
+export interface PagedComments {
+  /** 当前页的顶层留言及其全部回复 */
+  rows: CommentRow[]
+  /** 顶层留言总数(用于页码) */
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
 export interface UsageRow {
   id?: number
   ts: string
