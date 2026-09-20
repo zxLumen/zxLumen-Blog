@@ -1,4 +1,7 @@
 // DeepSeek 计价表(单位:¥ / 百万 tokens)、官方价目为准,可随时修改同步
+import type { UsageRow } from './schema.js'
+export type { UsageRow }
+
 export interface ModelPrice {
   model: string
   label: string
@@ -33,14 +36,6 @@ export const PRICING: ModelPrice[] = [
     color: '#ff2b7a',
   },
 ]
-
-export interface UsageRow {
-  ts: string // ISO datetime
-  model: string
-  inputTokens: number
-  outputTokens: number
-  cacheHitTokens: number
-}
 
 export interface CostParts {
   cacheHit: number

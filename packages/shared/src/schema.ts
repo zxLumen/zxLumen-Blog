@@ -64,6 +64,10 @@ export interface UsageRow {
   outputTokens: number
   cacheHitTokens: number
   source?: string
+  /** 以下为平台聚合数据(真实用量)可选字段 */
+  apiKey?: string
+  requests?: number
+  cost?: number
 }
 
 export type Visibility = 'public' | 'private'

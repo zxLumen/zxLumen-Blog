@@ -31,6 +31,18 @@ export function AdminPanel() {
   const [qrUrl, setQrUrl] = useState('/wechat.png')
   const [qrBusy, setQrBusy] = useState(false)
 
+  interface DsStatus {
+    configured?: boolean
+    exp?: number | null
+    expired?: boolean | null
+    lastSync?: string | null
+    syncKey?: string
+    lastError?: string | null
+  }
+  const [ds, setDs] = useState<DsStatus | null>(null)
+  const [dsToken, setDsToken] = useState('')
+  const [dsBusy, setDsBusy] = useState(false)
+
   const [curPw, setCurPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [newPw2, setNewPw2] = useState('')
@@ -77,7 +89,46 @@ export function AdminPanel() {
       const q = (await qres.json()) as { hasQr?: boolean; ver?: string | null }
       setQrUrl(q.hasQr ? `/api/contact/wechat-qr?v=${q.ver}` : '/wechat.png')
     }
+    const dres = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
+    if (dres.ok) setDs((await dres.json()) as DsStatus)
   }, [])
+
+  async function loadDeepseek() {
+    const res = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
+    if (res.ok) setDs((await res.json()) as DsStatus)
+  }
+
+  async function dsAction(action: 'save' | 'refresh' | 'rotate' | 'clear', token?: string) {
+    setDsBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/deepseek', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action, token }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(d.error || '操作失败')
+      if (action === 'save') setDsToken('')
+      await loadDeepseek()
+      setMsg({ kind: 'ok', text: action === 'refresh' ? '已刷新(令牌有效)' : '操作成功' })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
+    } finally {
+      setDsBusy(false)
+    }
+  }
+
+  function copyBookmarklet() {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const key = ds?.syncKey ?? ''
+    const code = `javascript:(async()=>{try{const j=JSON.parse(localStorage.getItem('userToken')||'{}');const t=j.value||j;const r=await fetch('${origin}/api/deepseek/token',{method:'POST',headers:{'Content-Type':'text/plain','X-Sync-Key':'${key}'},body:JSON.stringify({token:t})});alert(r.ok?'✅ 已同步 DeepSeek 令牌到主页':'❌ 同步失败 '+r.status)}catch(e){alert('同步失败: '+e)}})()`
+    navigator.clipboard
+      .writeText(code)
+      .then(() => setMsg({ kind: 'ok', text: '同步书签已复制(在 DeepSeek 用量页点它)' }))
+      .catch(() => setMsg({ kind: 'err', text: '复制失败,请手动复制' }))
+  }
 
   async function uploadQr(file: File) {
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
@@ -365,6 +416,67 @@ export function AdminPanel() {
             PNG/JPEG/WebP · ≤800KB · 上传即生效
           </span>
         </div>
+      </div>
+
+      <div className="zx-panel" style={{ marginBottom: '1rem' }}>
+        <h3>
+          DeepSeek 用量 <span>平台私有接口 · 需登录会话令牌</span>
+        </h3>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
+          状态:
+          {ds?.configured ? (ds.expired ? '已过期(需重新同步)' : '已配置') : '未配置'}
+          {ds?.exp ? ` · 有效期至 ${new Date(ds.exp).toLocaleString()}` : ''}
+          {ds?.lastSync ? ` · 最近同步 ${ds.lastSync.slice(0, 19).replace('T', ' ')}` : ''}
+        </p>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={dsBusy} onClick={copyBookmarklet}>
+            复制同步书签
+          </button>
+          <button
+            className="zx-btn zx-btn-sm"
+            disabled={dsBusy || !ds?.configured}
+            onClick={() => void dsAction('refresh')}
+          >
+            验证 / 刷新
+          </button>
+          <button
+            className="zx-btn zx-btn-sm zx-btn-ghost"
+            disabled={dsBusy}
+            onClick={() => {
+              if (confirm('轮换同步密钥?旧书签将失效')) void dsAction('rotate')
+            }}
+          >
+            轮换密钥
+          </button>
+          <button
+            className="zx-btn zx-btn-sm zx-btn-ghost"
+            disabled={dsBusy || !ds?.configured}
+            onClick={() => void dsAction('clear')}
+          >
+            清除令牌
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
+          <input
+            className="zx-input"
+            style={{ maxWidth: 340 }}
+            placeholder="或手动粘贴 userToken"
+            value={dsToken}
+            onChange={(e) => setDsToken(e.target.value)}
+          />
+          <button
+            className="zx-btn zx-btn-sm"
+            disabled={dsBusy || !dsToken}
+            onClick={() => void dsAction('save', dsToken)}
+          >
+            保存令牌
+          </button>
+        </div>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
+          用法:登录 <span className="zx-accent">platform.deepseek.com/usage</span> → 点「复制同步书签」得到的书签
+          (或 F12 复制 <span className="zx-accent">localStorage.userToken.value</span> 粘贴保存)。令牌仅存服务器,不下发前端。
+        </p>
+        {ds?.lastError && <div className="zx-msg err">{ds.lastError}</div>}
       </div>
 
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>

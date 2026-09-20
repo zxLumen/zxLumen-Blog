@@ -2,6 +2,21 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.0] - 2026-09-20
+
+### 新增
+
+- **Token 用量面板接入 DeepSeek 账号真实数据**:`/admin` 提供**书签一键同步** `userToken`(存主库、仅服务器),显示状态与有效期、可轮换同步密钥、支持手动粘贴兜底
+- 面板支持 **24h / 7d / 30d / 90d** 与 **整体 / 多模型**切换;展示真实**成本**与**请求数**(按天 × 模型,数据来自 DeepSeek 平台)
+- 新增文档 `docs/DEEPSEEK-USAGE.md`(原理、同步步骤、风险)
+
+### 变更
+
+- 用量页标题 `DeepSeek 用量` → **`Token 用量`**
+- 数据源优先级:DeepSeek 平台 → 本地 `usage` 表 → demo 曲线;平台数据**缓存 5 分钟**、失败自动回退
+
+[0.5.0]: https://github.com/zxLumen/zxLumen-Blog/releases/tag/v0.5.0
+
 ## [0.4.3] - 2026-09-20
 
 ### 新增

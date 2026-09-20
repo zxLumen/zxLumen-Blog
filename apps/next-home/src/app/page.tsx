@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
+import type { UsageRow } from "@zx/shared";
 import { HomePage } from "@zx/shared/ui";
 import { getActiveDb } from "@/lib/env";
 import { isAdmin } from "@/lib/auth";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
+import { fetchUsage } from "@/lib/deepseek";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,15 @@ export default async function Home() {
 
   const db = await getActiveDb();
   const commentsPage = db.listThreadPage({ page: 1, pageSize: 5, includePrivate: admin });
-  const usage = db.listUsage(30);
+
+  // 优先 DeepSeek 平台真实用量;失败/未配置回退本地 usage 表(再空则前端用 mock)
+  let usage: UsageRow[] | undefined;
+  try {
+    usage = (await fetchUsage("30d")).rows;
+  } catch {
+    usage = undefined;
+  }
+  if (!usage || usage.length === 0) usage = db.listUsage(30);
 
   return (
     <HomePage
