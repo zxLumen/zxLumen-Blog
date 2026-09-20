@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { PROFILE } from '../content.js'
 import { ThemePicker } from './ThemePicker.js'
 import type { NavItem } from './types.js'
@@ -12,18 +12,60 @@ interface TopbarProps {
 }
 
 export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
-  const [path, setPath] = useState(activeHref)
+  const [pathname, setPathname] = useState(activeHref)
+  const [activeHash, setActiveHash] = useState('')
+
+  // 导航里指向页内区块的 id(projects/usage/about/guestbook)
+  const sectionIds = useMemo(
+    () => nav.map((n) => (n.href.includes('#') ? n.href.split('#')[1] : '')).filter(Boolean),
+    [nav],
+  )
+
+  // 计算当前高亮:按路径 + 视口内所在区块
+  const compute = useCallback(() => {
+    setPathname(window.location.pathname || '/')
+    let hash = ''
+    if (window.location.pathname === '/') {
+      for (const id of sectionIds) {
+        const el = document.getElementById(id)
+        if (el && el.getBoundingClientRect().top <= 130) hash = '#' + id
+      }
+    }
+    setActiveHash(hash)
+  }, [sectionIds])
 
   const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
   useIsoLayoutEffect(() => {
-    setPath(window.location.pathname || '/')
-  }, [])
+    compute()
+  }, [compute])
+
+  useEffect(() => {
+    let raf = 0
+    const onScroll = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        compute()
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('hashchange', onScroll)
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('hashchange', onScroll)
+      window.removeEventListener('resize', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [compute])
 
   const isActive = (href: string) => {
-    // 锚点导航(如 /#projects)不参与选中高亮
-    if (href.includes('#')) return false
-    if (href === '/') return path === '/'
-    return path === href || path.startsWith(href + '/')
+    if (href.includes('#')) {
+      const id = href.split('#')[1]
+      return pathname === '/' && activeHash === '#' + id
+    }
+    if (href === '/') return pathname === '/' && activeHash === ''
+    return pathname === href || pathname.startsWith(href + '/')
   }
 
   return (
