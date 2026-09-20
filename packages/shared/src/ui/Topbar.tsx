@@ -85,6 +85,15 @@ export function Topbar({
     }
   }, [compute])
 
+  // 首页滚动时把当前区块同步到地址栏 hash(用 replaceState,不堆历史、不触发 hashchange)
+  useEffect(() => {
+    if (pathname !== '/') return
+    const target = pathname + (activeHash || '')
+    if (window.location.pathname + window.location.hash !== target) {
+      window.history.replaceState(null, '', target)
+    }
+  }, [activeHash, pathname])
+
   // 同路由(首页 / 及其锚点)在客户端处理;跨路由交给注入的 Link 客户端导航
   function onNavClick(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
     const [pathPart, hash] = href.split('#')
