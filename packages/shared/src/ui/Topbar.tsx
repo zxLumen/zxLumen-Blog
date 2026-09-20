@@ -23,9 +23,10 @@ export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
 
   // 计算当前高亮:按路径 + 视口内所在区块
   const compute = useCallback(() => {
-    setPathname(window.location.pathname || '/')
+    const path = window.location.pathname || '/'
+    setPathname(path)
     let hash = ''
-    if (window.location.pathname === '/') {
+    if (path === '/') {
       for (const id of sectionIds) {
         const el = document.getElementById(id)
         if (el && el.getBoundingClientRect().top <= 130) hash = '#' + id
@@ -50,14 +51,34 @@ export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('hashchange', onScroll)
+    window.addEventListener('popstate', onScroll)
     window.addEventListener('resize', onScroll)
     return () => {
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('hashchange', onScroll)
+      window.removeEventListener('popstate', onScroll)
       window.removeEventListener('resize', onScroll)
       if (raf) cancelAnimationFrame(raf)
     }
   }, [compute])
+
+  // 同路由导航(首页 / 及其锚点)在客户端处理,避免整页刷新
+  function onNavClick(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    const [pathPart, hash] = href.split('#')
+    const targetPath = pathPart || '/'
+    if (targetPath !== (window.location.pathname || '/')) return // 跨路由:交给浏览器
+
+    e.preventDefault()
+    if (hash) {
+      document.getElementById(hash)?.scrollIntoView({ behavior: 'auto', block: 'start' })
+      window.history.pushState(null, '', href)
+      setActiveHash('#' + hash)
+    } else {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+      window.history.pushState(null, '', targetPath)
+      setActiveHash('')
+    }
+  }
 
   const isActive = (href: string) => {
     if (href.includes('#')) {
@@ -71,7 +92,7 @@ export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
   return (
     <header className="zx-topbar">
       <div className="zx-topbar-in">
-        <a className="zx-logo" href="/">
+        <a className="zx-logo" href="/" onClick={(e) => onNavClick(e, '/')}>
           <span className="z">❯</span> {PROFILE.shell}
         </a>
         <nav className="zx-nav">
@@ -79,6 +100,7 @@ export function Topbar({ nav, activeHref = '/', extra }: TopbarProps) {
             <a
               key={item.href}
               href={item.href}
+              onClick={(e) => onNavClick(e, item.href)}
               className={isActive(item.href) ? 'is-active' : undefined}
             >
               {item.label}
