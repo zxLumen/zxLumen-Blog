@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { PROFILE } from '../content.js'
 import { ThemePicker } from './ThemePicker.js'
 import type { LinkComponent, NavItem } from './types.js'
@@ -52,14 +52,16 @@ export function Topbar({
   useIsoLayoutEffect(() => {
     const id = (window.location.hash || '').replace(/^#/, '')
     if (id) {
-      const el = document.getElementById(id)
-      el?.scrollIntoView({ behavior: 'auto', block: 'start' })
       if (sectionIds.includes(id)) setActiveHash('#' + id)
       else setActiveHash('')
-    } else {
-      window.scrollTo({ top: 0, behavior: 'auto' })
-      setActiveHash('')
+      const scroll = () => document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' })
+      scroll()
+      // 布局稳定后再定位一次,提升刷新恢复的可靠性
+      const raf = requestAnimationFrame(scroll)
+      return () => cancelAnimationFrame(raf)
     }
+    window.scrollTo({ top: 0, behavior: 'auto' })
+    setActiveHash('')
     // 之后的 scroll 事件会让 compute() 依据实际位置refine
   }, [pathname, sectionIds])
 
@@ -86,8 +88,12 @@ export function Topbar({
   }, [compute])
 
   // 首页滚动时把当前区块同步到地址栏 hash(用 replaceState,不堆历史、不触发 hashchange)
+  const sawHashRef = useRef(false)
   useEffect(() => {
     if (pathname !== '/') return
+    if (activeHash) sawHashRef.current = true
+    // 初始化尚未把 URL 的 hash 反映到状态前,不要清除它(否则刷新会掉回 home)
+    if (!sawHashRef.current && !activeHash && window.location.hash) return
     const target = pathname + (activeHash || '')
     if (window.location.pathname + window.location.hash !== target) {
       window.history.replaceState(null, '', target)
