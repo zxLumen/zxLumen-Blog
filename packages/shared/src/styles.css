@@ -2124,6 +2124,31 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   gap: 0.5rem;
 }
 
+/* 归档留言(被 admin/访客 删除) */
+
+.zx-arch-tag {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  line-height: 1.5;
+}
+
+.zx-arch-tag.admin {
+  color: #f87171;
+  border: 1px solid #f87171;
+}
+
+.zx-arch-tag.visitor {
+  color: #eab308;
+  border: 1px solid #eab308;
+}
+
+.zx-arch-actions {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
 .zx-linkbtn {
   font-family: var(--font-mono);
   font-size: 0.7rem;

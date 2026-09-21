@@ -11,7 +11,10 @@ CREATE TABLE IF NOT EXISTS comments (
   is_admin    INTEGER NOT NULL DEFAULT 0,
   ip          TEXT DEFAULT '',
   author_cid  TEXT DEFAULT '',
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  archived    INTEGER NOT NULL DEFAULT 0,
+  archived_at TEXT,
+  archived_by TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_comments_visibility ON comments(visibility, created_at);
@@ -48,6 +51,32 @@ export interface CommentRow {
   /** 是否为当前访客本人所发(用于显示"删除"按钮) */
   mine?: boolean
   created_at: string
+}
+
+/** 已归档(被删除)的留言:admin 或访客删除后进入归档 */
+export interface ArchivedCommentRow {
+  id: number
+  author: string
+  author_link?: string
+  body: string
+  visibility: 'public' | 'private'
+  parent_id?: number | null
+  is_admin?: number
+  ip?: string
+  author_cid?: string
+  created_at: string
+  /** 归档时间 */
+  archived_at: string
+  /** 谁删除的:admin(站长)/ visitor(访客) */
+  archived_by: 'admin' | 'visitor'
+}
+
+export interface PagedArchived {
+  rows: ArchivedCommentRow[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
 /** 按"顶层留言 + 其整棵回复子树"分页的结果 */

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import type { CommentRow, PagedComments } from '../schema.js'
+import type { ArchivedCommentRow, CommentRow, PagedComments } from '../schema.js'
 import { fmtDateTime } from '../format.js'
 import { Pagination } from './Pagination.js'
 import { useFeature } from './theme-context.js'
@@ -44,9 +44,68 @@ export function AdminPanel() {
   const [ds, setDs] = useState<DsStatus | null>(null)
   const [dsToken, setDsToken] = useState('')
   const [dsBusy, setDsBusy] = useState(false)
-  const [tab, setTab] = useState<'comments' | 'profile' | 'token'>('comments')
+  const [tab, setTab] = useState<'comments' | 'archive' | 'profile' | 'token'>('comments')
   // 功能门控:Tab 分栏为 TEST-only,晋升后加入 LIVE_FEATURES 即对正式模式生效
   const showTabs = useFeature('admin-tabs')
+
+  const [archived, setArchived] = useState<ArchivedCommentRow[]>([])
+  const [archTotal, setArchTotal] = useState(0)
+  const [archPage, setArchPage] = useState(1)
+  const [archPageSize, setArchPageSize] = useState(20)
+  const [archTotalPages, setArchTotalPages] = useState(1)
+  const [archLoading, setArchLoading] = useState(false)
+  const [archBusy, setArchBusy] = useState(false)
+
+  const loadArchive = useCallback(async (p: number, size: number) => {
+    setArchLoading(true)
+    try {
+      const res = await fetch(`/api/admin/archive?page=${p}&pageSize=${size}`, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      })
+      if (!res.ok) throw new Error('加载归档失败')
+      const d = (await res.json()) as {
+        rows: ArchivedCommentRow[]
+        total: number
+        page: number
+        pageSize: number
+        totalPages: number
+      }
+      setArchived(d.rows ?? [])
+      setArchTotal(d.total ?? 0)
+      setArchPage(d.page ?? 1)
+      setArchPageSize(d.pageSize ?? size)
+      setArchTotalPages(d.totalPages ?? 1)
+    } catch {
+      setArchived([])
+    } finally {
+      setArchLoading(false)
+    }
+  }, [])
+
+  async function onArchAction(id: number, action: 'restore' | 'purge') {
+    if (action === 'purge' && !confirm(`彻底删除归档留言 #${id}?此操作不可恢复`)) return
+    setArchBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ id, action }),
+      })
+      if (!res.ok) throw new Error('操作失败')
+      await loadArchive(archPage, archPageSize)
+      setMsg({
+        kind: 'ok',
+        text: action === 'restore' ? `已恢复 #${id}` : `已彻底删除 #${id}`,
+      })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
+    } finally {
+      setArchBusy(false)
+    }
+  }
 
   const [curPw, setCurPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -217,6 +276,10 @@ export function AdminPanel() {
     })()
   }, [loadPage, loadSettings])
 
+  useEffect(() => {
+    if (tab === 'archive') void loadArchive(archPage, archPageSize)
+  }, [tab, loadArchive, archPage, archPageSize])
+
   async function savePassword() {
     if (newPw !== newPw2) return setMsg({ kind: 'err', text: '两次输入的新密码不一致' })
     if (newPw.length < 4) return setMsg({ kind: 'err', text: '新密码至少 4 位' })
@@ -335,14 +398,14 @@ export function AdminPanel() {
         <span className="zx-sec-tag">// ADMIN</span>
         {showTabs ? (
           <div className="zx-tabs is-inline">
-            {(['comments', 'profile', 'token'] as const).map((t) => (
+            {(['comments', 'archive', 'profile', 'token'] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 className={`zx-tab${tab === t ? ' is-active' : ''}`}
                 onClick={() => setTab(t)}
               >
-                {t === 'comments' ? '留言' : t === 'profile' ? '个人信息' : 'Token 用量'}
+                {t === 'comments' ? '留言' : t === 'archive' ? '归档' : t === 'profile' ? '个人信息' : 'Token 用量'}
               </button>
             ))}
           </div>
@@ -612,6 +675,69 @@ export function AdminPanel() {
         disabled={loading}
         onPage={(p) => void loadPage(p, pageSize)}
         onPageSize={(s) => void loadPage(1, s)}
+      />
+      </>
+      )}
+
+      {showTabs && tab === 'archive' && (
+      <>
+      <p className="zx-muted zx-mono" style={{ fontSize: '0.75rem' }}>
+        // 归档 {archTotal} 条已删除留言(admin 或访客删除均可在此查看){archLoading ? ' · 加载中…' : ''}
+      </p>
+
+      <div className="zx-comments">
+        {archived.length === 0 && <div className="zx-c-empty">归档为空</div>}
+        {archived.map((c) => (
+          <div className="zx-comment" key={c.id}>
+            <div className="zx-c-head">
+              <span className="zx-c-author">
+                {c.parent_id ? '↳ ' : ''}
+                {c.author}
+              </span>
+              {!!c.is_admin && <span className="zx-admin-tag">站长</span>}
+              {c.visibility === 'private' && <span className="zx-private-tag">仅站长可见</span>}
+              <span className={`zx-arch-tag ${c.archived_by}`}>
+                {c.archived_by === 'admin' ? '站长删除' : '访客删除'}
+              </span>
+              <span className="zx-c-time">
+                #{c.id} · 原 {fmtDateTime(c.created_at)}
+              </span>
+              {c.archived_at && <span className="zx-c-time">归档 {fmtDateTime(c.archived_at)}</span>}
+              <span
+                className="zx-arch-actions"
+                style={{ marginLeft: 'auto' }}
+              >
+                <button
+                  className="zx-btn zx-btn-sm zx-btn-ghost"
+                  type="button"
+                  disabled={archBusy}
+                  onClick={() => void onArchAction(c.id, 'restore')}
+                >
+                  恢复
+                </button>
+                <button
+                  className="zx-btn zx-btn-sm zx-btn-ghost"
+                  type="button"
+                  disabled={archBusy}
+                  onClick={() => void onArchAction(c.id, 'purge')}
+                >
+                  彻底删除
+                </button>
+              </span>
+            </div>
+            <div className="zx-c-body">{c.body}</div>
+          </div>
+        ))}
+      </div>
+
+      <Pagination
+        page={archPage}
+        totalPages={archTotalPages}
+        total={archTotal}
+        pageSize={archPageSize}
+        disabled={archLoading}
+        onPage={(p) => void loadArchive(p, archPageSize)}
+        onPageSize={(s) => void loadArchive(1, s)}
       />
       </>
       )}

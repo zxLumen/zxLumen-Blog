@@ -13,5 +13,5 @@ export async function POST(req: Request) {
     return Response.json({ error: 'id required' }, { status: 400 })
   }
   const db = await getActiveDb()
-  return Response.json({ ok: db.deleteComment(data.id) })
+  return Response.json({ ok: db.archiveComment(data.id, 'admin') })
 }

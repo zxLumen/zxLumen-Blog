@@ -1,7 +1,9 @@
 import Database from 'better-sqlite3'
 import {
   SCHEMA_SQL,
+  type ArchivedCommentRow,
   type CommentRow,
+  type PagedArchived,
   type PagedComments,
   type UsageRow,
   type Visibility,
@@ -45,7 +47,14 @@ export interface Db {
   /** 取某条留言的作者匿名 ID(仅服务端使用) */
   getCommentCid(id: number): string | null
   addComment(input: NewCommentInput): CommentRow
-  deleteComment(id: number): boolean
+  /** 删除留言 = 归档整棵子树(admin/visitor 删除均可查回) */
+  archiveComment(id: number, by: 'admin' | 'visitor'): boolean
+  /** 从归档恢复整棵子树 */
+  restoreComment(id: number): boolean
+  /** 物理删除整棵子树(归档内彻底删除) */
+  purgeComment(id: number): boolean
+  /** 归档留言列表(仅站长接口) */
+  listArchived(opts?: { page?: number; pageSize?: number }): PagedArchived
   listUsage(days?: number): UsageRow[]
   allUsage(): UsageRow[]
   addUsage(input: NewUsageInput): UsageRow
@@ -77,6 +86,9 @@ export function openDb(path: string): Db {
   if (!cols.has('parent_id')) db.exec('ALTER TABLE comments ADD COLUMN parent_id INTEGER DEFAULT NULL')
   if (!cols.has('is_admin')) db.exec('ALTER TABLE comments ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0')
   if (!cols.has('author_cid')) db.exec("ALTER TABLE comments ADD COLUMN author_cid TEXT DEFAULT ''")
+  if (!cols.has('archived')) db.exec("ALTER TABLE comments ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+  if (!cols.has('archived_at')) db.exec("ALTER TABLE comments ADD COLUMN archived_at TEXT")
+  if (!cols.has('archived_by')) db.exec("ALTER TABLE comments ADD COLUMN archived_by TEXT DEFAULT ''")
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_cid ON comments(author_cid)')
 
@@ -95,7 +107,7 @@ export function openDb(path: string): Db {
       return db
         .prepare(
           `SELECT ${COMMENT_COLS} FROM comments
-           WHERE visibility='public'
+           WHERE visibility='public' AND archived=0
            ORDER BY created_at ASC, id ASC LIMIT ?`,
         )
         .all(limit) as CommentRow[]
@@ -105,6 +117,7 @@ export function openDb(path: string): Db {
       return db
         .prepare(
           `SELECT ${COMMENT_COLS} FROM comments
+           WHERE archived=0
            ORDER BY created_at ASC, id ASC LIMIT ?`,
         )
         .all(limit) as CommentRow[]
@@ -126,10 +139,12 @@ export function openDb(path: string): Db {
           ? `AND (visibility='public' OR author_cid = ?)`
           : `AND visibility='public'`
       const visArgs = mine ? [viewerCid] : []
+      // 已归档(=被删除)的留言不参与任何正常列表
+      const rootWhere = `WHERE parent_id IS NULL ${vis}${vis ? ' AND' : 'AND'} archived=0`
 
       const total = (
         db
-          .prepare(`SELECT COUNT(*) AS n FROM comments WHERE parent_id IS NULL ${vis}`)
+          .prepare(`SELECT COUNT(*) AS n FROM comments ${rootWhere}`)
           .get(...visArgs) as { n: number }
       ).n
       const totalPages = Math.max(1, Math.ceil(total / size))
@@ -139,7 +154,7 @@ export function openDb(path: string): Db {
       const rootIds = (
         db
           .prepare(
-            `SELECT id FROM comments WHERE parent_id IS NULL ${vis}
+            `SELECT id FROM comments ${rootWhere}
              ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
           )
           .all(...visArgs, size, offset) as { id: number }[]
@@ -160,7 +175,7 @@ export function openDb(path: string): Db {
              SELECT c.id FROM comments c JOIN tree t ON c.parent_id = t.id
            )
            SELECT ${cols} FROM comments
-           WHERE id IN (SELECT id FROM tree) ${vis}
+           WHERE id IN (SELECT id FROM tree) ${vis} AND archived=0
            ORDER BY created_at ASC, id ASC`,
         )
         .all(...rootIds, ...visArgs) as (CommentRow & { author_cid?: string })[]
@@ -218,19 +233,71 @@ export function openDb(path: string): Db {
       }
     },
 
-    deleteComment(id) {
-      // 递归删除整棵子树(含回复的回复)
+    archiveComment(id, by) {
+      // 递归归档整棵子树(删除 = 移入归档,可查回/恢复)
       const info = db
         .prepare(
           `WITH RECURSIVE sub(id) AS (
-             SELECT id FROM comments WHERE id = ?
+             SELECT id FROM comments WHERE id = @id
              UNION ALL
              SELECT c.id FROM comments c JOIN sub s ON c.parent_id = s.id
            )
-           DELETE FROM comments WHERE id IN (SELECT id FROM sub)`,
+           UPDATE comments
+           SET archived = 1, archived_at = @at, archived_by = @by
+           WHERE id IN (SELECT id FROM sub)`,
         )
-        .run(id)
+        .run({ id, at: nowIso(), by })
       return info.changes > 0
+    },
+
+    restoreComment(id) {
+      // 从归档恢复整棵子树(archived_at/by 还原为空)
+      const info = db
+        .prepare(
+          `WITH RECURSIVE sub(id) AS (
+             SELECT id FROM comments WHERE id = @id
+             UNION ALL
+             SELECT c.id FROM comments c JOIN sub s ON c.parent_id = s.id
+           )
+           UPDATE comments
+           SET archived = 0, archived_at = NULL, archived_by = ''
+           WHERE id IN (SELECT id FROM sub)`,
+        )
+        .run({ id })
+      return info.changes > 0
+    },
+
+    purgeComment(id) {
+      // 物理删除整棵子树(含回复的回复),从归档彻底移除
+      const info = db
+        .prepare(
+          `WITH RECURSIVE sub(id) AS (
+             SELECT id FROM comments WHERE id = @id
+             UNION ALL
+             SELECT c.id FROM comments c JOIN sub s ON c.parent_id = s.id
+           )
+           DELETE FROM comments WHERE archived=1 AND id IN (SELECT id FROM sub)`,
+        )
+        .run({ id })
+      return info.changes > 0
+    },
+
+    listArchived({ page = 1, pageSize = 20 } = {}) {
+      const size = Math.min(100, Math.max(1, Math.floor(pageSize)))
+      const total = (
+        db.prepare(`SELECT COUNT(*) AS n FROM comments WHERE archived=1`).get() as { n: number }
+      ).n
+      const totalPages = Math.max(1, Math.ceil(total / size))
+      const cur = Math.min(Math.max(1, Math.floor(page)), totalPages)
+      const offset = (cur - 1) * size
+      const rows = db
+        .prepare(
+          `SELECT id, author, author_link, body, visibility, parent_id, is_admin, ip, author_cid, created_at, archived_at, archived_by
+           FROM comments WHERE archived=1
+           ORDER BY archived_at DESC, id DESC LIMIT ? OFFSET ?`,
+        )
+        .all(size, offset) as ArchivedCommentRow[]
+      return { rows, total, page: cur, pageSize: size, totalPages }
     },
 
     listUsage(days = 30) {
