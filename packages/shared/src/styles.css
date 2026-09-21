@@ -2275,10 +2275,10 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   flex-wrap: wrap;
 }
 
-.zx-mocksel {
+.zx-mockbtn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--fg-dim);
@@ -2288,35 +2288,234 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   padding: 0.3rem 0.5rem;
   white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
-.zx-mocksel:hover {
-  border-color: var(--line-strong);
+.zx-mockbtn:hover,
+.zx-mockbtn.is-open {
   color: var(--fg);
+  border-color: var(--line-strong);
 }
 
-.zx-mocksel.is-on {
+.zx-mockbtn.is-on {
   color: var(--accent-2);
   border-color: var(--accent-2);
   background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+  box-shadow: 0 0 14px -4px var(--glow-2);
 }
 
-.zx-mocksel select {
-  appearance: none;
-  -webkit-appearance: none;
+.zx-mockbtn-label {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: baseline;
+}
+
+.zx-mockbtn-sep {
+  opacity: 0.5;
+}
+
+.zx-mockbtn-cur {
+  color: var(--fg);
+}
+
+.zx-mockbtn.is-on .zx-mockbtn-cur {
+  color: var(--accent-2);
+}
+
+.zx-mockbtn-caret {
+  opacity: 0.6;
+  font-size: 0.6rem;
+}
+
+/* MOCK 弹出面板(portal + fixed,不受容器 overflow 裁剪) */
+
+.zx-mockpop {
+  width: 300px;
+}
+
+.zx-mockpop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.zx-mockpop-tag {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+}
+
+.zx-mockpop-status {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--fg-dim);
+}
+
+.zx-mockpop-status.is-on {
+  color: var(--accent-2);
+}
+
+.zx-mockpop-status.is-on::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px var(--accent-2);
+  animation: zx-blink 1.6s steps(2, start) infinite;
+}
+
+.zx-mockpop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.zx-mockrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--fg);
   background: transparent;
-  border: none;
-  color: inherit;
-  font: inherit;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.4rem 0.55rem;
   cursor: pointer;
-  outline: none;
-  max-width: 11rem;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
-.zx-mocksel select option {
+.zx-mockrow:hover:not(:disabled) {
+  background: var(--elev);
+  border-color: var(--line);
+}
+
+.zx-mockrow.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: 0 0 14px -6px var(--glow);
+}
+
+.zx-mockrow:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.zx-mockrow-avatar {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  box-shadow: 0 0 8px -1px currentColor;
+}
+
+.zx-mockrow-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zx-mockrow-hint {
+  flex: none;
+  font-size: 0.62rem;
+  color: var(--fg-muted);
+}
+
+.zx-mockrow-check {
+  flex: none;
+  color: var(--accent-2);
+  font-size: 0.7rem;
+}
+
+.zx-mockpop-custom {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--line);
+}
+
+.zx-mockpop-cli {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.zx-mockpop-dollar {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--accent-2);
+}
+
+.zx-mockpop-in {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.3rem 0.5rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.zx-mockpop-in:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 16px -6px var(--glow);
+}
+
+.zx-mockpop-in::placeholder {
+  color: var(--fg-muted);
+}
+
+.zx-mockpop-go {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
   color: var(--fg);
   background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.zx-mockpop-go:hover:not(:disabled) {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+.zx-mockpop-go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.zx-mockpop-error {
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: #f87171;
+}
+
+.zx-mockpop-hint {
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--fg-muted);
 }
 
 /* ---------- 回复对象提示 ---------- */
