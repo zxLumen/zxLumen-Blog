@@ -23,7 +23,8 @@ export function getTestDb(): Db {
   return g.__zxTestDb
 }
 
-export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin'
+/** 环境变量回退密码:未配置则为空(此时若库中也无哈希,登录被禁用,不再默认弱密码) */
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ''
 export const REPORT_TOKEN = process.env.REPORT_TOKEN || 'dev-report-token'
 
 /** 极简内存限流:每 IP 每分钟 N 次 */

@@ -82,7 +82,8 @@ export async function setAdminPassword(pw: string) {
 /** 校验密码:库里有哈希用哈希,否则回退到环境变量 ADMIN_PASSWORD */
 export async function verifyAdminPassword(pw: string): Promise<boolean> {
   const stored = (await getActiveDb()).getMeta(ADMIN_PASS_KEY)
-  if (!stored) return pw === ADMIN_PASSWORD
+  // 库中无哈希时回退环境变量;若环境变量也未配置则一律拒绝(不默认弱密码)
+  if (!stored) return !!ADMIN_PASSWORD && pw === ADMIN_PASSWORD
   const [salt, hash] = stored.split(':')
   if (!salt || !hash) return false
   const calc = crypto.scryptSync(pw, salt, 32).toString('hex')
