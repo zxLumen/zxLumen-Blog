@@ -1,11 +1,13 @@
 'use client'
 
 import type { Contacts } from '../content.js'
-import type { CommentRow, PagedComments, UsageRow } from '../schema.js'
+import type { CommentRow, PagedComments, StatsResult, UsageRow } from '../schema.js'
 import type { DataSource, UsageSel } from '../usage-sel.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
 import { UsageSection } from './UsageSection.js'
+import { StatsSection } from './StatsSection.js'
+import { TrackBeacon } from './TrackBeacon.js'
 import { AboutSection } from './AboutSection.js'
 import { GuestbookSection, type NewComment } from './GuestbookSection.js'
 
@@ -24,6 +26,8 @@ interface HomePageProps {
   initialAuthor?: string
   /** 当前模拟访客身份(昵称/主题按身份分键) */
   viewerMock?: string
+  /** 首页统计聚合(SSR 计算) */
+  stats?: StatsResult
   contacts?: Contacts
   onSubmitComment?: (input: NewComment) => Promise<CommentRow> | CommentRow
 }
@@ -39,14 +43,17 @@ export function HomePage({
   apiBase,
   initialAuthor,
   viewerMock,
+  stats,
   contacts,
   onSubmitComment,
 }: HomePageProps) {
   return (
     <>
+      <TrackBeacon path="/" />
       <Hero />
       <ProjectsSection />
       <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} availableSources={availableSources} />
+      <StatsSection stats={stats} />
       <AboutSection contacts={contacts} />
       <GuestbookSection
         page={commentsPage}

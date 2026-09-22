@@ -91,6 +91,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 | GET | `/api/usage?range=30d` | 用量记录(`range`=`24h`/`7d`/`30d`/`90d`;回退链:DeepSeek 平台 → 上次成功数据 → 本地表) |
 | GET | `/api/usage?source=opencode` | OpenCode 用量(官方 Console;功能门控 `usage-opencode`) |
 | GET | `/api/usage?source=zhipu` | 智谱用量(monitor API;功能门控 `usage-zhipu`) |
+| POST | `/api/track` | 埋点上报(访问/项目点击/简历下载;排除站长/MOCK/爬虫) |
 | POST | `/api/usage` | 上报用量,需头 `X-Report-Token` |
 | GET | `/api/contact/phone` | 获取电话(限流;号码不预置页面) |
 | GET | `/api/contact/wechat-qr` | 微信二维码图片(长缓存,带版本) |

@@ -3,8 +3,11 @@ import {
   SCHEMA_SQL,
   type ArchivedCommentRow,
   type CommentRow,
+  type DayPoint,
+  type NewEventInput,
   type PagedArchived,
   type PagedComments,
+  type StatsResult,
   type UsageRow,
   type Visibility,
 } from '../schema.js'
@@ -58,6 +61,10 @@ export interface Db {
   listUsage(days?: number): UsageRow[]
   allUsage(): UsageRow[]
   addUsage(input: NewUsageInput): UsageRow
+  /** 记录埋点事件(访问/项目点击/简历下载) */
+  addEvent(input: NewEventInput): void
+  /** 首页统计聚合(PV/UV/趋势/留言/事件) */
+  stats(opts?: { trendDays?: number; onlineMinutes?: number }): StatsResult
   countComments(): number
   clearComments(): number
   getMeta(key: string): string | null
@@ -67,6 +74,9 @@ export interface Db {
 }
 
 const nowIso = () => new Date().toISOString().replace('T', ' ').slice(0, 19)
+
+/** 北京时(UTC+8)日期 YYYY-MM-DD */
+const bjDay = (t = Date.now()) => new Date(t + 8 * 3600 * 1000).toISOString().slice(0, 10)
 
 const COMMENT_COLS = `id, author, author_link, body, visibility, parent_id, is_admin, created_at`
 const COMMENT_COLS_CID = `id, author, author_link, body, visibility, parent_id, is_admin, author_cid, created_at`
@@ -365,6 +375,77 @@ export function openDb(path: string): Db {
         outputTokens: input.outputTokens ?? 0,
         cacheHitTokens: input.cacheHitTokens ?? 0,
         source: input.source ?? 'report',
+      }
+    },
+
+    addEvent(input) {
+      db.prepare(
+        `INSERT INTO events (ts, day, cid, type, target, ua)
+         VALUES (@ts, @day, @cid, @type, @target, @ua)`,
+      ).run({
+        ts: nowIso(),
+        day: bjDay(),
+        cid: input.cid ?? '',
+        type: input.type,
+        target: input.target ?? '',
+        ua: input.ua ?? '',
+      })
+    },
+
+    stats({ trendDays = 30, onlineMinutes = 5 } = {}) {
+      const today = bjDay()
+      const n = (sql: string, ...args: unknown[]) =>
+        (db.prepare(sql).get(...args) as { n: number }).n
+
+      const pv = n(`SELECT COUNT(*) AS n FROM events WHERE type='visit'`)
+      const uv = n(`SELECT COUNT(DISTINCT cid) AS n FROM events WHERE type='visit' AND cid != ''`)
+      const todayPv = n(`SELECT COUNT(*) AS n FROM events WHERE type='visit' AND day = ?`, today)
+      const todayUv = n(
+        `SELECT COUNT(DISTINCT cid) AS n FROM events WHERE type='visit' AND cid != '' AND day = ?`,
+        today,
+      )
+      const online = n(
+        `SELECT COUNT(DISTINCT cid) AS n FROM events WHERE type='visit' AND cid != '' AND ts >= datetime('now', ?)`,
+        `-${onlineMinutes} minutes`,
+      )
+
+      const trendRows = db
+        .prepare(
+          `SELECT day, COUNT(*) AS pv, COUNT(DISTINCT cid) AS uv
+           FROM events WHERE type='visit' AND day >= ? GROUP BY day`,
+        )
+        .all(bjDay(Date.now() - (trendDays - 1) * 86400000)) as { day: string; pv: number; uv: number }[]
+      const tmap = new Map(trendRows.map((r) => [r.day, r]))
+      const days: DayPoint[] = []
+      for (let i = trendDays - 1; i >= 0; i--) {
+        const d = bjDay(Date.now() - i * 86400000)
+        const r = tmap.get(d)
+        days.push({ day: d, pv: r?.pv ?? 0, uv: r?.uv ?? 0 })
+      }
+
+      const comments = {
+        total: n(`SELECT COUNT(*) AS n FROM comments WHERE archived=0`),
+        today: n(`SELECT COUNT(*) AS n FROM comments WHERE archived=0 AND date(created_at, '+8 hours') = ?`, today),
+        publicCount: n(`SELECT COUNT(*) AS n FROM comments WHERE archived=0 AND visibility='public'`),
+        privateCount: n(`SELECT COUNT(*) AS n FROM comments WHERE archived=0 AND visibility='private'`),
+        authors: n(`SELECT COUNT(DISTINCT author) AS n FROM comments WHERE archived=0`),
+      }
+
+      const events = {
+        projectClicks: n(`SELECT COUNT(*) AS n FROM events WHERE type='project_click'`),
+        resumeDownloads: n(`SELECT COUNT(*) AS n FROM events WHERE type='resume_download'`),
+        topProjects: db
+          .prepare(
+            `SELECT target, COUNT(*) AS count FROM events
+             WHERE type='project_click' AND target != '' GROUP BY target ORDER BY count DESC LIMIT 5`,
+          )
+          .all() as { target: string; count: number }[],
+      }
+
+      return {
+        visits: { pv, uv, today: { pv: todayPv, uv: todayUv }, online, days },
+        comments,
+        events,
       }
     },
 

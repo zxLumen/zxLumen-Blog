@@ -36,6 +36,20 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS events (
+  id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts     TEXT NOT NULL,            -- UTC 'YYYY-MM-DD HH:MM:SS'
+  day    TEXT NOT NULL,            -- 北京时 YYYY-MM-DD
+  cid    TEXT DEFAULT '',          -- 访客匿名 ID(UV 依据)
+  type   TEXT NOT NULL,            -- 'visit' | 'project_click' | 'resume_download'
+  target TEXT DEFAULT '',          -- 路径 / 项目 id / 文件名
+  ua     TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_day_type ON events(day, type);
+CREATE INDEX IF NOT EXISTS idx_events_cid ON events(cid);
+CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 `
 
 export interface CommentRow {
@@ -108,3 +122,46 @@ export interface UsageRow {
 }
 
 export type Visibility = 'public' | 'private'
+
+/** 埋点事件类型 */
+export type EventType = 'visit' | 'project_click' | 'resume_download'
+
+export interface NewEventInput {
+  type: EventType
+  target?: string
+  cid?: string
+  ua?: string
+}
+
+export interface DayPoint {
+  day: string
+  pv: number
+  uv: number
+}
+
+/** 首页统计数据(聚合,不含 cid/ip 等明细) */
+export interface StatsResult {
+  visits: {
+    /** 总访问量 */
+    pv: number
+    /** 总独立访客(cid 去重) */
+    uv: number
+    today: { pv: number; uv: number }
+    /** 近 N 分钟活跃独立访客(在线估算) */
+    online: number
+    /** 近 30 天趋势 */
+    days: DayPoint[]
+  }
+  comments: {
+    total: number
+    today: number
+    publicCount: number
+    privateCount: number
+    authors: number
+  }
+  events: {
+    projectClicks: number
+    resumeDownloads: number
+    topProjects: { target: string; count: number }[]
+  }
+}

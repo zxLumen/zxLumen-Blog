@@ -41,6 +41,9 @@ export default async function Home() {
   // 各数据源可用性(已配置 + 近30天有数据):SSR 决定显示哪些源,避免隐藏源闪现
   const availableSources = await getSourceAvailability();
 
+  // 首页统计聚合(访客/留言/事件);是否展示由客户端 useFeature('visitor-stats') 决定
+  const stats = db.stats();
+
   const commentsPage = db.listThreadPage({
     page: 1,
     pageSize: 5,
@@ -70,6 +73,7 @@ export default async function Home() {
       usageWindow={usageWindow}
       initialSel={initialSel}
       availableSources={availableSources}
+      stats={stats}
       isAdmin={admin}
       initialAuthor={initialAuthor}
       viewerMock={viewerMock || undefined}

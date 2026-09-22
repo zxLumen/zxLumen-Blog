@@ -2,6 +2,7 @@
 
 import { PROJECTS, type Project } from '../content.js'
 import { Section } from './Section.js'
+import { trackEvent } from './track.js'
 
 const STATUS_LABEL: Record<Project['status'], string> = {
   online: 'ONLINE',
@@ -58,12 +59,19 @@ function ProjectCard({ project, idx }: { project: Project; idx: number }) {
             href={project.demoUrl}
             target={project.demoUrl.startsWith('http') ? '_blank' : undefined}
             rel="noreferrer"
+            onClick={() => trackEvent('project_click', project.id)}
           >
             试用 →
           </a>
         )}
         {project.repoUrl && (
-          <a className="zx-btn zx-btn-sm zx-btn-ghost" href={project.repoUrl} target="_blank" rel="noreferrer">
+          <a
+            className="zx-btn zx-btn-sm zx-btn-ghost"
+            href={project.repoUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => trackEvent('project_click', project.id)}
+          >
             repo
           </a>
         )}

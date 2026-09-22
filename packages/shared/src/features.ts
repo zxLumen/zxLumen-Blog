@@ -15,12 +15,14 @@ export const FEATURE_IDS = [
   'usage-opencode',
   // 用量面板智谱数据源(读 monitor API:按模型 token 总量 + 配额)
   'usage-zhipu',
+  // 首页统计区块(访客 PV/UV/趋势、留言、项目点击/简历下载)
+  'visitor-stats',
 ] as const
 
 export type FeatureId = (typeof FEATURE_IDS)[number]
 
 /** 正式环境放行的集合;晋升新功能 = 把 id 加进这里 */
-export const LIVE_FEATURES: FeatureId[] = ['admin-tabs', 'self-delete', 'usage-opencode', 'usage-zhipu']
+export const LIVE_FEATURES: FeatureId[] = ['admin-tabs', 'self-delete', 'usage-opencode', 'usage-zhipu', 'visitor-stats']
 
 /** 当前模式下某功能是否放行(测试模式恒为 true) */
 export function isFeatureAllowed(id: FeatureId, testMode: boolean): boolean {
