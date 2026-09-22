@@ -296,6 +296,7 @@ export function openDb(path: string): Db {
       const cur = Math.min(Math.max(1, Math.floor(page)), totalPages)
       const offset = (cur - 1) * size
 
+      // 根留言:最近删除(archived_at)最靠前;同刻按 id 倒序
       const rootIds = (
         db
           .prepare(
@@ -309,20 +310,23 @@ export function openDb(path: string): Db {
         return { rows: [], total, page: cur, pageSize: size, totalPages }
       }
 
+      // root_id:每行所属的归档根,用于按"根的删除顺序"整体排序
       const ph = rootIds.map(() => '?').join(',')
       const rows = db
         .prepare(
-          `WITH RECURSIVE tree(id) AS (
-             SELECT id FROM comments WHERE id IN (${ph})
+          `WITH RECURSIVE tree(id, root_id) AS (
+             SELECT id, id FROM comments WHERE id IN (${ph})
              UNION ALL
-             SELECT c.id FROM comments c JOIN tree t ON c.parent_id = t.id
+             SELECT c.id, t.root_id FROM comments c JOIN tree t ON c.parent_id = t.id
            )
-           SELECT id, author, author_link, body, visibility, parent_id, is_admin, ip, author_cid, created_at, archived_at, archived_by, archived_by_cid
-           FROM comments
-           WHERE id IN (SELECT id FROM tree) AND archived=1
-           ORDER BY created_at ASC, id ASC`,
+           SELECT c.id, c.author, c.author_link, c.body, c.visibility, c.parent_id, c.is_admin, c.ip, c.author_cid, c.created_at, c.archived_at, c.archived_by, c.archived_by_cid,
+                  CASE t.root_id ${rootIds.map((_, i) => `WHEN ? THEN ${i}`).join(' ')} END AS root_ord
+           FROM comments c
+           JOIN tree t ON t.id = c.id
+           WHERE c.archived=1
+           ORDER BY root_ord ASC, c.parent_id IS NULL DESC, c.created_at ASC, c.id ASC`,
         )
-        .all(...rootIds) as ArchivedCommentRow[]
+        .all(...rootIds, ...rootIds) as ArchivedCommentRow[]
       return { rows, total, page: cur, pageSize: size, totalPages }
     },
 

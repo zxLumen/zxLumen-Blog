@@ -506,12 +506,9 @@ export function AdminPanel() {
 
   const tops = comments.filter((c) => !c.parent_id).slice().reverse()
   const repliesOf = (id: number) => comments.filter((c) => c.parent_id === id)
-  // 归档:与留言板一致,按根留言 + 子回复嵌套展示
+  // 归档:与留言板一致,按根留言 + 子回复嵌套展示(顺序已由接口按删除时间排好)
   const archRoots = archived.filter((c) => !c.parent_id)
   const archRepliesOf = (id: number) => archived.filter((c) => c.parent_id === id)
-  // 删除者 cid 小字:访客删除显示 by {cid},无记录显示 by —;站长删除显示标签
-  const archByLabel = (c: ArchivedCommentRow) =>
-    c.archived_by === 'visitor' ? `by ${c.archived_by_cid || '—'}` : ''
 
   return (
     <div className="zx-container" style={{ paddingBlock: '2.5rem' }}>
@@ -911,7 +908,6 @@ export function AdminPanel() {
               </span>
               {c.ip && <span className="zx-c-time">ip {c.ip}</span>}
               {c.author_cid && <span className="zx-c-time">cid {c.author_cid}</span>}
-              {archByLabel(c) && <span className="zx-c-time">{archByLabel(c)}</span>}
               {c.archived_at && <span className="zx-c-time">归档 {fmtDateTime(c.archived_at)}</span>}
               <span
                 className="zx-arch-actions"
@@ -951,7 +947,6 @@ export function AdminPanel() {
                   </span>
                   {r.ip && <span className="zx-c-time">ip {r.ip}</span>}
                   {r.author_cid && <span className="zx-c-time">cid {r.author_cid}</span>}
-                  {archByLabel(r) && <span className="zx-c-time">{archByLabel(r)}</span>}
                 </div>
                 <div className="zx-c-body">{r.body}</div>
               </div>
