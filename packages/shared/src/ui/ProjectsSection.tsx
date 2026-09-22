@@ -11,11 +11,16 @@ const STATUS_LABEL: Record<Project['status'], string> = {
   archived: 'ARCHIVED',
 }
 
-function ProjectCard({ project, idx }: { project: Project; idx: number }) {
+function ProjectCard({ project, idx, clicks }: { project: Project; idx: number; clicks?: number }) {
   return (
     <article className={`zx-card${project.featured ? ' is-featured' : ''}`} data-idx={String(idx).padStart(2, '0')}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
         <h3 style={{ margin: 0 }}>{project.name}</h3>
+        {clicks !== undefined && clicks > 0 && (
+          <span className="zx-project-clicks zx-mono" title="点击次数">
+            ▸ {clicks}
+          </span>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
         <span className="zx-status" data-status={project.status}>
@@ -80,12 +85,12 @@ function ProjectCard({ project, idx }: { project: Project; idx: number }) {
   )
 }
 
-export function ProjectsSection() {
+export function ProjectsSection({ clicks }: { clicks?: Record<string, number> }) {
   return (
     <Section id="projects" tag="// PROJECTS" num="01" title="项目">
       <div className="zx-grid">
         {PROJECTS.map((p, i) => (
-          <ProjectCard key={p.id} project={p} idx={i + 1} />
+          <ProjectCard key={p.id} project={p} idx={i + 1} clicks={clicks?.[p.id]} />
         ))}
       </div>
     </Section>

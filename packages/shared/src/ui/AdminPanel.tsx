@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ArchivedCommentRow, CommentRow, PagedComments } from '../schema.js'
-import { fmtDateTime } from '../format.js'
+import type { ArchivedCommentRow, CommentRow, PagedComments, StatsResult } from '../schema.js'
+import { fmtDateTime, fmtInt } from '../format.js'
+import { PROJECTS } from '../content.js'
 import { Pagination } from './Pagination.js'
 import { useFeature } from './theme-context.js'
 
@@ -66,9 +67,9 @@ export function AdminPanel() {
   const [zpUrl, setZpUrl] = useState('')
   const [zpKey, setZpKey] = useState('')
   const [zpBusy, setZpBusy] = useState(false)
-  type TabKey = 'comments' | 'archive' | 'profile' | 'token'
+  type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats'
   const validTab = (t: unknown): t is TabKey =>
-    t === 'comments' || t === 'archive' || t === 'profile' || t === 'token'
+    t === 'comments' || t === 'archive' || t === 'profile' || t === 'token' || t === 'stats'
   // 刷新/新标签页都停留在上次 Tab(localStorage;SSR 首帧不渲染 tabs,无 hydration 冲突)
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === 'undefined') return 'comments'
@@ -91,6 +92,21 @@ export function AdminPanel() {
   const [archTotalPages, setArchTotalPages] = useState(1)
   const [archLoading, setArchLoading] = useState(false)
   const [archBusy, setArchBusy] = useState(false)
+
+  const [stats, setStats] = useState<StatsResult | null>(null)
+  const [statsLoading, setStatsLoading] = useState(false)
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true)
+    try {
+      const res = await fetch('/api/admin/stats', { credentials: 'same-origin', cache: 'no-store' })
+      if (res.ok) setStats((await res.json()) as StatsResult)
+    } catch {
+      /* ignore */
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [])
 
   const loadArchive = useCallback(async (p: number, size: number) => {
     setArchLoading(true)
@@ -455,7 +471,8 @@ export function AdminPanel() {
 
   useEffect(() => {
     if (tab === 'archive') void loadArchive(archPage, archPageSize)
-  }, [tab, loadArchive, archPage, archPageSize])
+    if (tab === 'stats') void loadStats()
+  }, [tab, loadArchive, archPage, archPageSize, loadStats])
 
   async function savePassword() {
     if (newPw !== newPw2) return setMsg({ kind: 'err', text: '两次输入的新密码不一致' })
@@ -578,14 +595,22 @@ export function AdminPanel() {
         <span className="zx-sec-tag">// ADMIN</span>
         {showTabs ? (
           <div className="zx-tabs is-inline">
-            {(['comments', 'archive', 'profile', 'token'] as const).map((t) => (
+            {(['comments', 'archive', 'stats', 'profile', 'token'] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 className={`zx-tab${tab === t ? ' is-active' : ''}`}
                 onClick={() => setTab(t)}
               >
-                {t === 'comments' ? '留言' : t === 'archive' ? '归档' : t === 'profile' ? '个人信息' : 'Token 用量'}
+                {t === 'comments'
+                  ? '留言'
+                  : t === 'archive'
+                    ? '归档'
+                    : t === 'stats'
+                      ? '统计'
+                      : t === 'profile'
+                        ? '个人信息'
+                        : 'Token 用量'}
               </button>
             ))}
           </div>
@@ -996,6 +1021,96 @@ export function AdminPanel() {
         onPage={(p) => void loadPage(p, pageSize)}
         onPageSize={(s) => void loadPage(1, s)}
       />
+      </>
+      )}
+
+      {showTabs && tab === 'stats' && (
+      <>
+      <p className="zx-muted zx-mono" style={{ fontSize: '0.75rem' }}>
+        // 统计{statsLoading ? ' · 加载中…' : ''}
+      </p>
+      {!stats && <div className="zx-c-empty">暂无数据</div>}
+      {stats && (
+        <>
+          <div className="zx-grid-stats" style={{ marginBottom: '1.2rem' }}>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.comments.total)}</div>
+              <div className="zx-stat-label">留言总数</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.comments.today)}</div>
+              <div className="zx-stat-label">今日新增</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.comments.publicCount)}</div>
+              <div className="zx-stat-label">公开</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.comments.privateCount)}</div>
+              <div className="zx-stat-label">仅站长可见</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.comments.authors)}</div>
+              <div className="zx-stat-label">留言者</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.events.resumeDownloads)}</div>
+              <div className="zx-stat-label">简历下载</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.events.projectClicks)}</div>
+              <div className="zx-stat-label">项目点击</div>
+            </div>
+          </div>
+
+          <div className="zx-grid-stats" style={{ marginBottom: '1.2rem' }}>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.visits.pv)}</div>
+              <div className="zx-stat-label">总访问</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.visits.uv)}</div>
+              <div className="zx-stat-label">独立访客</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.visits.today.pv)}</div>
+              <div className="zx-stat-label">今日访问</div>
+            </div>
+            <div className="zx-stat">
+              <div className="zx-stat-now">{fmtInt(stats.visits.online)}</div>
+              <div className="zx-stat-label">在线</div>
+            </div>
+          </div>
+
+          <div className="zx-panel">
+            <h3>
+              项目点击 <span>按次数</span>
+            </h3>
+            {Object.keys(stats.events.clicksByTarget).length === 0 ? (
+              <div className="zx-c-empty">暂无点击</div>
+            ) : (
+              <table className="zx-table">
+                <thead>
+                  <tr>
+                    <th>项目</th>
+                    <th className="num">点击</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(stats.events.clicksByTarget)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([id, count]) => (
+                      <tr key={id}>
+                        <td>{PROJECTS.find((p) => p.id === id)?.name ?? id}</td>
+                        <td className="num">{fmtInt(count)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
       </>
       )}
 

@@ -6,7 +6,7 @@ import type { DataSource, UsageSel } from '../usage-sel.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
 import { UsageSection } from './UsageSection.js'
-import { StatsSection } from './StatsSection.js'
+import { StatsWidget } from './StatsWidget.js'
 import { TrackBeacon } from './TrackBeacon.js'
 import { AboutSection } from './AboutSection.js'
 import { GuestbookSection, type NewComment } from './GuestbookSection.js'
@@ -50,10 +50,10 @@ export function HomePage({
   return (
     <>
       <TrackBeacon path="/" />
+      <StatsWidget stats={stats} />
       <Hero />
-      <ProjectsSection />
+      <ProjectsSection clicks={stats?.events.clicksByTarget} />
       <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} availableSources={availableSources} />
-      <StatsSection stats={stats} />
       <AboutSection contacts={contacts} />
       <GuestbookSection
         page={commentsPage}

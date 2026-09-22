@@ -8,7 +8,7 @@ import { trackEvent } from './track.js'
 export function AboutSection({ contacts }: { contacts?: Contacts }) {
   const github = LINKS.find((l) => l.label === 'github')?.url
   return (
-    <Section id="about" tag="// ABOUT" num="04" title="关于 / 简历">
+    <Section id="about" tag="// ABOUT" num="03" title="关于 / 简历">
       <div className="zx-about-grid">
         <div className="zx-bio">
           <div className="zx-kicker">{PROFILE.statusLine}</div>

@@ -2973,3 +2973,121 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   background: transparent;
   box-shadow: none;
 }
+
+/* ---------- 悬浮访客统计 ---------- */
+
+.zx-statswidget-btn {
+  position: fixed;
+  top: 4.2rem;
+  right: 1rem;
+  z-index: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  background: color-mix(in srgb, var(--bg-2) 85%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  backdrop-filter: blur(var(--card-blur));
+  -webkit-backdrop-filter: blur(var(--card-blur));
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.zx-statswidget-btn:hover,
+.zx-statswidget-btn.is-open {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+.zx-statswidget-btn .zx-envdot {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.zx-statswidget-sep {
+  opacity: 0.5;
+}
+
+.zx-statswidget-pop {
+  position: fixed;
+  top: 6.6rem;
+  right: 1rem;
+  z-index: 401;
+  width: min(320px, calc(100vw - 2rem));
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+  box-shadow: 0 20px 50px -24px rgba(0, 0, 0, 0.9);
+  font-family: var(--font-mono);
+}
+
+.zx-statswidget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+  font-size: 0.7rem;
+}
+
+.zx-statswidget-close {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+}
+
+.zx-statswidget-close:hover {
+  color: var(--fg);
+}
+
+.zx-statswidget-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem 0.4rem;
+  margin-bottom: 0.7rem;
+}
+
+.zx-statswidget-cell {
+  text-align: center;
+}
+
+.zx-statswidget-val {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.zx-statswidget-lbl {
+  font-size: 0.6rem;
+  color: var(--fg-muted);
+}
+
+.zx-statswidget-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 54px;
+  margin-bottom: 0.35rem;
+}
+
+.zx-statswidget-foot {
+  font-size: 0.6rem;
+  text-align: right;
+}
+
+.zx-project-clicks {
+  font-size: 0.66rem;
+  color: var(--accent-2);
+  border: 1px solid color-mix(in srgb, var(--accent-2) 40%, var(--line));
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}

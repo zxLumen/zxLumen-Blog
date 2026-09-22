@@ -99,6 +99,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 | GET | `/api/admin/comments?page=&pageSize=` | 全部留言(含私密) |
 | POST | `/api/admin/delete` | 删除留言(递归子树) |
 | GET/POST | `/api/admin/settings` | 站长昵称 + 联系方式 |
+| GET | `/api/admin/stats` | 统计聚合(留言/简历/项目点击/访客;仅站长) |
 | POST | `/api/admin/password` | 修改密码 |
 | GET/POST | `/api/admin/wechat-qr` | 查询/上传微信二维码 |
 | GET | `/api/env` | 查询当前模式 `{ test, available }` |

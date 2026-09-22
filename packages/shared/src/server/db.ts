@@ -431,15 +431,19 @@ export function openDb(path: string): Db {
         authors: n(`SELECT COUNT(DISTINCT author) AS n FROM comments WHERE archived=0`),
       }
 
+      const clickRows = db
+        .prepare(
+          `SELECT target, COUNT(*) AS count FROM events
+           WHERE type='project_click' AND target != '' GROUP BY target`,
+        )
+        .all() as { target: string; count: number }[]
+      const clicksByTarget: Record<string, number> = {}
+      for (const r of clickRows) clicksByTarget[r.target] = r.count
+
       const events = {
         projectClicks: n(`SELECT COUNT(*) AS n FROM events WHERE type='project_click'`),
         resumeDownloads: n(`SELECT COUNT(*) AS n FROM events WHERE type='resume_download'`),
-        topProjects: db
-          .prepare(
-            `SELECT target, COUNT(*) AS count FROM events
-             WHERE type='project_click' AND target != '' GROUP BY target ORDER BY count DESC LIMIT 5`,
-          )
-          .all() as { target: string; count: number }[],
+        clicksByTarget,
       }
 
       return {

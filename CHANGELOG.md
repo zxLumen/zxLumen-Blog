@@ -6,7 +6,7 @@
 
 ### 新增
 
-- **首页统计区块**(功能门控 `visitor-stats`,已放行):新增 STATS 区块,展示**访客**(总 PV/UV、今日、在线、近30天趋势)、**留言**(总数/今日/公开/私密/留言者)、**事件**(项目点击、简历下载、热门项目 Top5)。采集用客户端 beacon(`POST /api/track`,始终匿名采集;排除站长/MOCK/爬虫);数据存 `events` 表。见 `docs/STATS.md`
+- **统计**(功能门控 `visitor-stats`,已放行):**访客统计**做成首页右上角**悬浮组件**(PV/UV/今日/在线/近30天趋势,公开);**项目点击**常驻显示在每个项目卡上;**留言/简历/项目点击**汇总移到 admin 新增的「统计」Tab。采集用客户端 beacon(`POST /api/track`,始终匿名采集;排除站长/MOCK/爬虫);数据存 `events` 表。见 `docs/STATS.md`
 - **用量面板按源隐藏空数据源**:各数据源(含 DeepSeek)只有「已配置 且 近 30 天有数据」时才显示切换按钮;SSR 即算好可用性(避免隐藏源闪现),无数据的源(如按量智谱账号,monitor 接口仅 Coding Plan 可用)自动隐藏
 - **智谱用量数据源**:新增「智谱」源(功能门控 `usage-zhipu`),读 monitor API 给出**区间内按模型 token 总量** + **配额条**(5 小时/每周 token、MCP 月度、套餐等级);admin 可配 API Key(裸 key)与 baseURL(国内/国际)。局限:智谱无逐日/逐小时明细与费用,故无日趋势、无输入/输出/缓存拆分(总 tokens 准确)。见 `docs/ZHIPU-USAGE.md`
 - **OpenCode Go 费用折算 + 配额展示**:官方导出的 `cost_micro_cents` 对 Go 订阅恒为 0;面板改用 **token × Go 价目表**折算美元(与 Console 同口径,含 Peak/Off-Peak),价目内置 `go-pricing.ts`(全量模型、促销截止标注);并在数据源为 OpenCode 时展示 **Go 5 小时 / 周 / 月 配额**(真实百分比 + 重置时间,来自 `/zen/go/v1/usage`)

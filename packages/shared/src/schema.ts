@@ -162,6 +162,7 @@ export interface StatsResult {
   events: {
     projectClicks: number
     resumeDownloads: number
-    topProjects: { target: string; count: number }[]
+    /** 各项目点击次数(projectId → count) */
+    clicksByTarget: Record<string, number>
   }
 }
