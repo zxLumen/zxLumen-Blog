@@ -19,8 +19,26 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
   const [mounted, setMounted] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const popRef = useRef<HTMLDivElement>(null)
+  // 预取到号码后缓存:移动端点击可在同步调用栈内直接跳 tel:,避免 await 被浏览器拦截
+  const phoneRef = useRef<string | null>(null)
 
   useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    if (!c.hasPhone && !(c.phoneReversed && c.phoneReversed.length)) return
+    let alive = true
+    fetch('/api/contact/phone', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { phone?: string } | null) => {
+        if (alive && d?.phone) phoneRef.current = d.phone
+      })
+      .catch(() => {
+        /* 忽略:点击时会再取一次 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [c.hasPhone, c.phoneReversed])
 
   function flash(msg: string) {
     setToast(msg)
@@ -78,19 +96,32 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
     }
   }, [pop])
 
-  async function onPhone() {
-    if (!c.hasPhone && !(c.phoneReversed && c.phoneReversed.length)) return
-    let phone = ''
+  async function fetchPhone(): Promise<string | null> {
     try {
       const res = await fetch('/api/contact/phone', { credentials: 'same-origin' })
       if (!res.ok) throw new Error()
-      phone = ((await res.json()) as { phone?: string }).phone || ''
+      return ((await res.json()) as { phone?: string }).phone ?? ''
     } catch {
-      flash('获取电话失败,请改用邮件/微信')
+      return null
+    }
+  }
+
+  async function onPhone() {
+    if (!c.hasPhone && !(c.phoneReversed && c.phoneReversed.length)) return
+    const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    // 移动端:优先用预取号码,在用户手势的同步栈内跳 tel:(避免 await 后跳转被拦)
+    if (mobile && phoneRef.current) {
+      window.location.href = `tel:${phoneRef.current}`
       return
     }
+    let phone = phoneRef.current
+    if (!phone) {
+      const res = await fetchPhone()
+      if (res === null) return flash('获取电话失败,请改用邮件/微信')
+      phone = res
+    }
     if (!phone) return flash('暂未提供电话')
-    const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    phoneRef.current = phone
     if (mobile) window.location.href = `tel:${phone}`
     else void copy(phone, '电话已复制到剪贴板')
   }
