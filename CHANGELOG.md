@@ -6,6 +6,7 @@
 
 ### 新增
 
+- **OpenCode Go 费用折算 + 配额展示**:官方导出的 `cost_micro_cents` 对 Go 订阅恒为 0;面板改用 **token × Go 价目表**折算美元(与 Console 同口径,含 Peak/Off-Peak),价目内置 `go-pricing.ts`(全量模型、促销截止标注);并在数据源为 OpenCode 时展示 **Go 5 小时 / 周 / 月 配额**(真实百分比 + 重置时间,来自 `/zen/go/v1/usage`)
 - **DeepSeek 今天/昨天分时**:接平台 `by_api_key/amount(+cost)` 小时级接口(北京时窗口、bucket=3600),与 OpenCode 共用同一套模板——今天/昨天在天级图里直接画 24 根小时柱,其余区间按天;移除两平台在文案/粒度上的差异(HOURLY 面板、平台特殊提示均删除)
 - **OpenCode 用量数据源改为官方 Console**(读取组织内完整数据):可用未用的 `sk-` BYOK key 官方拒收,需在 Console 创建 service-account key(`oc_sk_…`,admin 或 `OPENCODE_SERVICE_KEY` 配置);官方只提供最近 30 天(UTC 零点对齐)导出,拉取后按每请求精确时间戳本地聚合;今天/昨天**在天级图里直接画 24 根小时柱(北京时)**(移除独立的 HOURLY 面板,全平台共用),其余区间按天;越界区间返回 `platformLimit`；成本 USD(microcents/1e8)
 - **模型选单按使用频率排序**:按区间内 tokens 总量从高到低排,零用量模型(DeepSeek 置灰)排最后
@@ -13,6 +14,8 @@
 - 服务端 `/api/deepseek/token` 增加 `Access-Control-Allow-Private-Network`,兼容从公网 https 页面同步到本地服务(Chrome PNA 预检)
 - **用量时间区间重构**:去掉 24h / 90d,新增 **今天 / 昨天 / 本月 / 上月 / 自定义**(自定义日期区间的选择器);「今天/昨天」替代 24h(平台无小时级数据),按月粒度统一支持任意历史区间(上限 12 个月),修复此前「24h 显示成 30d」「90d 无内容」的问题
 - **零用量模型置灰保留**:面板模型 chips 基于平台返回的全量模型清单,当前区间无用量的模型**置灰但仍可点击**;自定义区间用「应用」按钮确认后拉取
+- **MOCK 每个身份 = 一台独立设备**:模拟访客身份除匿名 ID 外,昵称与主题也按身份分键(`zx_nick.<id>` / `zx-theme.<id>`),切 A/B/C 各自独立、互不影响;昵称默认留空、填后各自记住;首帧主题脚本按身份注入
+- **归档记录并展示访客删除者**:comments 新增 `archived_by_cid`,访客自删时记录其匿名 ID;admin 归档页对齐留言板(根留言 + 嵌套子回复,按删除时间倒序),显示作者 cid;访客只能删自己的留言,故不再单独展示删除者
 - **用量筛选按数据源各自保存**:时间区间 / 自定义日期 / 模型筛选 / Key(提供方)筛选均按 DeepSeek 与 OpenCode 各存一份,切换数据源时整套按钮自动切到该源的记忆状态;存档经 cookie 下发,SSR 首帧即正确、刷新无闪跳(首次切到某源用默认「近30天」)
 - **API Key 维度**:新增「全部 API Key / 各 key」多选 chips,与模型筛选**组合过滤**指标/柱状/占比/明细;RECENT 明细新增「key」列;只显示 `api_key_name`,不下发掩码 key 与 user_id
 - 管理后台 Tab 状态持久化改为 `localStorage`(首帧同步初始化),刷新/新开标签页都停留在当前 Tab 而非跳回留言页

@@ -77,6 +77,11 @@ cd apps/next-home && npm run lint && npm run build
 用于验证"私密仅本人与站长可见""访客删除自己的留言"等。模拟时该请求按普通访客处理
 (不享受站长特权);`恢复本人` 清除。也可直接调 `POST /api/admin/mock` `{ cid }`。
 
+**每个 mock 身份 = 一台独立设备**:除身份(`zx_mock` 覆盖 `zx_cid`)外,**昵称与主题**
+也按身份分键(`zx_nick.<id>` / `zx-theme.<id>`,见 `packages/shared/src/ui/identity.ts`),
+切 A/B/C 时各自独立、互不影响;昵称默认留空,填后各自记住。首次帧主题由
+`themeInitScript(..., mockId)` 注入。普通访客无 `zx_mock`,始终用无后缀键。
+
 ## 隐私:以下文件不入库(部署需单独提供)
 
 - `packages/shared/src/content.local.ts`(真实资料;有 `content.local.example.ts` 占位)
