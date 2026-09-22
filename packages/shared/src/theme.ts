@@ -340,12 +340,14 @@ const THEME_MAP = THEMES.reduce<Record<string, { t: Texture; m: Mode }>>((acc, t
 /**
  * 首帧无闪烁脚本:只接受 allowed 集合内的主题/布局,其余回退默认。
  * 由服务端按模式(正式/测试)生成 allowed 列表后注入 <head>。
+ * mockId:模拟访客身份时,主题键按身份后缀(等价于该访客设备的偏好)。
  */
-export function themeInitScript(allowedThemes: string[], allowedLayouts: string[]): string {
+export function themeInitScript(allowedThemes: string[], allowedLayouts: string[], mockId?: string): string {
+  const themeStorageKey = `${THEME_STORAGE_KEY}${mockId ? `.${mockId}` : ''}`
   return `(function(){try{
 var T=${JSON.stringify(allowedThemes)},Tm=${JSON.stringify(THEME_MAP)},L=${JSON.stringify(allowedLayouts)};
 var D=document.documentElement;
-var th=localStorage.getItem('${THEME_STORAGE_KEY}');if(T.indexOf(th)<0)th='${DEFAULT_THEME}';
+var th=localStorage.getItem('${themeStorageKey}');if(T.indexOf(th)<0)th='${DEFAULT_THEME}';
 var ly=localStorage.getItem('${LAYOUT_STORAGE_KEY}');if(L.indexOf(ly)<0)ly='${DEFAULT_LAYOUT}';
 var info=Tm[th]||{t:'none',m:'dark'};
 D.dataset.theme=th;D.dataset.layout=ly;D.dataset.texture=info.t;D.dataset.mode=info.m;

@@ -20,6 +20,8 @@ interface ShellProps {
   allowedLayoutIds: LayoutId[]
   /** 允许的功能(按模式:正式为白名单,测试为全集) */
   allowedFeatures?: FeatureId[]
+  /** 模拟访客身份:主题等偏好按身份分键(等价于一台独立设备) */
+  mockId?: string
   extra?: React.ReactNode
   children: React.ReactNode
 }
@@ -34,6 +36,7 @@ export function Shell({
   allowedThemeIds,
   allowedLayoutIds,
   allowedFeatures,
+  mockId,
   extra,
   children,
 }: ShellProps) {
@@ -42,6 +45,7 @@ export function Shell({
       allowedThemeIds={allowedThemeIds}
       allowedLayoutIds={allowedLayoutIds}
       allowedFeatures={allowedFeatures}
+      mockId={mockId}
     >
       <div className="zx-app">
         <Topbar nav={nav} activeHref={activeHref} pathname={pathname} link={link} extra={extra} />

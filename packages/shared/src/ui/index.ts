@@ -1,6 +1,7 @@
 export { PreferencesProvider, usePrefs, useTheme, useFeature } from './theme-context.js'
 export type { FeatureId } from '../features.js'
 export { ThemePicker } from './ThemePicker.js'
+export { nickKey, themeKey, selSuffix } from './identity.js'
 export { ThemeGrid, LayoutGrid } from './PickGrid.js'
 export { Typewriter } from './Typewriter.js'
 export { Topbar } from './Topbar.js'

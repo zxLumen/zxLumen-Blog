@@ -14,6 +14,7 @@ export function AppShell({
   allowedThemeIds,
   allowedLayoutIds,
   allowedFeatures,
+  mockId,
   extra,
   children,
 }: {
@@ -22,6 +23,8 @@ export function AppShell({
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
   allowedFeatures?: FeatureId[]
+  /** 模拟访客身份:主题等偏好按身份分键 */
+  mockId?: string
   extra?: React.ReactNode
   children: React.ReactNode
 }) {
@@ -35,6 +38,7 @@ export function AppShell({
       allowedThemeIds={allowedThemeIds}
       allowedLayoutIds={allowedLayoutIds}
       allowedFeatures={allowedFeatures}
+      mockId={mockId}
       extra={extra}
     >
       {children}

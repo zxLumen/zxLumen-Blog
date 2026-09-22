@@ -6,6 +6,7 @@ import { fmtDateTime } from '../format.js'
 import { Section } from './Section.js'
 import { Pagination } from './Pagination.js'
 import { useFeature } from './theme-context.js'
+import { nickKey } from './identity.js'
 
 export interface NewComment {
   author: string
@@ -26,9 +27,9 @@ interface GuestbookProps {
   apiBase?: string
   /** 服务端预填昵称(cookie 或站长昵称) */
   initialAuthor?: string
+  /** 当前模拟访客身份:昵称按身份分键(等价于一台独立设备) */
+  viewerMock?: string
 }
-
-const NICK_COOKIE = 'zx_nick'
 
 function readCookie(name: string): string {
   if (typeof document === 'undefined') return ''
@@ -62,8 +63,10 @@ export function GuestbookSection({
   isAdmin = false,
   apiBase: apiBaseProp = '/api',
   initialAuthor = '',
+  viewerMock = '',
 }: GuestbookProps) {
   const apiBase = apiBaseProp.replace(/\/$/, '')
+  const nickStorageKey = nickKey(viewerMock)
   // 访客删除自己的留言(功能门控 self-delete)
   const canSelfDelete = useFeature('self-delete')
 
@@ -124,7 +127,7 @@ export function GuestbookSection({
   // 无服务端预填时,从 cookie 兜底恢复昵称
   useEffect(() => {
     if (!initialAuthor) {
-      const n = readCookie(NICK_COOKIE)
+      const n = readCookie(nickStorageKey)
       if (n) {
         setAuthor((a) => a || n)
         setRAuthor((a) => a || n)
@@ -134,7 +137,7 @@ export function GuestbookSection({
 
   function rememberNick(name: string) {
     setAuthor(name)
-    writeCookie(NICK_COOKIE, name)
+    writeCookie(nickStorageKey, name)
   }
 
   // 可见性由服务端决定(公开 + 本人私密;站长看全部),前端不再二次过滤
@@ -245,7 +248,7 @@ export function GuestbookSection({
 
   const startReply = (c: CommentRow) => {
     setReplyTo(c.id)
-    setRAuthor(author || readCookie(NICK_COOKIE))
+    setRAuthor(author || readCookie(nickStorageKey))
     setRBody('')
     setRPrivate(false)
   }

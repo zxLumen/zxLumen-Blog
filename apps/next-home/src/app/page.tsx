@@ -2,22 +2,28 @@ import { cookies } from "next/headers";
 import type { UsageRow, UsageSel } from "@zx/shared";
 import { USAGE_SEL_COOKIE, parseUsageSel } from "@zx/shared";
 import { HomePage } from "@zx/shared/ui";
-import { getActiveDb } from "@/lib/env";
+import { getActiveDb, isTestMode } from "@/lib/env";
 import { isAdmin } from "@/lib/auth";
-import { effectiveCid, isMockActive } from "@/lib/clientid";
+import { effectiveCid, isMockActive, MOCK_COOKIE } from "@/lib/clientid";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
 import { fetchUsage } from "@/lib/deepseek";
 
 export const dynamic = "force-dynamic";
 
+/** 昵称 cookie 键:模拟访客时按身份分键(与 shared nickKey 规则一致) */
+const viewerNickKey = (mock: string) => `zx_nick${mock ? `.${mock}` : ""}`;
+
 export default async function Home() {
+  // 模拟访客身份(仅测试模式生效);决定昵称/主题按身份分键
+  const viewerMock = (await isTestMode()) ? ((await cookies()).get(MOCK_COOKIE)?.value ?? "") : "";
+
   // 模拟访客时,首页按普通访客视角渲染(不显示站长特权)
   const admin = (await isAdmin()) && !(await isMockActive());
   let initialAuthor = "";
   if (admin) {
     initialAuthor = await getAdminNick();
   } else {
-    const raw = (await cookies()).get("zx_nick")?.value ?? "";
+    const raw = (await cookies()).get(viewerNickKey(viewerMock))?.value ?? "";
     try {
       initialAuthor = raw ? decodeURIComponent(raw) : "";
     } catch {
@@ -61,6 +67,7 @@ export default async function Home() {
       initialSel={initialSel}
       isAdmin={admin}
       initialAuthor={initialAuthor}
+      viewerMock={viewerMock || undefined}
       contacts={await getClientContacts()}
     />
   );

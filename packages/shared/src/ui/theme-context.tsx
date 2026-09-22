@@ -14,13 +14,13 @@ import {
   DEFAULT_THEME,
   LAYOUTS,
   THEMES,
-  THEME_STORAGE_KEY,
   LAYOUT_STORAGE_KEY,
   getTheme,
   type Layout,
   type LayoutId,
   type Theme,
 } from '../theme.js'
+import { themeKey } from './identity.js'
 import type { FeatureId } from '../features.js'
 
 interface PrefsValue {
@@ -44,11 +44,14 @@ export function PreferencesProvider({
   allowedThemeIds,
   allowedLayoutIds,
   allowedFeatures = [],
+  mockId,
   children,
 }: {
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
   allowedFeatures?: FeatureId[]
+  /** 模拟访客身份:主题偏好按身份分键(等价于该访客设备的主题) */
+  mockId?: string
   children: React.ReactNode
 }) {
   const themes = useMemo(
@@ -79,8 +82,9 @@ export function PreferencesProvider({
     document.documentElement.dataset.layout = id
   }, [])
 
-  // 首帧恢复(受 allowed 限制)
+  // 首帧恢复(受 allowed 限制;按身份后缀读主题键)
   useIsoLayoutEffect(() => {
+    const tk = themeKey(mockId)
     const read = (k: string) => {
       try {
         return localStorage.getItem(k)
@@ -88,7 +92,7 @@ export function PreferencesProvider({
         return null
       }
     }
-    const savedTheme = read(THEME_STORAGE_KEY)
+    const savedTheme = read(tk)
     const nextTheme = savedTheme && themes.some((t) => t.id === savedTheme) ? savedTheme : themes[0].id
     const savedLayout = read(LAYOUT_STORAGE_KEY)
     const nextLayout =
@@ -101,7 +105,7 @@ export function PreferencesProvider({
     applyTheme(nextTheme)
     applyLayout(nextLayout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [themes, layouts])
+  }, [themes, layouts, mockId])
 
   const setTheme = useCallback(
     (id: string) => {
@@ -109,12 +113,12 @@ export function PreferencesProvider({
       setThemeState(id)
       applyTheme(id)
       try {
-        localStorage.setItem(THEME_STORAGE_KEY, id)
+        localStorage.setItem(themeKey(mockId), id)
       } catch {
         /* ignore */
       }
     },
-    [themes, applyTheme],
+    [themes, applyTheme, mockId],
   )
 
   const setLayout = useCallback(

@@ -20,6 +20,8 @@ interface HomePageProps {
   isAdmin?: boolean
   apiBase?: string
   initialAuthor?: string
+  /** 当前模拟访客身份(昵称/主题按身份分键) */
+  viewerMock?: string
   contacts?: Contacts
   onSubmitComment?: (input: NewComment) => Promise<CommentRow> | CommentRow
 }
@@ -33,6 +35,7 @@ export function HomePage({
   isAdmin,
   apiBase,
   initialAuthor,
+  viewerMock,
   contacts,
   onSubmitComment,
 }: HomePageProps) {
@@ -48,6 +51,7 @@ export function HomePage({
         isAdmin={isAdmin}
         apiBase={apiBase}
         initialAuthor={initialAuthor}
+        viewerMock={viewerMock}
       />
     </>
   )

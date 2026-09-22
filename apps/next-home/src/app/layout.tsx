@@ -39,9 +39,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const allowedFeatures = testMode ? [...FEATURE_IDS] : LIVE_FEATURES;
 
   const nav = admin ? [...NAV, { label: "admin", href: "/admin" }] : NAV;
-  const initScript = `${themeInitScript(allowedThemeIds, allowedLayoutIds)};${NAV_INIT_SCRIPT}`;
 
+  // 模拟访客身份:主题/昵称等偏好按身份分键(等价于一台独立设备);仅测试模式
   const mockCid = testMode ? ((await cookies()).get(MOCK_COOKIE)?.value ?? "") : "";
+
+  const initScript = `${themeInitScript(allowedThemeIds, allowedLayoutIds, mockCid || undefined)};${NAV_INIT_SCRIPT}`;
+
   const adminTools = admin && testAvailable ? (
     <div className="zx-admintools">
       <EnvSwitch testMode={testMode} />
@@ -61,6 +64,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           allowedThemeIds={allowedThemeIds}
           allowedLayoutIds={allowedLayoutIds}
           allowedFeatures={allowedFeatures}
+          mockId={mockCid || undefined}
           extra={adminTools}
         >
           {children}
