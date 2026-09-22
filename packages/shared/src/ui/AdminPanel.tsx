@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ArchivedCommentRow, CommentRow, PagedComments } from '../schema.js'
 import { fmtDateTime } from '../format.js'
 import { Pagination } from './Pagination.js'
@@ -40,11 +40,24 @@ export function AdminPanel() {
     lastSync?: string | null
     syncKey?: string
     lastError?: string | null
+    lastData?: { at?: number; count?: number } | null
   }
   const [ds, setDs] = useState<DsStatus | null>(null)
   const [dsToken, setDsToken] = useState('')
   const [dsBusy, setDsBusy] = useState(false)
-  const [tab, setTab] = useState<'comments' | 'archive' | 'profile' | 'token'>('comments')
+  type TabKey = 'comments' | 'archive' | 'profile' | 'token'
+  const validTab = (t: unknown): t is TabKey =>
+    t === 'comments' || t === 'archive' || t === 'profile' || t === 'token'
+  // 刷新/新标签页都停留在上次 Tab(localStorage;SSR 首帧不渲染 tabs,无 hydration 冲突)
+  const [tab, setTab] = useState<TabKey>(() => {
+    if (typeof window === 'undefined') return 'comments'
+    try {
+      const t = window.localStorage.getItem('zx-admin-tab')
+      return validTab(t) ? t : 'comments'
+    } catch {
+      return 'comments'
+    }
+  })
   // 功能门控:Tab 分栏为 TEST-only,晋升后加入 LIVE_FEATURES 即对正式模式生效
   const showTabs = useFeature('admin-tabs')
 
@@ -184,15 +197,42 @@ export function AdminPanel() {
     }
   }
 
-  function copyBookmarklet() {
+  function dsScript() {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const key = ds?.syncKey ?? ''
-    const code = `javascript:(async()=>{try{const j=JSON.parse(localStorage.getItem('userToken')||'{}');const t=j.value||j;const r=await fetch('${origin}/api/deepseek/token',{method:'POST',headers:{'Content-Type':'text/plain','X-Sync-Key':'${key}'},body:JSON.stringify({token:t})});alert(r.ok?'✅ 已同步 DeepSeek 令牌到主页':'❌ 同步失败 '+r.status)}catch(e){alert('同步失败: '+e)}})()`
-    navigator.clipboard
-      .writeText(code)
-      .then(() => setMsg({ kind: 'ok', text: '同步书签已复制(在 DeepSeek 用量页点它)' }))
-      .catch(() => setMsg({ kind: 'err', text: '复制失败,请手动复制' }))
+    return `(() => { const banner = (m) => { try { alert(m) } catch {}; const el = document.createElement('div'); el.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;padding:12px 16px;background:#0b0f14;color:#e6edf3;border:1px solid #30363d;border-radius:8px;font:12px/1.5 monospace;max-width:420px;box-shadow:0 8px 24px rgba(0,0,0,.4)'; el.textContent = m; document.body.appendChild(el); setTimeout(() => el.remove(), 6000) }; (async () => { try { const raw = localStorage.getItem('userToken'); if (!raw) { banner('未找到 userToken:需先登录 platform.deepseek.com/usage 再执行'); return } let t; try { const j = JSON.parse(raw); t = (j && typeof j === 'object' && 'value' in j) ? j.value : j } catch { t = raw } if (!t || typeof t !== 'string') { banner('userToken 结构无法识别,请手动复制(见下方指引)'); return } if (t.startsWith('sk-')) { banner('拿到的是 API Key(sk-),需要一个带 .xxx 的网页登录令牌(userToken)'); return } const res = await fetch('${origin}/api/deepseek/token', { method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-Sync-Key': '${key}' }, body: JSON.stringify({ token: t }) }); const detail = await res.json().catch(() => null); banner(res.ok ? '✅ 已同步 DeepSeek 令牌到主页' : ('❌ 同步失败 ' + res.status + ((detail && detail.error) ? ' · ' + detail.error : ''))) } catch (e) { banner('同步失败: ' + e) } })() })()`
   }
+
+  function dsTokenScript() {
+    return `(() => { let t; try { const j = JSON.parse(localStorage.getItem('userToken') || ''); t = (j && typeof j === 'object' && 'value' in j) ? j.value : j } catch { t = localStorage.getItem('userToken') } if (typeof t === 'string') t = t.trim(); if (!t) { alert('未找到 userToken,请先登录 platform.deepseek.com/usage'); return } if (t.startsWith('sk-')) { alert('这是 API Key(sk-),请用网页登录令牌 userToken'); return } (navigator.clipboard ? navigator.clipboard.writeText(t).then(() => alert('✅ 已复制 userToken,回 admin 粘贴保存')).catch(() => { prompt('自动复制失败,请手动全选复制:', t) }) : prompt('自动复制失败,请手动全选复制:', t)) })()`
+  }
+
+  async function copyText(text: string, okMsg: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setMsg({ kind: 'ok', text: okMsg })
+    } catch {
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.cssText = 'position:fixed;opacity:0'
+        document.body.appendChild(ta)
+        ta.select()
+        const ok = document.execCommand('copy')
+        ta.remove()
+        setMsg(ok ? { kind: 'ok', text: okMsg } : { kind: 'err', text: '复制失败,请手动复制' })
+      } catch {
+        setMsg({ kind: 'err', text: '复制失败,请手动复制' })
+      }
+    }
+  }
+
+  const dsBookmarkRef = useRef<HTMLAnchorElement>(null)
+  const bookmarkHref = `javascript:${dsScript()}`
+
+  useEffect(() => {
+    if (dsBookmarkRef.current) dsBookmarkRef.current.href = bookmarkHref
+  }, [bookmarkHref])
 
   async function uploadQr(file: File) {
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
@@ -275,6 +315,14 @@ export function AdminPanel() {
       await loadSettings()
     })()
   }, [loadPage, loadSettings])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('zx-admin-tab', tab)
+    } catch {
+      /* 忽略存储不可用 */
+    }
+  }, [tab])
 
   useEffect(() => {
     if (tab === 'archive') void loadArchive(archPage, archPageSize)
@@ -515,11 +563,35 @@ export function AdminPanel() {
           状态:
           {ds?.configured ? (ds.expired ? '已过期(需重新同步)' : '已配置') : '未配置'}
           {ds?.exp ? ` · 有效期至 ${new Date(ds.exp).toLocaleString()}` : ''}
-          {ds?.lastSync ? ` · 最近同步 ${ds.lastSync.slice(0, 19).replace('T', ' ')}` : ''}
+          {ds?.lastSync ? ` · 最近同步 ${new Date(ds.lastSync).toLocaleString()}` : ''}
+          {ds?.lastData?.at
+            ? ` · 上次成功 ${ds.lastData.count ?? 0} 行 @ ${new Date(ds.lastData.at).toLocaleString()}`
+            : ''}
         </p>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={dsBusy} onClick={copyBookmarklet}>
-            复制同步书签
+          <a
+            ref={dsBookmarkRef}
+            className="zx-btn zx-btn-sm zx-btn-primary"
+            draggable
+            title="拖到浏览器书签栏;点击会在本页运行,请勿直接点击"
+            onClick={(e) => e.preventDefault()}
+            onDragStart={(e) => {
+              e.currentTarget.href = bookmarkHref
+            }}
+          >
+            ⇢ 拖到书签栏
+          </a>
+          <button
+            className="zx-btn zx-btn-sm"
+            onClick={() => void copyText(dsScript(), '控制台命令已复制(在 DeepSeek 页 F12 → Console 粘贴回车)')}
+          >
+            复制控制台命令
+          </button>
+          <button
+            className="zx-btn zx-btn-sm"
+            onClick={() => void copyText(dsTokenScript(), '取令牌命令已复制(在官网 Console 执行,回这里粘贴保存)')}
+          >
+            复制取令牌命令
           </button>
           <button
             className="zx-btn zx-btn-sm"
@@ -532,7 +604,7 @@ export function AdminPanel() {
             className="zx-btn zx-btn-sm zx-btn-ghost"
             disabled={dsBusy}
             onClick={() => {
-              if (confirm('轮换同步密钥?旧书签将失效')) void dsAction('rotate')
+              if (confirm('轮换同步密钥?旧书签/旧命令将失效')) void dsAction('rotate')
             }}
           >
             轮换密钥
@@ -562,8 +634,10 @@ export function AdminPanel() {
           </button>
         </div>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
-          用法:登录 <span className="zx-accent">platform.deepseek.com/usage</span> → 点「复制同步书签」得到的书签
-          (或 F12 复制 <span className="zx-accent">localStorage.userToken.value</span> 粘贴保存)。令牌仅存服务器,不下发前端。
+          用法(任选其一):① 登录 <span className="zx-accent">platform.deepseek.com/usage</span> 后,把「⇢ 拖到书签栏」
+          拖到浏览器书签栏,再在该已登录页面点这个书签;② 或点「复制控制台命令」,在该页
+          <span className="zx-accent"> F12 → Console</span> 粘贴回车(首次需输入 <span className="zx-accent">allow pasting</span>);
+          ③ 或「复制取令牌命令」拿到令牌粘贴下方保存。令牌仅存服务器,不下发前端。
         </p>
         {ds?.lastError && <div className="zx-msg err">{ds.lastError}</div>}
       </div>

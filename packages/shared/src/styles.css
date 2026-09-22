@@ -1216,7 +1216,18 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   filter: brightness(1.4);
 }
 
-.zx-bar:nth-child(6n) {
+/* 区间内无用量的天:细矮占位条 */
+.zx-bar.is-zero {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fg-dim) 35%, transparent),
+    color-mix(in srgb, var(--fg-dim) 10%, transparent)
+  );
+  opacity: 0.5;
+}
+
+/* 有数据的天:每 6 根数据柱换一个强调色(只对数据柱计数,与占位天无关) */
+.zx-bar.is-alt {
   background: linear-gradient(
     180deg,
     var(--accent-2),
@@ -2847,6 +2858,16 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 .zx-chip:hover {
   color: var(--fg);
   border-color: var(--line-strong);
+}
+
+/* 零用量模型:置灰但保留点击 */
+.zx-chip.is-empty {
+  opacity: 0.42;
+}
+
+.zx-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .zx-chip.is-active {

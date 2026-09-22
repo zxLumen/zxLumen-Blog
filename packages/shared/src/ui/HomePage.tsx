@@ -12,6 +12,8 @@ interface HomePageProps {
   /** 留言分页数据(第 1 页) */
   commentsPage?: PagedComments
   usage?: UsageRow[]
+  /** SSR 阶段 usage 对应的日期窗口(用于柱状图补齐 0 值天) */
+  usageWindow?: { start?: string; end?: string }
   isAdmin?: boolean
   apiBase?: string
   initialAuthor?: string
@@ -23,6 +25,7 @@ interface HomePageProps {
 export function HomePage({
   commentsPage,
   usage,
+  usageWindow,
   isAdmin,
   apiBase,
   initialAuthor,
@@ -33,7 +36,7 @@ export function HomePage({
     <>
       <Hero />
       <ProjectsSection />
-      <UsageSection rows={usage} />
+      <UsageSection rows={usage} window={usageWindow} />
       <AboutSection contacts={contacts} />
       <GuestbookSection
         page={commentsPage}

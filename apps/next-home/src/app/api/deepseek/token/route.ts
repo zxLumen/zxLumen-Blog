@@ -9,6 +9,7 @@ function cors() {
     'Access-Control-Allow-Origin': ORIGIN,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Sync-Key',
+    'Access-Control-Allow-Private-Network': 'true',
     'Access-Control-Max-Age': '600',
   }
 }
@@ -28,8 +29,11 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: 'bad body' }, { status: 400, headers: cors() })
   }
-  if (!token || token.split('.').length < 2) {
-    return Response.json({ error: 'invalid token' }, { status: 400, headers: cors() })
+  if (token.startsWith('sk-')) {
+    return Response.json({ error: 'API Key(sk-)不能用作同步令牌,需网页登录 userToken' }, { status: 400, headers: cors() })
+  }
+  if (!token) {
+    return Response.json({ error: 'token required' }, { status: 400, headers: cors() })
   }
   setToken(token)
   setSyncAt(new Date().toISOString())

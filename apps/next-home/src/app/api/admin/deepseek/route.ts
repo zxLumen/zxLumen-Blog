@@ -42,8 +42,11 @@ export async function POST(req: Request) {
 
   if (action === 'save') {
     const token = (data?.token ?? '').trim()
-    if (!token || token.split('.').length < 2) {
-      return Response.json({ error: '令牌格式不正确(应为 JWT)' }, { status: 400 })
+    if (token.startsWith('sk-')) {
+      return Response.json({ error: '这是 API Key(sk-),需网页登录令牌 userToken' }, { status: 400 })
+    }
+    if (!token) {
+      return Response.json({ error: '请填入 userToken' }, { status: 400 })
     }
     setToken(token)
     setSyncAt(new Date().toISOString())

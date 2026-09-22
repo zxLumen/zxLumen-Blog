@@ -10,29 +10,55 @@ DeepSeek **官方公开 API 没有用量查询**:
 
 因此,主页无法"替你登录 DeepSeek",只能**复用你官网已登录的会话令牌**。
 
-## 如何同步(推荐:书签脚本)
+## 如何同步(三选一,任选其一)
 
 1. 用浏览器登录 https://platform.deepseek.com/usage
-2. 打开主页 `/admin` → 「DeepSeek 用量」→ 点 **复制同步书签**
-3. 在浏览器书签栏**新建一个书签**,地址粘贴刚复制的内容(整段 `javascript:...`)
-4. 在 **platform.deepseek.com 已登录**的页面上点这个书签 → 提示"✅ 已同步"
-5. 回到 `/admin` 会显示**状态 / 有效期至**,前台「Token 用量」面板即显示真实数据
+2. 打开主页 `/admin` → 「Token 用量」标签
+3. 任选一种方式:
 
-> 备用:在官网 F12 → Application → Local Storage → `https://platform.deepseek.com` → `userToken`,
-> 复制其 `value`(或 Console 执行 `localStorage.getItem('userToken')`),粘贴到 admin「手动粘贴 userToken」保存。
+### 方式 A:拖拽书签(推荐)
+- 把「**⇢ 拖到书签栏**」链接**拖到浏览器书签栏**(不要点击;点击会在当前页运行)。
+- 回到已登录的 `platform.deepseek.com/usage`,点这个书签 → 页面右上角出现「✅ 已同步」。
+
+> 之前的「复制同步书签」文本方式容易在新建书签时被浏览器剥掉 `javascript:` 前缀导致「点了没反应」;
+> 拖拽可完整保留协议,是书签方式里最可靠的。
+
+### 方式 B:控制台命令(最稳,不依赖书签)
+- 点「**复制控制台命令**」→ 在已登录的 `platform.deepseek.com` 页面按 **F12 → Console** 粘贴回车
+  (Chrome 首次粘贴需先输入 `allow pasting`)。
+- 命令会自动读取 `localStorage.userToken` 并同步,右侧出现结果提示。
+
+### 方式 C:手动粘贴(兜底)
+- 点「**复制取令牌命令**」→ 在官网 Console 执行,令牌已复制到剪贴板;
+- 回到 `/admin` → 「Token 用量」输入框**粘贴保存**。
+
+> 若拿到的是 `sk-` 开头的内容,那是 **API Key**,不是网页令牌 —— 请确认已登录网页控制台再试。
+> 令牌 `userToken` 仅存服务器数据库(`meta`),**绝不下发前端**。
 
 ## 有效期与失效
 
-- `userToken` 是登录会话 JWT,**有效期通常数天到数周**(admin 里直接显示"有效期至");
+- `userToken` 是登录会话令牌,通常**有效期数天到数周**(若可解析出有效期,admin 会显示"有效期至";解析不出的新格式也照常用——校验仅要求非空、非 `sk-`,是否有效以"验证 / 刷新"为准);
 - **不需要每天同步**;只有在**登出官网 / 清缓存 / 过期**后,平台返回 `40002/40003` 时,再点一次书签重同步即可;
 - 面板若显示"令牌失效",去 admin 重新同步。
 
 ## 数据与口径
 
-- 接口:`GET platform.deepseek.com/api/v0/usage/by_api_key/amount|cost?start=&end=&tz=28800`
-  (北京时间分桶,需浏览器特征头绕 WAF)
-- 返回按 **(天 × 模型 × API Key)** 拆分的用量桶;面板据此展示指标、日趋势、模型占比与明细
-- 主页会**缓存 5 分钟**;失败时回退上次数据/本地表/demo
+- 接口:
+  - 按月粒度:`GET platform.deepseek.com/api/v0/usage/amount?month=&year=`(取**全量模型清单**,含零用量模型,用于模型置灰)
+  - 每月导出:`GET platform.deepseek.com/api/v0/usage/export?month=&year=`(返回 ZIP,解析 `amount-YYYY-M.csv`,还原按 **天 × 模型 × API Key** 的 tokens/请求/费用;费用 = `price × amount`,与平台账单精确一致)
+  - 两个都需浏览器特征头绕 WAF;`export` 数据与 `by_api_key` 实时一致(无滞后)
+- 区间由请求侧换算为**月份集合**再按天过滤:
+  `今天 / 昨天 / 近7天 / 近30天 / 本月 / 上月 / 自定义`(自定义为日期区间,上限 12 个月)
+- 时间口径:平台接口以**平台日**为准(与官网「本月」一致);"今天/昨天"用**北京时间**计算边界,当天数据可能有延迟
+- 平台无小时级数据,因此没有"24h";"今天/昨天"即对应自然日
+- 面板模型 chips 来自接口返回的**全量模型清单**,零用量模型**置灰但仍可点击**;
+  **API Key** 维度(`coding`/`yijing64` 等)可选组合(多选),只显示 `api_key_name`,不下发掩码 key / user_id
+- 主页会**缓存 5 分钟**(按月缓存);失败时按 **上次成功数据 → 本地 `usage` 表 → demo** 依次回退
+  (`GET /api/usage` 返回 `source` 分别为 `deepseek` / `stale` / `local` / `error`),面板注明数据来源与更新时间
+- 本地表来自自建服务的 `POST /api/usage` 上报(见 `docs/REPORTING.md`),按 `range` 聚合展示
+
+> 曾用 `by_api_key/amount|cost` 接口拉取(北京整日窗口),仅支持尾部 5~32 天窗口、无小时数据;
+> 2026-09 起改为**按月粒度 + 每月导出**接口,统一支持历史任意区间、保留零用量模型,并带 API Key 维度。
 
 ## 安全与风险
 

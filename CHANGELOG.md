@@ -2,6 +2,36 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 新增
+
+- **DeepSeek 令牌同步改为三种可靠入口**:拖拽书签(`javascript:` 协议不再被浏览器删除)、复制控制台命令(自动读取 `userToken` 直接同步)、复制取令牌命令(手动粘贴兜底);书签/命令兼容 `{value}` 与纯字符串、拒绝 `sk-` API Key、结果用告警 + 页面角标双重提示
+- 服务端 `/api/deepseek/token` 增加 `Access-Control-Allow-Private-Network`,兼容从公网 https 页面同步到本地服务(Chrome PNA 预检)
+- **用量时间区间重构**:去掉 24h / 90d,新增 **今天 / 昨天 / 本月 / 上月 / 自定义**(自定义日期区间的选择器);「今天/昨天」替代 24h(平台无小时级数据),按月粒度统一支持任意历史区间(上限 12 个月),修复此前「24h 显示成 30d」「90d 无内容」的问题
+- **零用量模型置灰保留**:面板模型 chips 基于平台返回的全量模型清单,当前区间无用量的模型**置灰但仍可点击**;自定义区间用「应用」按钮确认后拉取
+- **API Key 维度**:新增「全部 API Key / 各 key」多选 chips,与模型筛选**组合过滤**指标/柱状/占比/明细;RECENT 明细新增「key」列;只显示 `api_key_name`,不下发掩码 key 与 user_id
+- 管理后台 Tab 状态持久化改为 `localStorage`(首帧同步初始化),刷新/新开标签页都停留在当前 Tab 而非跳回留言页
+
+### 修复
+
+- 修复拖拽书签项被 React 重置 `href` 为空导致「点击跳回 admin」:书签链接不再声明 `href` 属性,改为 `onDragStart` 时写入完整脚本地址
+- 放宽同步令牌校验:`userToken` 可能不再是三段式 JWT,改为仅要求非空、非 `sk-`(是否有效以「验证 / 刷新」实测为准),修复「同步失败 invalid token」
+- **适配平台 2026-07 改版用量接口**:`start/end` 改为北京零点对齐整日窗口、`series[].buckets[].time` 按 epoch 秒换算日、cost 字符串、`api_key` 对象归一为名称标签,真实用量拉取恢复(此前返回 `INVALID_PARAM`);admin「最近同步」时间改为本地时区显示
+- **修复区间回退错位**:区间切换后以实时结果为准,「今天/昨天」等空区间不再回退到 30d 的 SSR 数据或 demo,而是如实显示"该区间暂无真实数据"
+- **修复日趋势柱状图只有单柱**:柱状图按区间(SSR 窗口 + 实时接口返回的 start/end)补齐到每一天,无用量天显示灰色占位条,不再只画有数据的那天
+
+### 变更
+
+- **用量数据源改为按月接口 + 每月导出**:`amount` JSON 取全量模型清单;`export` ZIP(解析 amount CSV)还原按 (天 × 模型 × API Key) 的 tokens/请求/费用(费用=price×amount),数据与 `by_api_key` 实时一致;`GET /api/usage` 新增 `models`/`apiKeys` 字段;移除 `cost` 按月接口与 `by_api_key` 窗口口径
+- **用量失败回退真实数据**:平台拉取失败时先回退「上次成功数据」(按 range 持久化到库),再回退本地 `usage` 表(按 range 聚合);`GET /api/usage` 返回 `source` = `deepseek` / `stale` / `local` / `error` 并携带更新时间
+- **面板数据源标注如实**:区分实时 / 上次数据 / 本地表 / demo 四态并显示「更新于」,修复「0 行仍标注实时数据」的错位提示
+- admin「Token 用量」状态栏显示「上次成功 N 行」与时间
+
+### 文档
+
+- 修正 README API 表 `?days=30` → `?range=30d`;`docs/DEEPSEEK-USAGE.md` 同步三种用法与回退链说明
+
 ## [0.5.0] - 2026-09-20
 
 ### 新增

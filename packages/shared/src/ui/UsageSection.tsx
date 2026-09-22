@@ -11,60 +11,158 @@ const modelColor = (model: string) => PRICING.find((p) => p.model === model)?.co
 const modelLabel = (model: string) => PRICING.find((p) => p.model === model)?.label ?? model
 const rowCost = (r: UsageRow) => (typeof r.cost === 'number' ? r.cost : estimateCost(r).total)
 
-type Range = '24h' | '7d' | '30d' | '90d'
-const RANGES: Range[] = ['24h', '7d', '30d', '90d']
+type Range = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastmonth' | 'custom'
+const RANGES: { key: Range; label: string }[] = [
+  { key: 'today', label: '今天' },
+  { key: 'yesterday', label: '昨天' },
+  { key: '7d', label: '近7天' },
+  { key: '30d', label: '近30天' },
+  { key: 'month', label: '本月' },
+  { key: 'lastmonth', label: '上月' },
+  { key: 'custom', label: '自定义' },
+]
+const rangeLabel = (r: Range) => RANGES.find((x) => x.key === r)?.label ?? r
 
-export function UsageSection({ rows }: { rows?: UsageRow[] }) {
+const localIso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+export function UsageSection({ rows, window: ssrWin }: { rows?: UsageRow[]; window?: { start?: string; end?: string } }) {
   const [range, setRange] = useState<Range>('30d')
   const [live, setLive] = useState<UsageRow[] | null>(null)
-  const [source, setSource] = useState<'server' | 'deepseek' | 'none' | 'invalid' | 'error'>('server')
+  const [fetchedFor, setFetchedFor] = useState<Range | null>(null)
+  const [source, setSource] = useState<'server' | 'deepseek' | 'stale' | 'local' | 'none' | 'invalid' | 'error'>('server')
+  const [at, setAt] = useState<number | undefined>()
+  const [lastError, setLastError] = useState<string | undefined>()
+  const [win, setWin] = useState<{ start?: string; end?: string }>(ssrWin ?? {})
+  const [knownModels, setKnownModels] = useState<string[]>([])
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
+  const [customApplied, setCustomApplied] = useState<{ start: string; end: string } | null>(null)
+  const [pickedKeys, setPickedKeys] = useState<string[]>([])
+  const [knownKeys, setKnownKeys] = useState<string[]>([])
+
+  useEffect(() => {
+    if (rows?.length) {
+      setKnownModels((prev) => Array.from(new Set([...prev, ...rows.map((r) => r.model)])))
+      setKnownKeys((prev) =>
+        Array.from(new Set([...prev, ...rows.map((r) => r.apiKey ?? '').filter(Boolean)])),
+      )
+    }
+  }, [rows])
 
   useEffect(() => {
     let alive = true
-    fetch(`/api/usage?range=${range}`, { credentials: 'same-origin' })
+    let url = `/api/usage?range=${range}`
+    if (range === 'custom') {
+      if (!customApplied) return
+      url += `&start=${customApplied.start}&end=${customApplied.end}`
+    }
+    fetch(url, { credentials: 'same-origin' })
       .then((r) => r.json())
-      .then((d: { source?: string; rows?: UsageRow[] }) => {
+      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; at?: number; lastError?: string; start?: string; end?: string }) => {
         if (!alive) return
-        if (d.source === 'deepseek' && d.rows) {
-          setLive(d.rows)
-          setSource('deepseek')
-        } else {
-          setLive(null)
-          setSource((d.source as typeof source) ?? 'none')
-        }
+        const s = (d.source as typeof source) || 'none'
+        setSource(s)
+        setAt(d.at)
+        setLastError(d.lastError)
+        setWin({ start: d.start, end: d.end })
+        setLive(d.rows ?? [])
+        setFetchedFor(range)
+        setKnownModels((prev) =>
+          Array.from(new Set([...prev, ...(d.models ?? []), ...(d.rows ?? []).map((x) => x.model)])),
+        )
+        setKnownKeys((prev) =>
+          Array.from(new Set([...prev, ...(d.apiKeys ?? []), ...(d.rows ?? []).map((x) => x.apiKey ?? '').filter(Boolean)])),
+        )
       })
       .catch(() => {
         if (alive) {
           setLive(null)
+          setFetchedFor(null)
           setSource('error')
         }
       })
     return () => {
       alive = false
     }
-  }, [range])
+  }, [range, customApplied])
 
-  const liveRows = live && live.length > 0 ? live : null
-  const usingMock = !liveRows && !(rows && rows.length)
-  const allData = useMemo(
-    () => liveRows ?? (rows && rows.length > 0 ? rows : genMockUsage(30)),
-    [liveRows, rows],
-  )
+  const serverRows = rows && rows.length > 0 ? rows : null
+  const fetchedLive = fetchedFor === range && live !== null
+  const allData = useMemo(() => {
+    if (fetchedLive) return live ?? []
+    return serverRows ?? genMockUsage(30)
+  }, [fetchedLive, live, serverRows])
+  const usingMock = !fetchedLive && !serverRows
 
-  const models = useMemo(() => Array.from(new Set(allData.map((r) => r.model))), [allData])
+  const dataModels = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of allData) {
+      if (usingMock || r.inputTokens + r.outputTokens > 0 || (r.cost ?? 0) > 0) s.add(r.model)
+    }
+    return s
+  }, [allData, usingMock])
+  const models = useMemo(() => Array.from(new Set([...knownModels, ...dataModels])), [knownModels, dataModels])
+
+  const dataKeys = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of allData) {
+      const k = r.apiKey
+      if (k && (usingMock || r.inputTokens + r.outputTokens > 0 || (r.cost ?? 0) > 0 || (r.requests ?? 0) > 0)) s.add(k)
+    }
+    return s
+  }, [allData, usingMock])
+  const keys = useMemo(() => Array.from(new Set([...knownKeys, ...dataKeys])), [knownKeys, dataKeys])
+  const hasKey = useMemo(() => allData.some((r) => !!r.apiKey), [allData])
+
   const [picked, setPicked] = useState<string[]>([])
-  const active = useMemo(
-    () => (picked.length > 0 ? allData.filter((r) => picked.includes(r.model)) : allData),
-    [allData, picked],
-  )
+  const active = useMemo(() => {
+    let arr = allData
+    if (picked.length > 0) arr = arr.filter((r) => picked.includes(r.model))
+    if (pickedKeys.length > 0) arr = arr.filter((r) => (r.apiKey ?? '') && pickedKeys.includes(r.apiKey ?? ''))
+    return arr
+  }, [allData, picked, pickedKeys])
 
   const totals = tokensOf(active)
   const totalCost = active.reduce((a, r) => a + rowCost(r), 0)
   const totalReq = active.reduce((a, r) => a + (r.requests ?? 0), 0)
   const showReq = active.some((r) => typeof r.requests === 'number')
   const daily = dailyAggregate(active)
+  const daySeries = useMemo(() => {
+    let start = win.start
+    let end = win.end
+    if (!start || !end) {
+      const days = daily.map((d) => d[0])
+      if (days.length) {
+        start = days.reduce((a, b) => (a < b ? a : b))
+        end = days.reduce((a, b) => (a > b ? a : b))
+      }
+    }
+    if (!start || !end) return daily.map((d) => [d[0], d[1], d[2]]) as Array<[string, number, number]>
+    const map = new Map<string, [number, number]>()
+    for (const d of daily) map.set(d[0], [d[1], d[2]])
+    const out: Array<[string, number, number]> = []
+    const [sy, sm, sd] = start.split('-').map(Number)
+    const [ey, em, ed] = end.split('-').map(Number)
+    for (let t = Date.UTC(sy, sm - 1, sd); t <= Date.UTC(ey, em - 1, ed); t += 86400000) {
+      const iso = new Date(t).toISOString().slice(0, 10)
+      const hit = map.get(iso)
+      out.push(hit ? [iso, hit[0], hit[1]] : [iso, 0, 0])
+    }
+    return out
+  }, [daily, win])
+
+  const altDays = useMemo(() => {
+    const set = new Set<string>()
+    let count = 0
+    for (const [day, input, output] of daySeries) {
+      if (input + output > 0 && ++count % 6 === 0) set.add(day)
+    }
+    return set
+  }, [daySeries])
+  const altFor = (day: string) => altDays.has(day)
   const byModel = modelAggregate(active)
-  const maxDaily = Math.max(1, ...daily.map((d) => d[1] + d[2]))
+  const maxDaily = Math.max(1, ...daySeries.map((d) => d[1] + d[2]))
   const modelTotal = Math.max(1, byModel.reduce((a, m) => a + m.input + m.output, 0))
 
   let acc = 0
@@ -87,29 +185,81 @@ export function UsageSection({ rows }: { rows?: UsageRow[] }) {
     setPicked((prev) => (prev.includes(model) ? prev.filter((x) => x !== model) : [...prev, model]))
   }
 
-  const note =
-    source === 'deepseek'
-      ? '// 实时数据 · 来自 DeepSeek 平台用量'
-      : source === 'invalid'
-        ? '// DeepSeek 令牌失效,请在 /admin → DeepSeek 用量 重新同步'
-        : usingMock
-          ? '// 当前为 demo 数据;配置 DeepSeek 令牌(admin)后将显示真实用量'
-          : '// 数据来自本地 usage 表'
+  function toggleKey(k: string) {
+    setPickedKeys((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]))
+  }
+
+  function onRange(r: Range) {
+    setRange(r)
+    if (r === 'custom' && !customStart && !customEnd) {
+      setCustomStart(localIso(new Date(Date.now() - 6 * 86400000)))
+      setCustomEnd(localIso(new Date()))
+    }
+  }
+
+  function applyCustom() {
+    if (!customStart || !customEnd) return
+    const start = customStart <= customEnd ? customStart : customEnd
+    const end = customStart <= customEnd ? customEnd : customStart
+    setCustomApplied({ start, end })
+  }
+
+  const fmtAt = (t?: number) => (t ? new Date(t).toLocaleString() : '—')
+  const rangeWin = win.start && win.end ? `${win.start} ~ ${win.end}` : ''
+  const note = (() => {
+    if (!fetchedLive) {
+      if (usingMock) return '// 当前为 demo 数据;配置 DeepSeek 令牌(admin)或接入上报后显示真实用量'
+      return `// 数据来自本地 usage 表(服务端) · 更新于 ${fmtAt(at)}`
+    }
+    if (source === 'invalid' || source === 'error') return `// demo 数据 · DeepSeek 拉取失败:${lastError ?? '未知'}`
+    if (source === 'stale') return `// 上次同步数据(拉取失败:${lastError ?? '未知'}) · 更新于 ${fmtAt(at)}`
+    if (source === 'local') return `// 数据来自本地 usage 表(上报) · 更新于 ${fmtAt(at)}`
+    if (live && live.length === 0) return `// 该区间暂无真实数据(平台按天结算,当天数据可能有延迟)· 更新于 ${fmtAt(at)}`
+    return `// 实时数据 · 来自 DeepSeek 平台用量${rangeWin ? ` · ${rangeWin}` : ''} · 更新于 ${fmtAt(at)}`
+  })()
 
   return (
     <Section id="usage" tag="// TOKEN USAGE" num="02" title="Token 用量">
       <div className="zx-seg" role="group" aria-label="时间范围">
         {RANGES.map((rg) => (
           <button
-            key={rg}
+            key={rg.key}
             type="button"
-            className={`zx-chip${range === rg ? ' is-active' : ''}`}
-            onClick={() => setRange(rg)}
+            className={`zx-chip${range === rg.key ? ' is-active' : ''}`}
+            onClick={() => onRange(rg.key)}
           >
-            {rg}
+            {rg.label}
           </button>
         ))}
       </div>
+
+      {range === 'custom' && (
+        <div className="zx-seg" role="group" aria-label="自定义日期">
+          <input
+            type="date"
+            className="zx-input"
+            style={{ width: 'auto' }}
+            value={customStart}
+            onChange={(e) => setCustomStart(e.target.value)}
+          />
+          <span className="zx-muted zx-mono">→</span>
+          <input
+            type="date"
+            className="zx-input"
+            style={{ width: 'auto' }}
+            value={customEnd}
+            onChange={(e) => setCustomEnd(e.target.value)}
+          />
+          <button
+            type="button"
+            className="zx-chip is-active"
+            onClick={applyCustom}
+            disabled={!customStart || !customEnd || (customApplied?.start === customStart && customApplied?.end === customEnd)}
+          >
+            应用
+          </button>
+        </div>
+      )}
 
       <div className="zx-seg" role="group" aria-label="模型筛选">
         <button
@@ -123,7 +273,7 @@ export function UsageSection({ rows }: { rows?: UsageRow[] }) {
           <button
             key={m}
             type="button"
-            className={`zx-chip${picked.includes(m) ? ' is-active' : ''}`}
+            className={`zx-chip${picked.includes(m) ? ' is-active' : ''}${!usingMock && !dataModels.has(m) ? ' is-empty' : ''}`}
             onClick={() => toggle(m)}
           >
             <span className="zx-legend-dot" style={{ background: modelColor(m), color: modelColor(m) }} />
@@ -131,6 +281,28 @@ export function UsageSection({ rows }: { rows?: UsageRow[] }) {
           </button>
         ))}
       </div>
+
+      {keys.length > 0 && (
+        <div className="zx-seg" role="group" aria-label="API Key 筛选">
+          <button
+            type="button"
+            className={`zx-chip${pickedKeys.length === 0 ? ' is-active' : ''}`}
+            onClick={() => setPickedKeys([])}
+          >
+            全部 API Key
+          </button>
+          {keys.map((k) => (
+            <button
+              key={k}
+              type="button"
+              className={`zx-chip${pickedKeys.includes(k) ? ' is-active' : ''}${!usingMock && !dataKeys.has(k) ? ' is-empty' : ''}`}
+              onClick={() => toggleKey(k)}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="zx-grid-stats">
         <div className="zx-stat">
@@ -157,22 +329,22 @@ export function UsageSection({ rows }: { rows?: UsageRow[] }) {
         )}
         <div className="zx-stat">
           <div className="zx-stat-now">{fmtCny(totalCost)}</div>
-          <div className="zx-stat-label">成本 · {range}</div>
+          <div className="zx-stat-label">成本 · {rangeLabel(range)}</div>
         </div>
       </div>
 
       <div className="zx-usage-charts">
         <div className="zx-panel">
           <h3>
-            DAILY_TOKENS <span>近 {range} · input + output</span>
+            DAILY_TOKENS <span>{rangeLabel(range)} · input + output</span>
           </h3>
           <div className="zx-bars">
-            {daily.map(([day, input, output]) => {
+            {daySeries.map(([day, input, output]) => {
               const v = input + output
               return (
                 <div
                   key={day}
-                  className="zx-bar"
+                  className={`zx-bar${v === 0 ? ' is-zero' : altFor(day) ? ' is-alt' : ''}`}
                   data-label={`${day.slice(5)} · ${fmtCompact(v)}`}
                   style={{ height: `${Math.max(3, (v / maxDaily) * 100)}%` }}
                 />
@@ -205,13 +377,14 @@ export function UsageSection({ rows }: { rows?: UsageRow[] }) {
 
       <div className="zx-panel">
         <h3>
-          RECENT <span>近 {range} 明细(按天/模型)</span>
+          RECENT <span>{rangeLabel(range)}{rangeWin ? ` · ${rangeWin}` : ''} 明细(按天/模型)</span>
         </h3>
         <table className="zx-table">
           <thead>
             <tr>
               <th>day</th>
               <th>model</th>
+              {hasKey && <th>key</th>}
               <th className="num">input</th>
               <th className="num">output</th>
               <th className="num">cache</th>
@@ -224,6 +397,7 @@ export function UsageSection({ rows }: { rows?: UsageRow[] }) {
               <tr key={i}>
                 <td className="zx-mono">{fmtDate(r.ts)}</td>
                 <td>{modelLabel(r.model)}</td>
+                {hasKey && <td className="zx-mono">{r.apiKey || '—'}</td>}
                 <td className="num">{fmtInt(r.inputTokens)}</td>
                 <td className="num">{fmtInt(r.outputTokens)}</td>
                 <td className="num">{fmtInt(r.cacheHitTokens)}</td>

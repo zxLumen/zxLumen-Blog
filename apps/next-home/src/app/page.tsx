@@ -35,17 +35,24 @@ export default async function Home() {
 
   // 优先 DeepSeek 平台真实用量;失败/未配置回退本地 usage 表(再空则前端用 mock)
   let usage: UsageRow[] | undefined;
+  let usageWindow: { start?: string; end?: string } | undefined;
   try {
-    usage = (await fetchUsage("30d")).rows;
+    const u = await fetchUsage("30d");
+    usage = u.rows;
+    usageWindow = { start: u.start, end: u.end };
   } catch {
     usage = undefined;
   }
-  if (!usage || usage.length === 0) usage = db.listUsage(30);
+  if (!usage || usage.length === 0) {
+    usage = db.listUsage(30);
+    usageWindow = undefined;
+  }
 
   return (
     <HomePage
       commentsPage={commentsPage}
       usage={usage}
+      usageWindow={usageWindow}
       isAdmin={admin}
       initialAuthor={initialAuthor}
       contacts={getClientContacts()}

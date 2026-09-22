@@ -84,7 +84,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 | GET | `/api/comments?page=&pageSize=` | 留言分页(线程级);登录站长则含私密 |
 | POST | `/api/comments` | 新增留言 / 回复(`parent_id`、`visibility`) |
 | POST | `/api/comments/delete` | 删除自己的留言(按匿名 ID 校验;TEST-only) |
-| GET | `/api/usage?days=30` | 用量记录 |
+| GET | `/api/usage?range=30d` | 用量记录(`range`=`24h`/`7d`/`30d`/`90d`;回退链:DeepSeek 平台 → 上次成功数据 → 本地表) |
 | POST | `/api/usage` | 上报用量,需头 `X-Report-Token` |
 | GET | `/api/contact/phone` | 获取电话(限流;号码不预置页面) |
 | GET | `/api/contact/wechat-qr` | 微信二维码图片(长缓存,带版本) |
@@ -123,6 +123,6 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 
 - [ ] 到 `/admin → 联系方式` 填写**真实微信号**(现为占位)
 - [ ] (可选)填写 GitHub 链接;决定哪些主题/布局进入正式集
-- [ ] **接入 DeepSeek 用量上报**(现有服务调用后 `POST /api/usage`),否则面板显示 demo 曲线
+- [ ] **接入 DeepSeek 用量上报**:你的 DeepSeek 服务每次调用后 `POST /api/usage`(读取与聚合展示已完成,接口见 `docs/REPORTING.md`);面板在无平台数据时会回退本地表,否则显示 demo 曲线
 - [ ] **上线**(M5b):买 VPS/域名,按 `docs/DEPLOY.md` 部署
 - [ ] (可选)挂载项目子域名 demo 并填 `PROJECTS[].demoUrl`
