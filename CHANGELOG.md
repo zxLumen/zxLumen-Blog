@@ -24,6 +24,7 @@
 
 ### 修复
 
+- **修复 admin 登录校验被绕过**(严重):`/api/admin/login` 漏写 `await`(校验函数改为 async 后未同步),Promise 恒为真导致**任意非空密码都能登录**;补上 `await`,错误密码恢复 401
 - 修复 DeepSeek 今天/昨天分时费用全为 0:cost 接口的分时 series 在 `data[0].series`(amount 接口在顶层),原先只读顶层导致 costMap 为空;按小时费用现与平台导出对账一致
 - 修复拖拽书签项被 React 重置 `href` 为空导致「点击跳回 admin」:书签链接不再声明 `href` 属性,改为 `onDragStart` 时写入完整脚本地址
 - 放宽同步令牌校验:`userToken` 可能不再是三段式 JWT,改为仅要求非空、非 `sk-`(是否有效以「验证 / 刷新」实测为准),修复「同步失败 invalid token」

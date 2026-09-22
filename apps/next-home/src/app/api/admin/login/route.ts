@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   const data = await readJson<{ password?: string }>(req)
-  if (!data?.password || !verifyAdminPassword(data.password)) {
+  if (!data?.password || !(await verifyAdminPassword(data.password))) {
     return Response.json({ error: '密码错误' }, { status: 401 })
   }
   const store = await cookies()
