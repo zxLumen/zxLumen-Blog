@@ -27,6 +27,6 @@ export async function POST(req: Request) {
     return Response.json({ error: '只能删除自己的留言' }, { status: 403 })
   }
 
-  db.archiveComment(id, 'visitor')
+  db.archiveComment(id, 'visitor', cid)
   return Response.json({ ok: true })
 }

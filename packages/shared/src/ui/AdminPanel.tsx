@@ -439,6 +439,12 @@ export function AdminPanel() {
 
   const tops = comments.filter((c) => !c.parent_id).slice().reverse()
   const repliesOf = (id: number) => comments.filter((c) => c.parent_id === id)
+  // 归档:与留言板一致,按根留言 + 子回复嵌套展示
+  const archRoots = archived.filter((c) => !c.parent_id)
+  const archRepliesOf = (id: number) => archived.filter((c) => c.parent_id === id)
+  // 删除者 cid 小字:访客删除显示 by {cid},无记录显示 by —;站长删除显示标签
+  const archByLabel = (c: ArchivedCommentRow) =>
+    c.archived_by === 'visitor' ? `by ${c.archived_by_cid || '—'}` : ''
 
   return (
     <div className="zx-container" style={{ paddingBlock: '2.5rem' }}>
@@ -760,14 +766,11 @@ export function AdminPanel() {
       </p>
 
       <div className="zx-comments">
-        {archived.length === 0 && <div className="zx-c-empty">归档为空</div>}
-        {archived.map((c) => (
+        {archRoots.length === 0 && <div className="zx-c-empty">归档为空</div>}
+        {archRoots.map((c) => (
           <div className="zx-comment" key={c.id}>
             <div className="zx-c-head">
-              <span className="zx-c-author">
-                {c.parent_id ? '↳ ' : ''}
-                {c.author}
-              </span>
+              <span className="zx-c-author">{c.author}</span>
               {!!c.is_admin && <span className="zx-admin-tag">站长</span>}
               {c.visibility === 'private' && <span className="zx-private-tag">仅站长可见</span>}
               <span className={`zx-arch-tag ${c.archived_by}`}>
@@ -776,6 +779,9 @@ export function AdminPanel() {
               <span className="zx-c-time">
                 #{c.id} · 原 {fmtDateTime(c.created_at)}
               </span>
+              {c.ip && <span className="zx-c-time">ip {c.ip}</span>}
+              {c.author_cid && <span className="zx-c-time">cid {c.author_cid}</span>}
+              {archByLabel(c) && <span className="zx-c-time">{archByLabel(c)}</span>}
               {c.archived_at && <span className="zx-c-time">归档 {fmtDateTime(c.archived_at)}</span>}
               <span
                 className="zx-arch-actions"
@@ -800,6 +806,26 @@ export function AdminPanel() {
               </span>
             </div>
             <div className="zx-c-body">{c.body}</div>
+
+            {archRepliesOf(c.id).map((r) => (
+              <div className="zx-comment zx-reply" key={r.id}>
+                <div className="zx-c-head">
+                  <span className="zx-c-author">↳ {r.author}</span>
+                  {!!r.is_admin && <span className="zx-admin-tag">站长</span>}
+                  {r.visibility === 'private' && <span className="zx-private-tag">仅站长可见</span>}
+                  <span className={`zx-arch-tag ${r.archived_by}`}>
+                    {r.archived_by === 'admin' ? '站长删除' : '访客删除'}
+                  </span>
+                  <span className="zx-c-time">
+                    #{r.id} · 原 {fmtDateTime(r.created_at)}
+                  </span>
+                  {r.ip && <span className="zx-c-time">ip {r.ip}</span>}
+                  {r.author_cid && <span className="zx-c-time">cid {r.author_cid}</span>}
+                  {archByLabel(r) && <span className="zx-c-time">{archByLabel(r)}</span>}
+                </div>
+                <div className="zx-c-body">{r.body}</div>
+              </div>
+            ))}
           </div>
         ))}
       </div>

@@ -47,8 +47,8 @@ export interface Db {
   /** 取某条留言的作者匿名 ID(仅服务端使用) */
   getCommentCid(id: number): string | null
   addComment(input: NewCommentInput): CommentRow
-  /** 删除留言 = 归档整棵子树(admin/visitor 删除均可查回) */
-  archiveComment(id: number, by: 'admin' | 'visitor'): boolean
+  /** 删除留言 = 归档整棵子树(admin/visitor 删除均可查回);byCid 记录删除动作发起者 */
+  archiveComment(id: number, by: 'admin' | 'visitor', byCid?: string): boolean
   /** 从归档恢复整棵子树 */
   restoreComment(id: number): boolean
   /** 物理删除整棵子树(归档内彻底删除) */
@@ -89,6 +89,8 @@ export function openDb(path: string): Db {
   if (!cols.has('archived')) db.exec("ALTER TABLE comments ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
   if (!cols.has('archived_at')) db.exec("ALTER TABLE comments ADD COLUMN archived_at TEXT")
   if (!cols.has('archived_by')) db.exec("ALTER TABLE comments ADD COLUMN archived_by TEXT DEFAULT ''")
+  if (!cols.has('archived_by_cid'))
+    db.exec("ALTER TABLE comments ADD COLUMN archived_by_cid TEXT DEFAULT ''")
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_cid ON comments(author_cid)')
 
@@ -233,7 +235,7 @@ export function openDb(path: string): Db {
       }
     },
 
-    archiveComment(id, by) {
+    archiveComment(id, by, byCid = '') {
       // 递归归档整棵子树(删除 = 移入归档,可查回/恢复)
       const info = db
         .prepare(
@@ -243,15 +245,15 @@ export function openDb(path: string): Db {
              SELECT c.id FROM comments c JOIN sub s ON c.parent_id = s.id
            )
            UPDATE comments
-           SET archived = 1, archived_at = @at, archived_by = @by
+           SET archived = 1, archived_at = @at, archived_by = @by, archived_by_cid = @byCid
            WHERE id IN (SELECT id FROM sub)`,
         )
-        .run({ id, at: nowIso(), by })
+        .run({ id, at: nowIso(), by, byCid })
       return info.changes > 0
     },
 
     restoreComment(id) {
-      // 从归档恢复整棵子树(archived_at/by 还原为空)
+      // 从归档恢复整棵子树(archived_at/by/by_cid 还原为空)
       const info = db
         .prepare(
           `WITH RECURSIVE sub(id) AS (
@@ -260,7 +262,7 @@ export function openDb(path: string): Db {
              SELECT c.id FROM comments c JOIN sub s ON c.parent_id = s.id
            )
            UPDATE comments
-           SET archived = 0, archived_at = NULL, archived_by = ''
+           SET archived = 0, archived_at = NULL, archived_by = '', archived_by_cid = ''
            WHERE id IN (SELECT id FROM sub)`,
         )
         .run({ id })
@@ -284,19 +286,43 @@ export function openDb(path: string): Db {
 
     listArchived({ page = 1, pageSize = 20 } = {}) {
       const size = Math.min(100, Math.max(1, Math.floor(pageSize)))
+      // 与留言板一致:按「归档根留言」分页,子回复随根一起返回(前端按 parent_id 重建嵌套)
       const total = (
-        db.prepare(`SELECT COUNT(*) AS n FROM comments WHERE archived=1`).get() as { n: number }
+        db
+          .prepare(`SELECT COUNT(*) AS n FROM comments WHERE archived=1 AND parent_id IS NULL`)
+          .get() as { n: number }
       ).n
       const totalPages = Math.max(1, Math.ceil(total / size))
       const cur = Math.min(Math.max(1, Math.floor(page)), totalPages)
       const offset = (cur - 1) * size
+
+      const rootIds = (
+        db
+          .prepare(
+            `SELECT id FROM comments WHERE archived=1 AND parent_id IS NULL
+             ORDER BY archived_at DESC, id DESC LIMIT ? OFFSET ?`,
+          )
+          .all(size, offset) as { id: number }[]
+      ).map((r) => r.id)
+
+      if (rootIds.length === 0) {
+        return { rows: [], total, page: cur, pageSize: size, totalPages }
+      }
+
+      const ph = rootIds.map(() => '?').join(',')
       const rows = db
         .prepare(
-          `SELECT id, author, author_link, body, visibility, parent_id, is_admin, ip, author_cid, created_at, archived_at, archived_by
-           FROM comments WHERE archived=1
-           ORDER BY archived_at DESC, id DESC LIMIT ? OFFSET ?`,
+          `WITH RECURSIVE tree(id) AS (
+             SELECT id FROM comments WHERE id IN (${ph})
+             UNION ALL
+             SELECT c.id FROM comments c JOIN tree t ON c.parent_id = t.id
+           )
+           SELECT id, author, author_link, body, visibility, parent_id, is_admin, ip, author_cid, created_at, archived_at, archived_by, archived_by_cid
+           FROM comments
+           WHERE id IN (SELECT id FROM tree) AND archived=1
+           ORDER BY created_at ASC, id ASC`,
         )
-        .all(size, offset) as ArchivedCommentRow[]
+        .all(...rootIds) as ArchivedCommentRow[]
       return { rows, total, page: cur, pageSize: size, totalPages }
     },
 

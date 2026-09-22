@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS comments (
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   archived    INTEGER NOT NULL DEFAULT 0,
   archived_at TEXT,
-  archived_by TEXT DEFAULT ''
+  archived_by TEXT DEFAULT '',
+  archived_by_cid TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_comments_visibility ON comments(visibility, created_at);
@@ -69,6 +70,8 @@ export interface ArchivedCommentRow {
   archived_at: string
   /** 谁删除的:admin(站长)/ visitor(访客) */
   archived_by: 'admin' | 'visitor'
+  /** 删除动作发起者的匿名 ID(访客删除时;站长删除留空) */
+  archived_by_cid?: string
 }
 
 export interface PagedArchived {
