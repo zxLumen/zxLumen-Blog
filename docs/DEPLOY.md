@@ -10,15 +10,30 @@
 
 ## 1. 服务器初始化
 
+**推荐**:直接跑仓库脚本(安装 Docker、2G swap、ufw、fail2ban,并创建部署用户 `zx`):
+
 ```bash
-# 以 root 登录后
+scp docker/init-server.sh root@你的服务器IP:/root/
+ssh root@你的服务器IP 'bash /root/init-server.sh'
+```
+
+> 采购 / DNS / 云控制台放行端口等前置步骤,见 [`PROVISIONING.md`](./PROVISIONING.md)。
+
+手动等价操作(不跑脚本时):
+
+```bash
 apt update && apt upgrade -y
-# 安装 Docker(含 compose 插件)
+timedatectl set-timezone Asia/Shanghai
+# 2G swap(2G 内存机器构建 Next 更稳)
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+# Docker(含 compose 插件)
 curl -fsSL https://get.docker.com | sh
-# 新建非 root 用户并加入 docker 组(可选但推荐)
+# 部署用户
 adduser zx && usermod -aG docker zx
-# 防火墙:只放行 SSH + HTTP(S)
-ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw enable
+# 防火墙
+apt install -y ufw fail2ban
+ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw allow 443/udp && ufw enable
 ```
 
 ## 2. DNS

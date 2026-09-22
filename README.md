@@ -14,13 +14,16 @@ packages/
   shared/src/content.local.example.ts   个人资料示例(占位,入库)
   shared/src/content.local.ts           你的真实资料(不入库,见下)
 docker/
-  Dockerfile            多阶段构建
-  docker-compose.yml    app + Caddy
-  Caddyfile             自动 HTTPS / 子域名路由
-  backup.sh             SQLite 备份脚本
+  Dockerfile         多阶段构建
+  docker-compose.yml app + Caddy
+  Caddyfile          自动 HTTPS / 子域名路由
+  init-server.sh     服务器初始化(Docker/swap/ufw/fail2ban)
+  update.sh          拉代码 + 重建重启
+  backup.sh          SQLite 备份脚本
 docs/
-  DEPLOY.md             部署手册
-  REPORTING.md          DeepSeek 用量上报接口
+  PROVISIONING.md    采购与上线手册(域名/VPS/DNS)
+  DEPLOY.md          部署手册
+  REPORTING.md       DeepSeek 用量上报接口
 ```
 
 ## 本地开发
@@ -58,7 +61,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 - **留言板**:公开 / 仅站长可见;**回复**(单层缩进 + `回复 @昵称`);**页码分页**(每页 5/10/20/50/100);昵称 cookie 记忆;`/admin` 可删除(递归整棵回复)
 - **admin** `/admin`:会话登录、站长昵称、修改密码、联系方式(邮箱/微信/电话/二维码上传)、留言管理
 - **测试模式(仅本地)**:整站 LIVE / TEST 切换(独立测试库 + 全部主题/布局/功能),仅站长可见;线上生产环境禁用
-- **模拟访客(TEST)**:测试模式下右上角 `MOCK` 可切换多个匿名身份,以不同访客视角浏览/留言(验证私密可见性、自删等)
+- **模拟访客(TEST)**:测试模式下右上角 `MOCK` 可切换多个匿名身份(每身份 = 一台独立设备:身份 + 昵称 + 主题各自独立),以不同访客视角浏览/留言(验证私密可见性、自删等)
 
 ### 主题 / 布局 / 功能的"正式集"
 在 `packages/shared` 里维护:
