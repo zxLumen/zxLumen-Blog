@@ -11,12 +11,14 @@ export const FEATURE_IDS = [
   'admin-tabs',
   // 访客删除自己发过的留言(按匿名 ID 校验)
   'self-delete',
+  // 用量面板 OpenCode 数据源(读官方 Console,含 hourly 分时)
+  'usage-opencode',
 ] as const
 
 export type FeatureId = (typeof FEATURE_IDS)[number]
 
 /** 正式环境放行的集合;晋升新功能 = 把 id 加进这里 */
-export const LIVE_FEATURES: FeatureId[] = []
+export const LIVE_FEATURES: FeatureId[] = ['admin-tabs', 'self-delete', 'usage-opencode']
 
 /** 当前模式下某功能是否放行(测试模式恒为 true) */
 export function isFeatureAllowed(id: FeatureId, testMode: boolean): boolean {

@@ -62,3 +62,7 @@ export type { CommentRow, PagedComments, UsageRow, Visibility } from './schema.j
 
 // 格式化
 export { fmtInt, fmtCompact, fmtCny, fmtDate, fmtDateTime } from './format.js'
+
+// 用量区块筛选存档(客户端/服务端共用)
+export { USAGE_SEL_COOKIE, DEFAULT_SEL, defaultRangeSel, parseUsageSel, encodeUsageSel, writeUsageSelCookie } from './usage-sel.js'
+export type { UsageSel, RangeSel, Range as UsageRange, DataSource as UsageSource } from './usage-sel.js'

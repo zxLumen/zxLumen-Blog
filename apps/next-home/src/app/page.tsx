@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import type { UsageRow } from "@zx/shared";
+import type { UsageRow, UsageSel } from "@zx/shared";
+import { USAGE_SEL_COOKIE, parseUsageSel } from "@zx/shared";
 import { HomePage } from "@zx/shared/ui";
 import { getActiveDb } from "@/lib/env";
 import { isAdmin } from "@/lib/auth";
@@ -14,7 +15,7 @@ export default async function Home() {
   const admin = (await isAdmin()) && !(await isMockActive());
   let initialAuthor = "";
   if (admin) {
-    initialAuthor = getAdminNick();
+    initialAuthor = await getAdminNick();
   } else {
     const raw = (await cookies()).get("zx_nick")?.value ?? "";
     try {
@@ -26,6 +27,10 @@ export default async function Home() {
 
   const viewerCid = await effectiveCid();
   const db = await getActiveDb();
+
+  // 用量筛选存档(cookie 下发):SSR 首帧即按上次选择渲染,刷新无闪跳
+  const initialSel: UsageSel = parseUsageSel((await cookies()).get(USAGE_SEL_COOKIE)?.value ?? "");
+
   const commentsPage = db.listThreadPage({
     page: 1,
     pageSize: 5,
@@ -53,9 +58,10 @@ export default async function Home() {
       commentsPage={commentsPage}
       usage={usage}
       usageWindow={usageWindow}
+      initialSel={initialSel}
       isAdmin={admin}
       initialAuthor={initialAuthor}
-      contacts={getClientContacts()}
+      contacts={await getClientContacts()}
     />
   );
 }

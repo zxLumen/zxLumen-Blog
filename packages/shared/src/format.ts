@@ -9,6 +9,8 @@ export const fmtCompact = (n: number) => {
 
 export const fmtCny = (n: number) => '¥' + n.toFixed(n < 1 ? 3 : 2)
 
+export const fmtUsd = (n: number) => '$' + n.toFixed(n < 1 ? 3 : 2)
+
 export const fmtDate = (iso: string) => iso.slice(0, 10)
 
 export const fmtDateTime = (iso: string) => iso.replace('T', ' ').slice(0, 16)

@@ -45,6 +45,17 @@ export function AdminPanel() {
   const [ds, setDs] = useState<DsStatus | null>(null)
   const [dsToken, setDsToken] = useState('')
   const [dsBusy, setDsBusy] = useState(false)
+
+  interface OcStatus {
+    configured?: boolean
+    consoleUrl?: string
+    lastError?: string | null
+    lastData?: { at?: number; count?: number; since?: string } | null
+  }
+  const [oc, setOc] = useState<OcStatus | null>(null)
+  const [ocUrl, setOcUrl] = useState('')
+  const [ocKey, setOcKey] = useState('')
+  const [ocBusy, setOcBusy] = useState(false)
   type TabKey = 'comments' | 'archive' | 'profile' | 'token'
   const validTab = (t: unknown): t is TabKey =>
     t === 'comments' || t === 'archive' || t === 'profile' || t === 'token'
@@ -58,8 +69,9 @@ export function AdminPanel() {
       return 'comments'
     }
   })
-  // 功能门控:Tab 分栏为 TEST-only,晋升后加入 LIVE_FEATURES 即对正式模式生效
+  // 功能门控:按 LIVE_FEATURES 白名单放行(测试模式恒开)
   const showTabs = useFeature('admin-tabs')
+  const showOc = useFeature('usage-opencode')
 
   const [archived, setArchived] = useState<ArchivedCommentRow[]>([])
   const [archTotal, setArchTotal] = useState(0)
@@ -168,14 +180,69 @@ export function AdminPanel() {
     }
     const dres = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
     if (dres.ok) setDs((await dres.json()) as DsStatus)
-  }, [])
+    if (showOc) {
+      const ores = await fetch('/api/admin/opencode', { credentials: 'same-origin' })
+      if (ores.ok) {
+        const o = (await ores.json()) as OcStatus
+        setOc(o)
+        if (o.consoleUrl && o.consoleUrl !== 'https://opencode.ai/console') setOcUrl(o.consoleUrl)
+      }
+    }
+  }, [showOc])
 
   async function loadDeepseek() {
     const res = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
     if (res.ok) setDs((await res.json()) as DsStatus)
   }
 
+  async function loadOpenCode() {
+    const res = await fetch('/api/admin/opencode', { credentials: 'same-origin' })
+    if (res.ok) {
+      const o = (await res.json()) as OcStatus
+      setOc(o)
+      if (o.consoleUrl && o.consoleUrl !== 'https://opencode.ai/console') setOcUrl(o.consoleUrl)
+    }
+  }
+
+  async function ocAction(action: 'save' | 'refresh' | 'clear', key?: string, url?: string) {
+    if (action === 'refresh' && !oc?.configured) {
+      setMsg({ kind: 'err', text: '未配置服务账号 Key:请先粘贴 oc_sk_… Key 保存后再验证' })
+      return
+    }
+    setOcBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/opencode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action, key, consoleUrl: url }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
+      if (!res.ok) throw new Error(d.error || '操作失败')
+      await loadOpenCode()
+      setOcKey('')
+      setMsg({
+        kind: 'ok',
+        text:
+          action === 'refresh'
+            ? `已从官方 Console 拉取 ${d.rows ?? 0} 行(校验通过)`
+            : action === 'save'
+              ? 'Key 已保存'
+              : '已清除',
+      })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
+    } finally {
+      setOcBusy(false)
+    }
+  }
+
   async function dsAction(action: 'save' | 'refresh' | 'rotate' | 'clear', token?: string) {
+    if (action === 'refresh' && !ds?.configured) {
+      setMsg({ kind: 'err', text: '未配置令牌:请先通过书签/控制台命令同步 userToken 或粘贴保存' })
+      return
+    }
     setDsBusy(true)
     setMsg(null)
     try {
@@ -185,11 +252,11 @@ export function AdminPanel() {
         credentials: 'same-origin',
         body: JSON.stringify({ action, token }),
       })
-      const d = (await res.json().catch(() => ({}))) as { error?: string }
+      const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
       if (!res.ok) throw new Error(d.error || '操作失败')
       if (action === 'save') setDsToken('')
       await loadDeepseek()
-      setMsg({ kind: 'ok', text: action === 'refresh' ? '已刷新(令牌有效)' : '操作成功' })
+      setMsg({ kind: 'ok', text: action === 'refresh' ? `已刷新 · 拉取 ${d.rows ?? 0} 行(令牌有效)` : '操作成功' })
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
     } finally {
@@ -471,6 +538,8 @@ export function AdminPanel() {
         </button>
       </div>
 
+      {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
+
       {(!showTabs || tab === 'profile') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
@@ -601,10 +670,10 @@ export function AdminPanel() {
           </button>
           <button
             className="zx-btn zx-btn-sm"
-            disabled={dsBusy || !ds?.configured}
+            disabled={dsBusy}
             onClick={() => void dsAction('refresh')}
           >
-            验证 / 刷新
+            {dsBusy ? '验证中…' : '验证 / 刷新'}
           </button>
           <button
             className="zx-btn zx-btn-sm zx-btn-ghost"
@@ -646,6 +715,69 @@ export function AdminPanel() {
           ③ 或「复制取令牌命令」拿到令牌粘贴下方保存。令牌仅存服务器,不下发前端。
         </p>
         {ds?.lastError && <div className="zx-msg err">{ds.lastError}</div>}
+      </div>
+      )}
+
+      {(!showTabs || tab === 'token') && showOc && (
+      <div className="zx-panel" style={{ marginBottom: '1rem' }}>
+        <h3>
+          OpenCode 用量 <span>官方 Console 导出 · 今天/昨天分时</span>
+        </h3>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
+          状态:{oc?.configured ? '已配置' : '未配置'}
+          {oc?.consoleUrl ? ` · Console:${oc.consoleUrl}` : ''}
+          {oc?.lastData?.since ? ` · 覆盖 ${oc.lastData.since} 起` : ''}
+          {oc?.lastData?.at
+            ? ` · 上次成功 ${oc.lastData.count ?? 0} 个分时桶 @ ${new Date(oc.lastData.at).toLocaleString()}`
+            : ''}
+        </p>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            className="zx-input"
+            type="password"
+            style={{ maxWidth: 300, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+            placeholder="Console 服务账号 Key(oc_sk_…)"
+            value={ocKey}
+            onChange={(e) => setOcKey(e.target.value)}
+            autoComplete="off"
+          />
+          <input
+            className="zx-input"
+            style={{ maxWidth: 220, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+            placeholder="Console URL(默认生产)"
+            value={ocUrl}
+            onChange={(e) => setOcUrl(e.target.value)}
+          />
+          <button
+            className="zx-btn zx-btn-sm zx-btn-primary"
+            disabled={ocBusy || !ocKey || (!!ocUrl && !/^https:\/\//.test(ocUrl))}
+            onClick={() => void ocAction('save', ocKey, ocUrl || undefined)}
+          >
+            {ocBusy ? '保存中…' : '保存 Key'}
+          </button>
+          <button
+            className="zx-btn zx-btn-sm"
+            disabled={ocBusy}
+            onClick={() => void ocAction('refresh')}
+          >
+            {ocBusy ? '验证中…' : '验证 / 刷新'}
+          </button>
+          <button
+            className="zx-btn zx-btn-sm zx-btn-ghost"
+            disabled={ocBusy || !oc?.configured}
+            onClick={() => void ocAction('clear')}
+          >
+            清除
+          </button>
+        </div>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
+          到 <span className="zx-accent">opencode.ai/console(或 dev.opencode.ai/console)</span> → API keys
+          创建 <span className="zx-accent">Service account</span> key(需用量读取权限),粘贴上方保存。
+          官方仅提供最近 30 天(UTC 零点对齐);「今天/昨天」按小时趋势展示，其余区间按天。
+          也可用环境变量 <span className="zx-accent">OPENCODE_SERVICE_KEY</span> /{' '}
+          <span className="zx-accent">OPENCODE_CONSOLE_URL</span>(优先级更高)。Key 仅存服务器,不下发前端。
+        </p>
+        {oc?.lastError && <div className="zx-msg err">{oc.lastError}</div>}
       </div>
       )}
 
@@ -693,8 +825,6 @@ export function AdminPanel() {
 
       {(!showTabs || tab === 'comments') && (
       <>
-      {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
-
       <p className="zx-muted zx-mono" style={{ fontSize: '0.75rem' }}>
         // {total} 条留言(含私密与回复){loading ? ' · 加载中…' : ''} · 已登录状态在所有页面生效
       </p>

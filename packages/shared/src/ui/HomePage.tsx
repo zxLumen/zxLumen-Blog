@@ -2,6 +2,7 @@
 
 import type { Contacts } from '../content.js'
 import type { CommentRow, PagedComments, UsageRow } from '../schema.js'
+import type { UsageSel } from '../usage-sel.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
 import { UsageSection } from './UsageSection.js'
@@ -14,6 +15,8 @@ interface HomePageProps {
   usage?: UsageRow[]
   /** SSR 阶段 usage 对应的日期窗口(用于柱状图补齐 0 值天) */
   usageWindow?: { start?: string; end?: string }
+  /** 用量区块存档(cookie 下发,用于 SSR 首帧渲染正确筛选) */
+  initialSel?: UsageSel
   isAdmin?: boolean
   apiBase?: string
   initialAuthor?: string
@@ -26,6 +29,7 @@ export function HomePage({
   commentsPage,
   usage,
   usageWindow,
+  initialSel,
   isAdmin,
   apiBase,
   initialAuthor,
@@ -36,7 +40,7 @@ export function HomePage({
     <>
       <Hero />
       <ProjectsSection />
-      <UsageSection rows={usage} window={usageWindow} />
+      <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} />
       <AboutSection contacts={contacts} />
       <GuestbookSection
         page={commentsPage}
