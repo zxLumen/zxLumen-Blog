@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { CONTACTS, PROFILE } from '@zx/shared'
 import type { Contacts } from '@zx/shared'
-import { ADMIN_PASSWORD } from './db'
+import { ADMIN_PASSWORD, getDb } from './db'
 import { getActiveDb } from './env'
 
 export const ADMIN_NICK_KEY = 'admin_nick'
@@ -72,16 +72,22 @@ export async function setAdminNick(nick: string) {
   ;(await getActiveDb()).setMeta(ADMIN_NICK_KEY, nick)
 }
 
-/** 设置密码:scrypt 加盐哈希后存库 */
-export async function setAdminPassword(pw: string) {
+/**
+ * 设置密码:scrypt 加盐哈希后存库。
+ *
+ * 注意:admin 密码是**全局身份**,只存线上库(`getDb()`),**不随 TEST/LIVE 隔离**。
+ * 原因:登录时尚未有会话 → `isTestMode()` 为 false,只能查线上库;若改密码时按 TEST
+ * 写进测试库,就会出现"改完密码却登不上"。
+ */
+export function setAdminPassword(pw: string) {
   const salt = crypto.randomBytes(16).toString('hex')
   const hash = crypto.scryptSync(pw, salt, 32).toString('hex')
-  ;(await getActiveDb()).setMeta(ADMIN_PASS_KEY, `${salt}:${hash}`)
+  getDb().setMeta(ADMIN_PASS_KEY, `${salt}:${hash}`)
 }
 
-/** 校验密码:库里有哈希用哈希,否则回退到环境变量 ADMIN_PASSWORD */
-export async function verifyAdminPassword(pw: string): Promise<boolean> {
-  const stored = (await getActiveDb()).getMeta(ADMIN_PASS_KEY)
+/** 校验密码:库里有哈希用哈希,否则回退到环境变量 ADMIN_PASSWORD(仅线上库) */
+export function verifyAdminPassword(pw: string): boolean {
+  const stored = getDb().getMeta(ADMIN_PASS_KEY)
   // 库中无哈希时回退环境变量;若环境变量也未配置则一律拒绝(不默认弱密码)
   if (!stored) return !!ADMIN_PASSWORD && pw === ADMIN_PASSWORD
   const [salt, hash] = stored.split(':')
@@ -92,7 +98,7 @@ export async function verifyAdminPassword(pw: string): Promise<boolean> {
   return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
-/** 是否已通过网页设置过密码 */
-export async function hasCustomPassword(): Promise<boolean> {
-  return !!(await getActiveDb()).getMeta(ADMIN_PASS_KEY)
+/** 是否已通过网页设置过密码(线上库) */
+export function hasCustomPassword(): boolean {
+  return !!getDb().getMeta(ADMIN_PASS_KEY)
 }
