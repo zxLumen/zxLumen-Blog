@@ -7,6 +7,7 @@ import type { UsageRow } from '../schema.js'
 import { fmtCompact, fmtCny, fmtUsd, fmtDate, fmtInt } from '../format.js'
 import { DEFAULT_SEL, defaultRangeSel, writeUsageSelCookie } from '../usage-sel.js'
 import type { DataSource, Range, RangeSel, UsageSel } from '../usage-sel.js'
+import type { FeatureId } from '../features.js'
 import { Section } from './Section.js'
 import { useFeature } from './theme-context.js'
 
@@ -26,9 +27,10 @@ const RANGES: { key: Range; label: string }[] = [
 const rangeLabel = (r: Range) => RANGES.find((x) => x.key === r)?.label ?? r
 
 // 所有平台同一套模板:今天/昨天分时(hour),其余区间按天(day)
-const SOURCES: { key: DataSource; label: string; hint: string }[] = [
+const SOURCES: { key: DataSource; label: string; hint: string; feature?: FeatureId }[] = [
   { key: 'deepseek', label: 'DeepSeek', hint: '官方数据源 · 今天/昨天分时' },
-  { key: 'opencode', label: 'OpenCode', hint: '官方数据源 · 今天/昨天分时' },
+  { key: 'opencode', label: 'OpenCode', hint: '官方数据源 · 今天/昨天分时', feature: 'usage-opencode' },
+  { key: 'zhipu', label: '智谱', hint: '按模型 token · 区间汇总', feature: 'usage-zhipu' },
 ]
 
 const localIso = (d: Date) =>
@@ -46,6 +48,19 @@ interface GoQuota {
   weekly?: GoQuotaWindow
   monthly?: GoQuotaWindow
 }
+interface ZhipuQuotaLimit {
+  type?: string
+  unit?: number
+  percentage?: number
+  usage?: number
+  currentValue?: number
+  remaining?: number
+  nextResetTime?: number
+}
+interface ZhipuQuota {
+  limits: ZhipuQuotaLimit[]
+  level?: string
+}
 
 export function UsageSection({
   rows,
@@ -57,10 +72,16 @@ export function UsageSection({
   initialSel?: UsageSel
 }) {
   const showOc = useFeature('usage-opencode')
+  const showZhipu = useFeature('usage-zhipu')
+  // 仅显示放行的数据源(DeepSeek 恒显示)
+  const sources = useMemo(
+    () => SOURCES.filter((s) => !s.feature || (s.feature === 'usage-opencode' ? showOc : showZhipu)),
+    [showOc, showZhipu],
+  )
   const [dataSrc, setDataSrc] = useState<DataSource>(initialSel?.dataSrc ?? DEFAULT_SEL.dataSrc)
   const [live, setLive] = useState<UsageRow[] | null>(null)
   const [fetchedFor, setFetchedFor] = useState<{ range: Range; src: DataSource } | null>(null)
-  const [source, setSource] = useState<'server' | 'deepseek' | 'opencode' | 'stale' | 'local' | 'none' | 'unconfigured' | 'invalid' | 'error'>('server')
+  const [source, setSource] = useState<'server' | 'deepseek' | 'opencode' | 'zhipu' | 'stale' | 'local' | 'none' | 'unconfigured' | 'invalid' | 'error'>('server')
   const [granularity, setGranularity] = useState<'day' | 'hour'>('day')
   const hourMode = granularity === 'hour'
   const [platformLimit, setPlatformLimit] = useState(false)
@@ -68,12 +89,13 @@ export function UsageSection({
   const [at, setAt] = useState<number | undefined>()
   const [lastError, setLastError] = useState<string | undefined>()
   const [goQuota, setGoQuota] = useState<GoQuota | null>(null)
+  const [zhipuQuota, setZhipuQuota] = useState<ZhipuQuota | null>(null)
   const [win, setWin] = useState<{ start?: string; end?: string }>(ssrWin ?? {})
-  const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [] })
+  const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [] })
   // 区间/自定义日期按数据源各自保存:切源自动切到该源的一套
   const [per, setPer] = useState<Record<DataSource, RangeSel>>(initialSel?.per ?? DEFAULT_SEL.per)
   const [pickedKeys, setPickedKeys] = useState<Record<DataSource, string[]>>(initialSel?.pickedKeys ?? DEFAULT_SEL.pickedKeys)
-  const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [] })
+  const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [] })
   const [picked, setPicked] = useState<Record<DataSource, string[]>>(initialSel?.picked ?? DEFAULT_SEL.picked)
   const curPicked = picked[dataSrc] ?? []
   const curPickedKeys = pickedKeys[dataSrc] ?? []
@@ -110,7 +132,7 @@ export function UsageSection({
     }
     fetch(url, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; goQuota?: GoQuota | null }) => {
+      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; goQuota?: GoQuota | null; zhipuQuota?: ZhipuQuota | null }) => {
         if (!alive) return
         const s = (d.source as typeof source) || 'none'
         setSource(s)
@@ -120,6 +142,7 @@ export function UsageSection({
         setAt(d.at)
         setLastError(d.lastError)
         setGoQuota(d.goQuota ?? null)
+        setZhipuQuota(d.zhipuQuota ?? null)
         setWin({ start: d.start, end: d.end })
         setLive(d.rows ?? [])
         setFetchedFor({ range, src })
@@ -151,7 +174,7 @@ export function UsageSection({
   const fetchedLive = fetchedFor?.range === range && fetchedFor?.src === dataSrc && live !== null
   const allData = useMemo(() => {
     if (fetchedLive) return live ?? []
-    if (dataSrc === 'opencode') return [] // opencode 只展示实时拉取,避免混入 DeepSeek 数据
+    if (dataSrc === 'opencode' || dataSrc === 'zhipu') return [] // 这两个源只展示实时拉取,避免混入 DeepSeek 数据
     return serverRows ?? genMockUsage(30)
   }, [fetchedLive, live, serverRows, dataSrc])
   const usingMock = dataSrc === 'deepseek' && !fetchedLive && !serverRows
@@ -327,13 +350,20 @@ export function UsageSection({
   const fmtAt = (t?: number) => (t ? new Date(t).toLocaleString() : '—')
   const rangeWin = win.start && win.end ? `${win.start} ~ ${win.end}` : ''
   const note = (() => {
-    const srcName = dataSrc === 'opencode' ? 'OpenCode 官方 Console' : 'DeepSeek 平台'
+    const srcName = dataSrc === 'opencode' ? 'OpenCode 官方 Console' : dataSrc === 'zhipu' ? '智谱 monitor API' : 'DeepSeek 平台'
     if (dataSrc === 'opencode' && !fetchedLive) {
       if (source === 'unconfigured')
         return `// OpenCode:未配置服务账号 Key(admin 设 OPENCODE_SERVICE_KEY 或在「Token 用量」里粘贴 oc_sk_…)${lastError ? ` · ${lastError}` : ''}`
       if (source === 'invalid' || source === 'error')
         return `// OpenCode:${lastError ? `拉取失败:${lastError}` : '拉取失败'}`
       return `// OpenCode:读取官方 Console · ${lastError ? `错误:${lastError}` : '加载中…'}`
+    }
+    if (dataSrc === 'zhipu' && !fetchedLive) {
+      if (source === 'unconfigured')
+        return `// 智谱:未配置 API Key(admin 设 ZHIPU_API_KEY 或在「Token 用量」里粘贴)${lastError ? ` · ${lastError}` : ''}`
+      if (source === 'invalid' || source === 'error')
+        return `// 智谱:${lastError ? `拉取失败:${lastError}` : '拉取失败'}`
+      return `// 智谱:读取 monitor API · ${lastError ? `错误:${lastError}` : '加载中…'}`
     }
     if (!fetchedLive) {
       if (usingMock) return '// 当前为 demo 数据;配置 DeepSeek 令牌(admin)或接入上报后显示真实用量'
@@ -346,6 +376,8 @@ export function UsageSection({
     if (live && live.length === 0) {
       return `// 该区间暂无真实数据${platformLimit ? '(官方数据源仅保留近 30 天,已超出覆盖)' : ''} · 更新于 ${fmtAt(at)}`
     }
+    if (dataSrc === 'zhipu')
+      return `// 实时数据 · 智谱 monitor API(区间内按模型 token 总量)${rangeWin ? ` · ${rangeWin}` : ''} · 更新于 ${fmtAt(at)}`
     if (hourMode)
       return `// 实时数据 · ${srcName} 分时(UTC+8,按小时)${rangeWin ? ` · ${rangeWin}` : ''} · 更新于 ${fmtAt(at)}`
     return `// 实时数据 · 来自 ${srcName}${rangeWin ? ` · ${rangeWin}` : ''} · 更新于 ${fmtAt(at)}`
@@ -353,9 +385,9 @@ export function UsageSection({
 
   return (
     <Section id="usage" tag="// TOKEN USAGE" num="02" title="Token 用量">
-      {showOc && (
+      {sources.length > 1 && (
         <div className="zx-seg" role="group" aria-label="数据源">
-          {SOURCES.map((s) => (
+          {sources.map((s) => (
             <button
               key={s.key}
               type="button"
@@ -398,6 +430,56 @@ export function UsageSection({
               </div>
             )
           })}
+        </div>
+      )}
+
+      {dataSrc === 'zhipu' && zhipuQuota && zhipuQuota.limits.length > 0 && (
+        <div className="zx-quota">
+          {(() => {
+            // TOKENS_LIMIT:按 nextResetTime 升序 → 5h(unit 3)、周(unit 6);TIME_LIMIT:MCP 月度
+            const tokenLimits = zhipuQuota.limits
+              .filter((l) => l.type === 'TOKENS_LIMIT')
+              .slice()
+              .sort((a, b) => (a.nextResetTime ?? 0) - (b.nextResetTime ?? 0))
+            const mcp = zhipuQuota.limits.find((l) => l.type === 'TIME_LIMIT')
+            const cells: { label: string; pct: number; reset?: number; sub?: string }[] = []
+            if (tokenLimits[0]) {
+              const l = tokenLimits[0]
+              cells.push({ label: '5 小时', pct: Math.round(l.percentage ?? 0), reset: l.nextResetTime })
+            }
+            if (tokenLimits[1]) {
+              const l = tokenLimits[1]
+              cells.push({ label: '本周', pct: Math.round(l.percentage ?? 0), reset: l.nextResetTime })
+            }
+            if (mcp) {
+              cells.push({
+                label: 'MCP 月度',
+                pct: Math.round(mcp.percentage ?? 0),
+                reset: mcp.nextResetTime,
+                sub: typeof mcp.remaining === 'number' && typeof mcp.usage === 'number' ? `${mcp.remaining}/${mcp.usage}` : undefined,
+              })
+            }
+            return cells.map((c) => {
+              const resetTxt = c.reset
+                ? new Date(c.reset).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : ''
+              return (
+                <div className="zx-quota-item" key={c.label}>
+                  <div className="zx-quota-head">
+                    <span className="zx-quota-label">
+                      智谱{zhipuQuota.level ? ` · ${zhipuQuota.level.toUpperCase()}` : ''} · {c.label}
+                    </span>
+                    <span className="zx-quota-pct">{Math.max(0, Math.min(100, c.pct))}%</span>
+                  </div>
+                  <div className="zx-quota-bar">
+                    <span style={{ width: `${Math.max(0, Math.min(100, c.pct))}%` }} />
+                  </div>
+                  {c.sub && <div className="zx-quota-reset zx-muted zx-mono">剩余 {c.sub}</div>}
+                  {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
+                </div>
+              )
+            })
+          })()}
         </div>
       )}
 

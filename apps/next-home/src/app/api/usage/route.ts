@@ -9,6 +9,12 @@ import {
   getLastData,
   getLastError as ocLastError,
 } from '@/lib/opencode'
+import {
+  fetchUsageZhipu,
+  fetchZhipuQuota,
+  getLastRows as zhipuLastRows,
+  getLastError as zhipuLastError,
+} from '@/lib/zhipu'
 import { featureOn } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -153,6 +159,66 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
   }
 }
 
+/** 智谱数据源:monitor API 按模型 token 总量 + 配额;失败回退上次快照 */
+async function zhipuUsage(range: UsageRange, start?: string, end?: string) {
+  const filter =
+    range === 'custom'
+      ? {
+          start: start && isIsoDate(start) ? start : undefined,
+          end: end && isIsoDate(end) ? end : undefined,
+        }
+      : undefined
+  try {
+    const [d, quota] = await Promise.all([fetchUsageZhipu(range, filter), fetchZhipuQuota()])
+    return Response.json(
+      {
+        source: 'zhipu',
+        rows: d.rows,
+        models: d.models,
+        apiKeys: [],
+        currency: d.currency,
+        granularity: d.granularity,
+        start: d.start,
+        end: d.end,
+        at: Date.now(),
+        ...(quota ? { zhipuQuota: quota } : {}),
+      },
+      { headers: noStore },
+    )
+  } catch (e) {
+    const code = (e as { code?: string }).code
+    const error = e instanceof Error ? e.message : String(e)
+    const last = code === 'UNCONFIGURED' ? null : await zhipuLastRows()
+    if (last) {
+      return Response.json(
+        {
+          source: 'stale',
+          rows: last.rows,
+          models: last.models,
+          apiKeys: [],
+          currency: 'CNY',
+          granularity: 'day',
+          at: last.at,
+          lastError: error,
+        },
+        { headers: noStore },
+      )
+    }
+    return Response.json(
+      {
+        source: code === 'UNCONFIGURED' ? 'unconfigured' : 'error',
+        error,
+        lastError: await zhipuLastError(),
+        rows: [],
+        models: [],
+        apiKeys: [],
+        granularity: 'day',
+      },
+      { headers: noStore },
+    )
+  }
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const raw = url.searchParams.get('range') || '30d'
@@ -167,6 +233,12 @@ export async function GET(req: Request) {
       return Response.json({ error: 'forbidden' }, { status: 403 })
     }
     return opencodeUsage(range, start, end)
+  }
+  if (sourceParam === 'zhipu') {
+    if (!(await featureOn('usage-zhipu'))) {
+      return Response.json({ error: 'forbidden' }, { status: 403 })
+    }
+    return zhipuUsage(range, start, end)
   }
 
   const filter =

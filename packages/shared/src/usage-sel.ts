@@ -3,7 +3,8 @@
 export const USAGE_SEL_COOKIE = 'zx_usage'
 
 export type Range = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastmonth' | 'custom'
-export type DataSource = 'deepseek' | 'opencode'
+export const DATA_SOURCES = ['deepseek', 'opencode', 'zhipu'] as const
+export type DataSource = (typeof DATA_SOURCES)[number]
 
 /** 时间区间 + 自定义日期(按数据源各自保存) */
 export type RangeSel = {
@@ -30,28 +31,33 @@ export const defaultRangeSel = (): RangeSel => ({
   customApplied: null,
 })
 
+const emptyStringArrays = (): Record<DataSource, string[]> =>
+  DATA_SOURCES.reduce((acc, s) => ({ ...acc, [s]: [] as string[] }), {} as Record<DataSource, string[]>)
+
+const defaultPer = (): Record<DataSource, RangeSel> =>
+  DATA_SOURCES.reduce((acc, s) => ({ ...acc, [s]: defaultRangeSel() }), {} as Record<DataSource, RangeSel>)
+
 export const DEFAULT_SEL: UsageSel = {
   dataSrc: 'deepseek',
-  per: { deepseek: defaultRangeSel(), opencode: defaultRangeSel() },
-  picked: { deepseek: [], opencode: [] },
-  pickedKeys: { deepseek: [], opencode: [] },
+  per: defaultPer(),
+  picked: emptyStringArrays(),
+  pickedKeys: emptyStringArrays(),
 }
 
 const RANGES_SET: readonly Range[] = ['today', 'yesterday', '7d', '30d', 'month', 'lastmonth', 'custom']
-const SOURCES_SET: readonly DataSource[] = ['deepseek', 'opencode']
+const SOURCES_SET: readonly DataSource[] = DATA_SOURCES
 
 const asStringArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
 
 /** 兼容旧格式(单一数组)与新格式(按源分桶) */
 const asBySrc = (v: unknown, dataSrc: DataSource): Record<DataSource, string[]> => {
-  const out: Record<DataSource, string[]> = { deepseek: [], opencode: [] }
+  const out = emptyStringArrays()
   if (Array.isArray(v)) {
     out[dataSrc] = asStringArray(v)
   } else if (v && typeof v === 'object') {
     const o = v as Record<string, unknown>
-    out.deepseek = asStringArray(o.deepseek)
-    out.opencode = asStringArray(o.opencode)
+    for (const s of DATA_SOURCES) out[s] = asStringArray(o[s])
   }
   return out
 }
@@ -72,11 +78,10 @@ const asRangeSel = (v: unknown): RangeSel => {
 
 /** 区间按源分桶;旧格式(顶层 range/custom*)迁移到当前 dataSrc 桶,另一源用默认 */
 const asPer = (v: Partial<UsageSel> | null | undefined, dataSrc: DataSource): Record<DataSource, RangeSel> => {
-  const out: Record<DataSource, RangeSel> = { deepseek: defaultRangeSel(), opencode: defaultRangeSel() }
+  const out = defaultPer()
   const raw = v?.per as Record<string, unknown> | undefined
   if (raw && typeof raw === 'object') {
-    out.deepseek = asRangeSel(raw.deepseek)
-    out.opencode = asRangeSel(raw.opencode)
+    for (const s of DATA_SOURCES) out[s] = asRangeSel(raw[s])
     return out
   }
   // 旧格式:顶层 range/customStart/customEnd/customApplied → 归入当前源

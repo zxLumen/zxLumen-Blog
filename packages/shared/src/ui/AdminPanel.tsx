@@ -56,6 +56,16 @@ export function AdminPanel() {
   const [ocUrl, setOcUrl] = useState('')
   const [ocKey, setOcKey] = useState('')
   const [ocBusy, setOcBusy] = useState(false)
+  interface ZhipuStatus {
+    configured?: boolean
+    baseUrl?: string
+    lastError?: string | null
+    lastData?: { at?: number; count?: number } | null
+  }
+  const [zp, setZp] = useState<ZhipuStatus | null>(null)
+  const [zpUrl, setZpUrl] = useState('')
+  const [zpKey, setZpKey] = useState('')
+  const [zpBusy, setZpBusy] = useState(false)
   type TabKey = 'comments' | 'archive' | 'profile' | 'token'
   const validTab = (t: unknown): t is TabKey =>
     t === 'comments' || t === 'archive' || t === 'profile' || t === 'token'
@@ -72,6 +82,7 @@ export function AdminPanel() {
   // 功能门控:按 LIVE_FEATURES 白名单放行(测试模式恒开)
   const showTabs = useFeature('admin-tabs')
   const showOc = useFeature('usage-opencode')
+  const showZhipu = useFeature('usage-zhipu')
 
   const [archived, setArchived] = useState<ArchivedCommentRow[]>([])
   const [archTotal, setArchTotal] = useState(0)
@@ -188,7 +199,15 @@ export function AdminPanel() {
         if (o.consoleUrl && o.consoleUrl !== 'https://opencode.ai/console') setOcUrl(o.consoleUrl)
       }
     }
-  }, [showOc])
+    if (showZhipu) {
+      const zres = await fetch('/api/admin/zhipu', { credentials: 'same-origin' })
+      if (zres.ok) {
+        const z = (await zres.json()) as ZhipuStatus
+        setZp(z)
+        if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
+      }
+    }
+  }, [showOc, showZhipu])
 
   async function loadDeepseek() {
     const res = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
@@ -235,6 +254,49 @@ export function AdminPanel() {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
     } finally {
       setOcBusy(false)
+    }
+  }
+
+  async function loadZhipu() {
+    const res = await fetch('/api/admin/zhipu', { credentials: 'same-origin' })
+    if (res.ok) {
+      const z = (await res.json()) as ZhipuStatus
+      setZp(z)
+      if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
+    }
+  }
+
+  async function zpAction(action: 'save' | 'refresh' | 'clear', key?: string, url?: string) {
+    if (action === 'refresh' && !zp?.configured) {
+      setMsg({ kind: 'err', text: '未配置智谱 API Key:请先粘贴保存后再验证' })
+      return
+    }
+    setZpBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/zhipu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action, key, baseUrl: url }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
+      if (!res.ok) throw new Error(d.error || '操作失败')
+      await loadZhipu()
+      setZpKey('')
+      setMsg({
+        kind: 'ok',
+        text:
+          action === 'refresh'
+            ? `已从智谱拉取 ${d.rows ?? 0} 个模型(校验通过)`
+            : action === 'save'
+              ? 'Key 已保存'
+              : '已清除',
+      })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
+    } finally {
+      setZpBusy(false)
     }
   }
 
@@ -775,6 +837,57 @@ export function AdminPanel() {
           <span className="zx-accent">OPENCODE_CONSOLE_URL</span>(优先级更高)。Key 仅存服务器,不下发前端。
         </p>
         {oc?.lastError && <div className="zx-msg err">{oc.lastError}</div>}
+      </div>
+      )}
+
+      {(!showTabs || tab === 'token') && showZhipu && (
+      <div className="zx-panel" style={{ marginBottom: '1rem' }}>
+        <h3>
+          智谱用量 <span>monitor API · 按模型 token 区间汇总 + 配额</span>
+        </h3>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
+          状态:{zp?.configured ? '已配置' : '未配置'}
+          {zp?.baseUrl ? ` · Base:${zp.baseUrl}` : ''}
+          {zp?.lastData?.at ? ` · 上次成功 ${zp.lastData.count ?? 0} 个模型 @ ${new Date(zp.lastData.at).toLocaleString()}` : ''}
+        </p>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            className="zx-input"
+            type="password"
+            style={{ maxWidth: 300, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+            placeholder="智谱 API Key"
+            value={zpKey}
+            onChange={(e) => setZpKey(e.target.value)}
+            autoComplete="off"
+          />
+          <input
+            className="zx-input"
+            style={{ maxWidth: 240, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+            placeholder="Base URL(默认 open.bigmodel.cn)"
+            value={zpUrl}
+            onChange={(e) => setZpUrl(e.target.value)}
+          />
+          <button
+            className="zx-btn zx-btn-sm zx-btn-primary"
+            disabled={zpBusy || !zpKey || (!!zpUrl && !/^https:\/\//.test(zpUrl))}
+            onClick={() => void zpAction('save', zpKey, zpUrl || undefined)}
+          >
+            {zpBusy ? '保存中…' : '保存 Key'}
+          </button>
+          <button className="zx-btn zx-btn-sm" disabled={zpBusy} onClick={() => void zpAction('refresh')}>
+            {zpBusy ? '验证中…' : '验证 / 刷新'}
+          </button>
+          <button className="zx-btn zx-btn-sm zx-btn-ghost" disabled={zpBusy || !zp?.configured} onClick={() => void zpAction('clear')}>
+            清除
+          </button>
+        </div>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
+          在 <span className="zx-accent">open.bigmodel.cn</span> → 个人中心 → API Keys 创建 Key 粘贴保存(国际站用{' '}
+          <span className="zx-accent">https://api.z.ai</span>)。智谱无逐日/费用导出,仅提供区间内「按模型 token 总量」;
+          配额接口对按量用户可能为空。也可用环境变量 <span className="zx-accent">ZHIPU_API_KEY</span> /{' '}
+          <span className="zx-accent">ZHIPU_BASE_URL</span>(优先级更高)。Key 仅存服务器,不下发前端。
+        </p>
+        {zp?.lastError && <div className="zx-msg err">{zp.lastError}</div>}
       </div>
       )}
 
