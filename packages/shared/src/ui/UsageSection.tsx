@@ -66,19 +66,53 @@ export function UsageSection({
   rows,
   window: ssrWin,
   initialSel,
+  availableSources,
 }: {
   rows?: UsageRow[]
   window?: { start?: string; end?: string }
   initialSel?: UsageSel
+  /** SSR 计算的数据源可用性;未提供则客户端探测 */
+  availableSources?: Partial<Record<DataSource, boolean>>
 }) {
   const showOc = useFeature('usage-opencode')
   const showZhipu = useFeature('usage-zhipu')
-  // 仅显示放行的数据源(DeepSeek 恒显示)
-  const sources = useMemo(
-    () => SOURCES.filter((s) => !s.feature || (s.feature === 'usage-opencode' ? showOc : showZhipu)),
-    [showOc, showZhipu],
-  )
   const [dataSrc, setDataSrc] = useState<DataSource>(initialSel?.dataSrc ?? DEFAULT_SEL.dataSrc)
+  // 各源可用性(已配置 + 近30天有数据);null=未知(按 feature 放行)
+  const [avail, setAvail] = useState<Record<DataSource, boolean> | null>(
+    availableSources ? (availableSources as Record<DataSource, boolean>) : null,
+  )
+  useEffect(() => {
+    if (availableSources) return
+    let alive = true
+    fetch('/api/usage/sources', { credentials: 'same-origin', cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: Record<DataSource, boolean> | null) => {
+        if (alive && d) setAvail(d)
+      })
+      .catch(() => {
+        /* 探测失败:不隐藏任何源 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [availableSources])
+  // 仅显示放行且可用的数据源
+  const sources = useMemo(
+    () =>
+      SOURCES.filter((s) => {
+        if (s.feature === 'usage-opencode' && !showOc) return false
+        if (s.feature === 'usage-zhipu' && !showZhipu) return false
+        if (avail && !avail[s.key]) return false
+        return true
+      }),
+    [showOc, showZhipu, avail],
+  )
+  // 当前源若被隐藏,回退到默认(DeepSeek)
+  useEffect(() => {
+    if (avail && !avail[dataSrc] && sources.length > 0 && dataSrc !== sources[0].key) {
+      setDataSrc(sources[0].key)
+    }
+  }, [avail, dataSrc, sources])
   const [live, setLive] = useState<UsageRow[] | null>(null)
   const [fetchedFor, setFetchedFor] = useState<{ range: Range; src: DataSource } | null>(null)
   const [source, setSource] = useState<'server' | 'deepseek' | 'opencode' | 'zhipu' | 'stale' | 'local' | 'none' | 'unconfigured' | 'invalid' | 'error'>('server')

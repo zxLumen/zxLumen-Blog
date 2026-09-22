@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/auth";
 import { effectiveCid, isMockActive, MOCK_COOKIE } from "@/lib/clientid";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
 import { fetchUsage } from "@/lib/deepseek";
+import { getSourceAvailability } from "@/lib/usage-sources";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,9 @@ export default async function Home() {
   // 用量筛选存档(cookie 下发):SSR 首帧即按上次选择渲染,刷新无闪跳
   const initialSel: UsageSel = parseUsageSel((await cookies()).get(USAGE_SEL_COOKIE)?.value ?? "");
 
+  // 各数据源可用性(已配置 + 近30天有数据):SSR 决定显示哪些源,避免隐藏源闪现
+  const availableSources = await getSourceAvailability();
+
   const commentsPage = db.listThreadPage({
     page: 1,
     pageSize: 5,
@@ -65,6 +69,7 @@ export default async function Home() {
       usage={usage}
       usageWindow={usageWindow}
       initialSel={initialSel}
+      availableSources={availableSources}
       isAdmin={admin}
       initialAuthor={initialAuthor}
       viewerMock={viewerMock || undefined}

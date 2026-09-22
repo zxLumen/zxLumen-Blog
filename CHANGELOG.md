@@ -6,6 +6,7 @@
 
 ### 新增
 
+- **用量面板按源隐藏空数据源**:各数据源(含 DeepSeek)只有「已配置 且 近 30 天有数据」时才显示切换按钮;SSR 即算好可用性(避免隐藏源闪现),无数据的源(如按量智谱账号,monitor 接口仅 Coding Plan 可用)自动隐藏
 - **智谱用量数据源**:新增「智谱」源(功能门控 `usage-zhipu`),读 monitor API 给出**区间内按模型 token 总量** + **配额条**(5 小时/每周 token、MCP 月度、套餐等级);admin 可配 API Key(裸 key)与 baseURL(国内/国际)。局限:智谱无逐日/逐小时明细与费用,故无日趋势、无输入/输出/缓存拆分(总 tokens 准确)。见 `docs/ZHIPU-USAGE.md`
 - **OpenCode Go 费用折算 + 配额展示**:官方导出的 `cost_micro_cents` 对 Go 订阅恒为 0;面板改用 **token × Go 价目表**折算美元(与 Console 同口径,含 Peak/Off-Peak),价目内置 `go-pricing.ts`(全量模型、促销截止标注);并在数据源为 OpenCode 时展示 **Go 5 小时 / 周 / 月 配额**(真实百分比 + 重置时间,来自 `/zen/go/v1/usage`)
 - **DeepSeek 今天/昨天分时**:接平台 `by_api_key/amount(+cost)` 小时级接口(北京时窗口、bucket=3600),与 OpenCode 共用同一套模板——今天/昨天在天级图里直接画 24 根小时柱,其余区间按天;移除两平台在文案/粒度上的差异(HOURLY 面板、平台特殊提示均删除)
