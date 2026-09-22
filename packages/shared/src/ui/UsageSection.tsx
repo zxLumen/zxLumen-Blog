@@ -36,6 +36,17 @@ const localIso = (d: Date) =>
 
 const mergeUnique = (a: string[], b: string[]) => Array.from(new Set([...a, ...b]))
 
+interface GoQuotaWindow {
+  percent: number
+  status?: string
+  resetsAt?: string
+}
+interface GoQuota {
+  rolling?: GoQuotaWindow
+  weekly?: GoQuotaWindow
+  monthly?: GoQuotaWindow
+}
+
 export function UsageSection({
   rows,
   window: ssrWin,
@@ -56,6 +67,7 @@ export function UsageSection({
   const [currency, setCurrency] = useState<'CNY' | 'USD'>('CNY')
   const [at, setAt] = useState<number | undefined>()
   const [lastError, setLastError] = useState<string | undefined>()
+  const [goQuota, setGoQuota] = useState<GoQuota | null>(null)
   const [win, setWin] = useState<{ start?: string; end?: string }>(ssrWin ?? {})
   const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [] })
   // 区间/自定义日期按数据源各自保存:切源自动切到该源的一套
@@ -98,7 +110,7 @@ export function UsageSection({
     }
     fetch(url, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean }) => {
+      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; goQuota?: GoQuota | null }) => {
         if (!alive) return
         const s = (d.source as typeof source) || 'none'
         setSource(s)
@@ -107,6 +119,7 @@ export function UsageSection({
         setCurrency(d.currency === 'USD' ? 'USD' : 'CNY')
         setAt(d.at)
         setLastError(d.lastError)
+        setGoQuota(d.goQuota ?? null)
         setWin({ start: d.start, end: d.end })
         setLive(d.rows ?? [])
         setFetchedFor({ range, src })
@@ -355,6 +368,36 @@ export function UsageSection({
               </span>
             </button>
           ))}
+        </div>
+      )}
+
+      {dataSrc === 'opencode' && goQuota && (
+        <div className="zx-quota">
+          {(
+            [
+              ['5 小时', goQuota.rolling],
+              ['本周', goQuota.weekly],
+              ['本月', goQuota.monthly],
+            ] as const
+          ).map(([label, w]) => {
+            const pct = Math.max(0, Math.min(100, Math.round(w?.percent ?? 0)))
+            const reset = w?.resetsAt ? new Date(w.resetsAt) : null
+            const resetTxt = reset
+              ? reset.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : ''
+            return (
+              <div className="zx-quota-item" key={label}>
+                <div className="zx-quota-head">
+                  <span className="zx-quota-label">Go · {label}</span>
+                  <span className="zx-quota-pct">{pct}%</span>
+                </div>
+                <div className="zx-quota-bar">
+                  <span style={{ width: `${pct}%` }} />
+                </div>
+                {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
+              </div>
+            )
+          })}
         </div>
       )}
 

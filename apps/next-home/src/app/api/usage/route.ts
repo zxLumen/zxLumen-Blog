@@ -5,6 +5,7 @@ import { fetchUsage, getLastError, getLastRows, type UsageRange } from '@/lib/de
 import {
   fetchUsageOpenCode,
   filterUsageOpenCode,
+  fetchGoQuota,
   getLastData,
   getLastError as ocLastError,
 } from '@/lib/opencode'
@@ -96,6 +97,7 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
     source: string,
     at: number,
     lastError?: string,
+    goQuota?: unknown,
   ) =>
     Response.json(
       {
@@ -109,25 +111,27 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
         start: d.start,
         end: d.end,
         at,
+        ...(goQuota ? { goQuota } : {}),
         ...(lastError ? { lastError } : {}),
       },
       { headers: noStore },
     )
   try {
-    const d = await fetchUsageOpenCode(range, filter)
-    return send(d, 'opencode', Date.now())
+    const [d, goQuota] = await Promise.all([fetchUsageOpenCode(range, filter), fetchGoQuota()])
+    return send(d, 'opencode', Date.now(), undefined, goQuota)
   } catch (e) {
     const code = (e as { code?: string }).code
     const error = e instanceof Error ? e.message : String(e)
     // 失败时回退上次成功快照(官方近 30 天小时级数据,可重新聚合到任意区间);
     // 未配置 key 不属于「失败」,如实返回 unconfigured
     const raw = code === 'UNCONFIGURED' ? '' : await getLastData()
+    const goQuota = await fetchGoQuota()
     if (raw) {
       try {
         const snap = JSON.parse(raw) as { at?: number; rows?: UsageRow[] }
         if (Array.isArray(snap.rows) && snap.rows.length) {
           const d = filterUsageOpenCode(snap.rows, range, filter)
-          return send(d, 'stale', snap.at ?? 0, error)
+          return send(d, 'stale', snap.at ?? 0, error, goQuota)
         }
       } catch {
         /* ignore */
@@ -142,6 +146,7 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
         models: [],
         apiKeys: [],
         granularity: range === 'today' || range === 'yesterday' ? 'hour' : 'day',
+        ...(goQuota ? { goQuota } : {}),
       },
       { headers: noStore },
     )

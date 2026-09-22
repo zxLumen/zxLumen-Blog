@@ -1,4 +1,5 @@
 import type { UsageRow } from '@zx/shared'
+import { estimateGoCost, isGoModelKnown } from '@zx/shared'
 import { getActiveDb } from './env'
 import { windowOf, type UsageRange } from './deepseek'
 
@@ -91,7 +92,11 @@ export function parseUsageCsv(text: string): Array<{
   input: number
   output: number
   cacheRead: number
+  cacheWrite: number
   cost: number
+  billingSource: string
+  /** 该模型是否已收录进 Go 价目(未收录且无实际扣费 → 费用未计) */
+  pricedKnown: boolean
 }> {
   const lines = parseCsv(text)
   if (lines.length < 2) return []
@@ -103,8 +108,11 @@ export function parseUsageCsv(text: string): Array<{
   const iInput = col('input_tokens')
   const iOutput = col('output_tokens')
   const iCache = col('cache_read_tokens')
+  const iCacheW5 = col('cache_write_5m_tokens')
+  const iCacheW1 = col('cache_write_1h_tokens')
   const iCost = col('cost_micro_cents')
   const iService = col('service')
+  const iBilling = col('billing_source')
   if (iCreated < 0 || iModel < 0 || iProvider < 0) return []
 
   const out: ReturnType<typeof parseUsageCsv> = []
@@ -115,14 +123,30 @@ export function parseUsageCsv(text: string): Array<{
     const model = String(line[iModel] ?? '').trim()
     const provider = String(line[iProvider] ?? '').trim()
     if (!Number.isFinite(created) || !model || !provider) continue
+    const input = iInput >= 0 ? num(line[iInput] ?? '') : 0
+    const output = iOutput >= 0 ? num(line[iOutput] ?? '') : 0
+    const cacheRead = iCache >= 0 ? num(line[iCache] ?? '') : 0
+    const cacheWrite =
+      (iCacheW5 >= 0 ? num(line[iCacheW5] ?? '') : 0) + (iCacheW1 >= 0 ? num(line[iCacheW1] ?? '') : 0)
+    const billingSource = iBilling >= 0 ? String(line[iBilling] ?? '').trim() : ''
+    // 官方实际扣费(microcents→USD);Go 订阅等无扣费记录为 0
+    const charged = iCost >= 0 ? num(line[iCost] ?? '') / 100000000 : 0
+    // 无实际扣费时按 Go 价目折算(与 Console 网页 Cost 同口径);未收录模型记 0
+    const cost =
+      charged > 0
+        ? charged
+        : estimateGoCost(model, created, { input, output, cacheRead, cacheWrite })
     out.push({
       created,
       model,
       provider,
-      input: iInput >= 0 ? num(line[iInput] ?? '') : 0,
-      output: iOutput >= 0 ? num(line[iOutput] ?? '') : 0,
-      cacheRead: iCache >= 0 ? num(line[iCache] ?? '') : 0,
-      cost: iCost >= 0 ? num(line[iCost] ?? '') / 100000000 : 0,
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+      cost,
+      billingSource,
+      pricedKnown: charged > 0 || isGoModelKnown(model),
     })
   }
   return out
@@ -291,4 +315,49 @@ export async function getSnapshotStatus(): Promise<{ at: number; count: number; 
   } catch {
     return null
   }
+}
+
+/* ---------- Go 订阅配额(5h / 周 / 月) ---------- */
+
+export interface GoQuotaWindow {
+  percent: number
+  status?: string
+  resetsAt?: string
+}
+export interface GoQuota {
+  rolling?: GoQuotaWindow
+  weekly?: GoQuotaWindow
+  monthly?: GoQuotaWindow
+}
+
+const GO_USAGE_URL = 'https://opencode.ai/zen/go/v1/usage'
+const gq = globalThis as unknown as { __goQuotaCache?: { at: number; quota: GoQuota | null } }
+
+/**
+ * 拉取 Go 订阅配额(真实百分比 + 重置时间)。
+ * 需 service-account key;未订阅 Go / key 无权限时返回 null(面板隐藏配额条)。
+ * 内存缓存 5 分钟。
+ */
+export async function fetchGoQuota(): Promise<GoQuota | null> {
+  const key = await getServiceKey()
+  if (!key) return null
+  gq.__goQuotaCache ??= { at: 0, quota: null }
+  if (Date.now() - gq.__goQuotaCache.at < CACHE_TTL) return gq.__goQuotaCache.quota
+
+  let quota: GoQuota | null = null
+  try {
+    const res = await fetch(GO_USAGE_URL, {
+      headers: { Authorization: `Bearer ${key}` },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.ok) {
+      const j = (await res.json()) as { usage?: GoQuota }
+      quota = j.usage ?? null
+    }
+  } catch {
+    quota = null
+  }
+  gq.__goQuotaCache = { at: Date.now(), quota }
+  return quota
 }

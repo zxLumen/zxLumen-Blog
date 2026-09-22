@@ -1133,6 +1133,64 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   margin-bottom: 1.6rem;
 }
 
+/* OpenCode Go 订阅配额(5h / 周 / 月) */
+.zx-quota {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.6rem;
+}
+
+.zx-quota-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  background: var(--elev);
+  backdrop-filter: blur(var(--card-blur));
+  -webkit-backdrop-filter: blur(var(--card-blur));
+}
+
+.zx-quota-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.zx-quota-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.zx-quota-pct {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.zx-quota-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.zx-quota-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.zx-quota-reset {
+  margin-top: 0.4rem;
+  font-size: 0.62rem;
+}
+
 .zx-stat {
   border: 1px solid var(--line);
   border-radius: var(--radius);

@@ -66,3 +66,7 @@ export { fmtInt, fmtCompact, fmtCny, fmtDate, fmtDateTime } from './format.js'
 // 用量区块筛选存档(客户端/服务端共用)
 export { USAGE_SEL_COOKIE, DEFAULT_SEL, defaultRangeSel, parseUsageSel, encodeUsageSel, writeUsageSelCookie } from './usage-sel.js'
 export type { UsageSel, RangeSel, Range as UsageRange, DataSource as UsageSource } from './usage-sel.js'
+
+// OpenCode Go 订阅价目(费用折算)
+export { GO_MODELS, goPriceOf, estimateGoCost, isGoModelKnown, expiredPromos } from './go-pricing.js'
+export type { GoModel, GoPrice } from './go-pricing.js'

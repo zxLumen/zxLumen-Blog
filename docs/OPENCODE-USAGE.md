@@ -15,6 +15,14 @@
   面板任意区间(今天/昨天/近7/近30/本月/上月/自定义)由该快照**本地二次聚合**;
   早于官方覆盖(约 30 天)的区间返回 `platformLimit: true`,前端注明「超出官方覆盖」;
 - 计入管理推理(如 `opencode` 提供方,`big-pickle` 等)的 tokens 与费用;**BYOK / 免费 / 未分类计费为 0 费用**但也统计 tokens 与请求数;
+- **费用折算**:官方导出的 `cost_micro_cents` 对 Go 订阅(`billing_source=go`)恒为 0。
+  面板据此改用 **token × Go 价目表**折算美元(与 Console 网页 Cost 同口径);
+  价目见 `packages/shared/src/go-pricing.ts`(含 Peak/Off-Peak,DeepSeek 系列;
+  Peak = 周一至周五 01:00–04:00、06:00–10:00 UTC)。官方无公开价目接口,故为**内置常量**,
+  促销/调价后需更新(表内 `promoUntil` 标注截止日,DeepSeek V4.1 Flash 现为 4x 至 2026-09-27);
+  未收录模型费用记 0。官方实际扣费(`cost_micro_cents>0`,如 fallback 到 Zen 余额)时以实际为准。
+- **Go 配额(5 小时 / 周 / 月)**:面板在有 Go 订阅时额外展示三档使用率(真实百分比 + 重置时间),
+  数据来自 `GET https://opencode.ai/zen/go/v1/usage`(service-account key);未订阅则自动隐藏;
 - Web Search(`service=web-search`,无 provider/model)行忽略;
 - 与 DeepSeek 数据源的区别:DeepSeek 平台导出只有天级,OpenCode 每条记录带精确时间戳,故能分时。
 
