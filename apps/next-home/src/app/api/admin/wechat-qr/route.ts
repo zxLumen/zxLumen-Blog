@@ -8,7 +8,7 @@ const MAX_BYTES = 800 * 1024
 
 export async function GET() {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const qr = getWechatQr()
+  const qr = await getWechatQr()
   return Response.json({ hasQr: !!qr, ver: qr?.ver ?? null })
 }
 
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     return Response.json({ error: '图片需 ≤ 800KB' }, { status: 400 })
   }
 
-  setWechatQr(base64, type)
-  const ver = getWechatQr()?.ver
+  await setWechatQr(base64, type)
+  const ver = (await getWechatQr())?.ver
   return Response.json({ ok: true, ver, url: `/api/contact/wechat-qr?v=${ver}` })
 }

@@ -6,15 +6,20 @@
 
 ### 新增
 
+- **DeepSeek 今天/昨天分时**:接平台 `by_api_key/amount(+cost)` 小时级接口(北京时窗口、bucket=3600),与 OpenCode 共用同一套模板——今天/昨天在天级图里直接画 24 根小时柱,其余区间按天;移除两平台在文案/粒度上的差异(HOURLY 面板、平台特殊提示均删除)
+- **OpenCode 用量数据源改为官方 Console**(读取组织内完整数据):可用未用的 `sk-` BYOK key 官方拒收,需在 Console 创建 service-account key(`oc_sk_…`,admin 或 `OPENCODE_SERVICE_KEY` 配置);官方只提供最近 30 天(UTC 零点对齐)导出,拉取后按每请求精确时间戳本地聚合;今天/昨天**在天级图里直接画 24 根小时柱(北京时)**(移除独立的 HOURLY 面板,全平台共用),其余区间按天;越界区间返回 `platformLimit`；成本 USD(microcents/1e8)
+- **模型选单按使用频率排序**:按区间内 tokens 总量从高到低排,零用量模型(DeepSeek 置灰)排最后
 - **DeepSeek 令牌同步改为三种可靠入口**:拖拽书签(`javascript:` 协议不再被浏览器删除)、复制控制台命令(自动读取 `userToken` 直接同步)、复制取令牌命令(手动粘贴兜底);书签/命令兼容 `{value}` 与纯字符串、拒绝 `sk-` API Key、结果用告警 + 页面角标双重提示
 - 服务端 `/api/deepseek/token` 增加 `Access-Control-Allow-Private-Network`,兼容从公网 https 页面同步到本地服务(Chrome PNA 预检)
 - **用量时间区间重构**:去掉 24h / 90d,新增 **今天 / 昨天 / 本月 / 上月 / 自定义**(自定义日期区间的选择器);「今天/昨天」替代 24h(平台无小时级数据),按月粒度统一支持任意历史区间(上限 12 个月),修复此前「24h 显示成 30d」「90d 无内容」的问题
 - **零用量模型置灰保留**:面板模型 chips 基于平台返回的全量模型清单,当前区间无用量的模型**置灰但仍可点击**;自定义区间用「应用」按钮确认后拉取
+- **用量筛选按数据源各自保存**:时间区间 / 自定义日期 / 模型筛选 / Key(提供方)筛选均按 DeepSeek 与 OpenCode 各存一份,切换数据源时整套按钮自动切到该源的记忆状态;存档经 cookie 下发,SSR 首帧即正确、刷新无闪跳(首次切到某源用默认「近30天」)
 - **API Key 维度**:新增「全部 API Key / 各 key」多选 chips,与模型筛选**组合过滤**指标/柱状/占比/明细;RECENT 明细新增「key」列;只显示 `api_key_name`,不下发掩码 key 与 user_id
 - 管理后台 Tab 状态持久化改为 `localStorage`(首帧同步初始化),刷新/新开标签页都停留在当前 Tab 而非跳回留言页
 
 ### 修复
 
+- 修复 DeepSeek 今天/昨天分时费用全为 0:cost 接口的分时 series 在 `data[0].series`(amount 接口在顶层),原先只读顶层导致 costMap 为空;按小时费用现与平台导出对账一致
 - 修复拖拽书签项被 React 重置 `href` 为空导致「点击跳回 admin」:书签链接不再声明 `href` 属性,改为 `onDragStart` 时写入完整脚本地址
 - 放宽同步令牌校验:`userToken` 可能不再是三段式 JWT,改为仅要求非空、非 `sk-`(是否有效以「验证 / 刷新」实测为准),修复「同步失败 invalid token」
 - **适配平台 2026-07 改版用量接口**:`start/end` 改为北京零点对齐整日窗口、`series[].buckets[].time` 按 epoch 秒换算日、cost 字符串、`api_key` 对象归一为名称标签,真实用量拉取恢复(此前返回 `INVALID_PARAM`);admin「最近同步」时间改为本地时区显示
@@ -23,6 +28,9 @@
 
 ### 变更
 
+- **环境模型收敛为「本地 TEST → 打包 → 线上生产」**:线上只有一个生产环境,`NODE_ENV=production` 时整站 TEST 模式禁用(`isTestMode()` 恒 false、`EnvSwitch` 不渲染、`POST /api/env` 403);确需线上临时开通才设 `ALLOW_TEST_MODE=1`
+- **TEST 数据全面隔离**:`settings` / `deepseek` / `opencode` / `usage` 等所有元数据读写从直连主库改为 `getActiveDb()`,TEST 模式下与 `comments` 一样读写独立测试库(此前仅 comments 隔离,配置/密钥等仍会写到线上库)
+- 生产容器补充 `DB_TEST_PATH=/data/zx.test.db`(随 `zx-data` 卷持久化),测试库不再随容器重建丢失
 - **用量数据源改为按月接口 + 每月导出**:`amount` JSON 取全量模型清单;`export` ZIP(解析 amount CSV)还原按 (天 × 模型 × API Key) 的 tokens/请求/费用(费用=price×amount),数据与 `by_api_key` 实时一致;`GET /api/usage` 新增 `models`/`apiKeys` 字段;移除 `cost` 按月接口与 `by_api_key` 窗口口径
 - **用量失败回退真实数据**:平台拉取失败时先回退「上次成功数据」(按 range 持久化到库),再回退本地 `usage` 表(按 range 聚合);`GET /api/usage` 返回 `source` = `deepseek` / `stale` / `local` / `error` 并携带更新时间
 - **面板数据源标注如实**:区分实时 / 上次数据 / 本地表 / demo 四态并显示「更新于」,修复「0 行仍标注实时数据」的错位提示
@@ -30,7 +38,10 @@
 
 ### 文档
 
+- `AGENTS.md` / `README.md` / `docs/DEPLOY.md`:工作流由「TEST 先行 → 同步 LIVE」改为「本地开发 → 打包 → 线上生产」;说明生产禁用 TEST、`ALLOW_TEST_MODE` 与全库隔离
+- `GET /api/env` 增加 `available` 字段(当前环境是否允许 TEST)
 - 修正 README API 表 `?days=30` → `?range=30d`;`docs/DEEPSEEK-USAGE.md` 同步三种用法与回退链说明
+- 重写 `docs/OPENCODE-USAGE.md`:官方 Console 数据源、service-account key 创建步骤、分时/平台覆盖与部署说明
 
 ## [0.5.0] - 2026-09-20
 

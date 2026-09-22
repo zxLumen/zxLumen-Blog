@@ -8,5 +8,5 @@ export async function GET(req: Request) {
   if (!rateLimit(clientIp(req), 20)) {
     return Response.json({ error: 'too many requests' }, { status: 429 })
   }
-  return Response.json({ phone: getContactSettings().phone || '' })
+  return Response.json({ phone: (await getContactSettings()).phone || '' })
 }

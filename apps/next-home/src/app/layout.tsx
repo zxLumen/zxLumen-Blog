@@ -14,7 +14,7 @@ import {
   LIVE_FEATURES,
 } from "@zx/shared";
 import { isAdmin } from "@/lib/auth";
-import { isTestMode } from "@/lib/env";
+import { isTestMode, testModeAvailable } from "@/lib/env";
 import { getClientContacts } from "@/lib/settings";
 import { EnvSwitch } from "@/components/EnvSwitch";
 import { MockUserSwitch } from "@/components/MockUserSwitch";
@@ -29,8 +29,9 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const admin = await isAdmin();
+  const testAvailable = testModeAvailable();
   const testMode = await isTestMode();
-  const contacts = getClientContacts();
+  const contacts = await getClientContacts();
 
   // 正式环境只放行精简集;测试模式放行全部主题/布局/功能
   const allowedThemeIds = testMode ? THEME_IDS : LIVE_THEME_IDS;
@@ -41,7 +42,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const initScript = `${themeInitScript(allowedThemeIds, allowedLayoutIds)};${NAV_INIT_SCRIPT}`;
 
   const mockCid = testMode ? ((await cookies()).get(MOCK_COOKIE)?.value ?? "") : "";
-  const adminTools = admin ? (
+  const adminTools = admin && testAvailable ? (
     <div className="zx-admintools">
       <EnvSwitch testMode={testMode} />
       {testMode && <MockUserSwitch current={mockCid} />}

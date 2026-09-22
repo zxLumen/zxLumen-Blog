@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  return Response.json({ nick: getAdminNick(), contacts: getContactSettings() })
+  return Response.json({ nick: await getAdminNick(), contacts: await getContactSettings() })
 }
 
 interface Body {
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     if (nick.length < 1 || nick.length > 32) {
       return Response.json({ error: '昵称需 1-32 字' }, { status: 400 })
     }
-    setAdminNick(nick)
+    await setAdminNick(nick)
   }
 
   if (data?.contacts) {
@@ -42,8 +42,8 @@ export async function POST(req: Request) {
     if (/[^\d+\-\s]/.test(phone)) {
       return Response.json({ error: '电话只能包含数字/+/-/空格' }, { status: 400 })
     }
-    setContactSettings({ email, wechat, phone })
+    await setContactSettings({ email, wechat, phone })
   }
 
-  return Response.json({ ok: true, nick: getAdminNick(), contacts: getContactSettings() })
+  return Response.json({ ok: true, nick: await getAdminNick(), contacts: await getContactSettings() })
 }

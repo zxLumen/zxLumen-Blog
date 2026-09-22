@@ -1,17 +1,20 @@
 import { cookies } from 'next/headers'
 import { isAdmin } from '@/lib/auth'
-import { ENV_COOKIE } from '@/lib/env'
+import { ENV_COOKIE, testModeAvailable } from '@/lib/env'
 import { getTestDb, readJson } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const { isTestMode } = await import('@/lib/env')
-  return Response.json({ test: await isTestMode() })
+  return Response.json({ test: await isTestMode(), available: testModeAvailable() })
 }
 
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  if (!testModeAvailable()) {
+    return Response.json({ error: '测试模式在当前环境已禁用' }, { status: 403 })
+  }
 
   const data = await readJson<{ mode?: 'test' | 'live'; reset?: boolean }>(req)
 

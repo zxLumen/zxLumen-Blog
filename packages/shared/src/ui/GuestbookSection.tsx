@@ -64,7 +64,7 @@ export function GuestbookSection({
   initialAuthor = '',
 }: GuestbookProps) {
   const apiBase = apiBaseProp.replace(/\/$/, '')
-  // 访客删除自己的留言:TEST-only 新功能
+  // 访客删除自己的留言(功能门控 self-delete)
   const canSelfDelete = useFeature('self-delete')
 
   const [items, setItems] = useState<CommentRow[]>(initialPage?.rows ?? [])

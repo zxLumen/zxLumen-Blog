@@ -67,7 +67,7 @@ export async function POST(req: Request) {
   }
 
   // 非管理员不得冒用站长昵称
-  if (!admin && normNick(author) === normNick(getAdminNick())) {
+  if (!admin && normNick(author) === normNick(await getAdminNick())) {
     return Response.json({ error: '该昵称为站长保留,请换一个昵称' }, { status: 403 })
   }
 

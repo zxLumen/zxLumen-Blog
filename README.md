@@ -57,7 +57,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 - **联系我**(关于页与页脚):**邮件**(mailto)、**微信**(复制微信号 + 点击处弹出二维码浮窗)、**电话**(移动端 `tel:` 拨号 / 桌面端复制;**号码不下发页面**)
 - **留言板**:公开 / 仅站长可见;**回复**(单层缩进 + `回复 @昵称`);**页码分页**(每页 5/10/20/50/100);昵称 cookie 记忆;`/admin` 可删除(递归整棵回复)
 - **admin** `/admin`:会话登录、站长昵称、修改密码、联系方式(邮箱/微信/电话/二维码上传)、留言管理
-- **测试模式**:整站 LIVE / TEST 切换(独立测试库 + 全部主题/布局/功能),仅站长可见
+- **测试模式(仅本地)**:整站 LIVE / TEST 切换(独立测试库 + 全部主题/布局/功能),仅站长可见;线上生产环境禁用
 - **模拟访客(TEST)**:测试模式下右上角 `MOCK` 可切换多个匿名身份,以不同访客视角浏览/留言(验证私密可见性、自删等)
 
 ### 主题 / 布局 / 功能的"正式集"
@@ -66,16 +66,17 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 - `LIVE_FEATURES`(`src/features.ts`):正式环境放行的**功能**(测试模式自动放行全部)
 - 新增主题:在 `THEMES` 注册 + 在 `styles.css` 加一段 token 块
 
-## 开发流程:TEST 先行 → 验证 → 同步 LIVE
+## 开发流程:本地开发 → 打包 → 部署线上
 
-站内有 **LIVE(正常模式)/ TEST(测试模式)** 两套环境(右上角仅站长可见的切换器)。
+线上**只有一个生产环境**;所有试验都在**本地 TEST 模式**完成(独立测试库,与线上隔离)。
 
-1. **改动默认只在 TEST 模式生效**(门控见 `FEATURE_IDS` / `LIVE_FEATURES`),LIVE 保持现状
-2. 在 TEST 模式(独立测试库)自测并交站长验收
-3. 确认 OK 后执行"**同步**":把特性 id 加进 `LIVE_FEATURES`,
-   提交 `feat(...): 同步 <特性> 到正常模式`
+1. **本地 TEST 模式**自测:改动只在 TEST 生效(门控见 `FEATURE_IDS` / `LIVE_FEATURES`)
+2. 验证通过后并入主线 → **打包** → 部署到线上
+3. 需要"只在 TEST 存在"的功能:不加进 `LIVE_FEATURES`;正式放行 = 把 id 加进
+   `LIVE_FEATURES`,提交 `feat(...): 同步 <特性> 到正常模式`
 
-新功能如何加门控,见 `AGENTS.md`。
+**线上不会进入 TEST**:`NODE_ENV=production` 时 `isTestMode()` 恒 false(除非显式设
+`ALLOW_TEST_MODE=1`)。新功能如何加门控,见 `AGENTS.md`。
 
 ## API
 
@@ -83,7 +84,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 |---|---|---|
 | GET | `/api/comments?page=&pageSize=` | 留言分页(线程级);登录站长则含私密 |
 | POST | `/api/comments` | 新增留言 / 回复(`parent_id`、`visibility`) |
-| POST | `/api/comments/delete` | 删除自己的留言(按匿名 ID 校验;TEST-only) |
+| POST | `/api/comments/delete` | 删除自己的留言(按匿名 ID 校验) |
 | GET | `/api/usage?range=30d` | 用量记录(`range`=`24h`/`7d`/`30d`/`90d`;回退链:DeepSeek 平台 → 上次成功数据 → 本地表) |
 | POST | `/api/usage` | 上报用量,需头 `X-Report-Token` |
 | GET | `/api/contact/phone` | 获取电话(限流;号码不预置页面) |
@@ -94,15 +95,16 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 | GET/POST | `/api/admin/settings` | 站长昵称 + 联系方式 |
 | POST | `/api/admin/password` | 修改密码 |
 | GET/POST | `/api/admin/wechat-qr` | 查询/上传微信二维码 |
-| GET | `/api/env` | 查询当前模式 `{ test }` |
-| POST | `/api/env` | 切换 LIVE / TEST(仅站长);`{reset:true}` 清空测试库 |
+| GET | `/api/env` | 查询当前模式 `{ test, available }` |
+| POST | `/api/env` | 切换 LIVE / TEST(仅站长,生产禁用);`{reset:true}` 清空测试库 |
 | POST | `/api/admin/mock` | 设置/清除"模拟访客"身份(仅站长 + 测试模式) |
 
 上报细节见 `docs/REPORTING.md`。
 
 ## 环境变量
 
-见各 `.env.example`:`DB_PATH` / `DB_TEST_PATH` / `ADMIN_PASSWORD` / `SESSION_SECRET` / `REPORT_TOKEN`。
+见各 `.env.example`:`DB_PATH`(线上库)/ `DB_TEST_PATH`(本地测试库)/ `ADMIN_PASSWORD` /
+`SESSION_SECRET` / `REPORT_TOKEN` / `ALLOW_TEST_MODE`(生产临时开启 TEST,默认关)。
 默认值可直接跑 demo(`admin` / `dev-report-token`),**上线前务必修改**。
 
 ## 部署

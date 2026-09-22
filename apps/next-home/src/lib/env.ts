@@ -6,8 +6,20 @@ import { getDb, getTestDb } from './db'
 
 export const ENV_COOKIE = 'zx_env'
 
-/** 是否处于测试模式(必须已登录 admin 才生效) */
+/**
+ * 测试模式是否可用(整站开关的前置条件)。
+ *
+ * 生产环境(NODE_ENV=production)**默认禁用整站测试模式**:线上产物永远只有一个
+ * 生产环境,试验在本地做。确需在生产临时开通时,显式设 `ALLOW_TEST_MODE=1`。
+ */
+export function testModeAvailable(): boolean {
+  if (process.env.NODE_ENV !== 'production') return true
+  return process.env.ALLOW_TEST_MODE === '1'
+}
+
+/** 是否处于测试模式(需管理员 + 测试模式可用 + zx_env=test) */
 export async function isTestMode(): Promise<boolean> {
+  if (!testModeAvailable()) return false
   if (!(await isAdmin())) return false
   const store = await cookies()
   return store.get(ENV_COOKIE)?.value === 'test'

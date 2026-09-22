@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  return Response.json({ custom: hasCustomPassword() })
+  return Response.json({ custom: await hasCustomPassword() })
 }
 
 export async function POST(req: Request) {
@@ -16,13 +16,13 @@ export async function POST(req: Request) {
   const current = data?.current ?? ''
   const next = (data?.next ?? '').trim()
 
-  if (!verifyAdminPassword(current)) {
+  if (!(await verifyAdminPassword(current))) {
     return Response.json({ error: '当前密码错误' }, { status: 400 })
   }
   if (next.length < 4 || next.length > 64) {
     return Response.json({ error: '新密码需 4-64 位' }, { status: 400 })
   }
 
-  setAdminPassword(next)
+  await setAdminPassword(next)
   return Response.json({ ok: true })
 }
