@@ -52,13 +52,18 @@ if ! id -u "${DEPLOY_USER}" >/dev/null 2>&1; then
   adduser --disabled-password --gecos "" "${DEPLOY_USER}"
 fi
 usermod -aG sudo,docker "${DEPLOY_USER}"
-if [ -f /root/.ssh/authorized_keys ]; then
+# 追加 root 的授权公钥到部署用户(去重,绝不覆盖已有 authorized_keys!)
+if [ -s /root/.ssh/authorized_keys ]; then
   mkdir -p "/home/${DEPLOY_USER}/.ssh"
-  cp /root/.ssh/authorized_keys "/home/${DEPLOY_USER}/.ssh/authorized_keys"
-  chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "/home/${DEPLOY_USER}/.ssh"
-  chmod 700 "/home/${DEPLOY_USER}/.ssh"
-  chmod 600 "/home/${DEPLOY_USER}/.ssh/authorized_keys"
+  touch "/home/${DEPLOY_USER}/.ssh/authorized_keys"
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    grep -qF "$key" "/home/${DEPLOY_USER}/.ssh/authorized_keys" || printf '%s\n' "$key" >> "/home/${DEPLOY_USER}/.ssh/authorized_keys"
+  done < /root/.ssh/authorized_keys
 fi
+chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "/home/${DEPLOY_USER}/.ssh" 2>/dev/null || true
+chmod 700 "/home/${DEPLOY_USER}/.ssh" 2>/dev/null || true
+chmod 600 "/home/${DEPLOY_USER}/.ssh/authorized_keys" 2>/dev/null || true
 
 log "防火墙 ufw(放行 SSH + HTTP/HTTPS)"
 ufw allow OpenSSH

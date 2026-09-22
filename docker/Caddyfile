@@ -13,6 +13,11 @@
 	reverse_proxy app:3000
 }
 
+# www → 主域 301 跳转(需 www 的 A 记录指向本机,Caddy 自动签证书)
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
 # 未来项目 demo:每个子域名一条,反代到对应容器
 # 记得把 demo 服务加入 compose 的 web 网络
 #
