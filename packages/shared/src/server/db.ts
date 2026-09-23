@@ -4,12 +4,14 @@ import {
   type ArchivedCommentRow,
   type CommentRow,
   type DayPoint,
+  type EventType,
   type NewEventInput,
   type PagedArchived,
   type PagedComments,
   type StatsResult,
   type UsageRow,
   type Visibility,
+  type VisitorDetail,
 } from '../schema.js'
 import { roundCny } from '../pricing.js'
 
@@ -63,8 +65,8 @@ export interface Db {
   addUsage(input: NewUsageInput): UsageRow
   /** 记录埋点事件(访问/项目点击/简历下载) */
   addEvent(input: NewEventInput): void
-  /** 首页统计聚合(PV/UV/趋势/留言/事件) */
-  stats(opts?: { trendDays?: number; onlineMinutes?: number }): StatsResult
+  /** 首页统计聚合(PV/UV/趋势/留言/事件;visitors 仅在 opts.visitors=true 时计算) */
+  stats(opts?: { trendDays?: number; onlineMinutes?: number; visitors?: boolean }): StatsResult
   countComments(): number
   clearComments(): number
   getMeta(key: string): string | null
@@ -77,6 +79,13 @@ const nowIso = () => new Date().toISOString().replace('T', ' ').slice(0, 19)
 
 /** 北京时(UTC+8)日期 YYYY-MM-DD */
 const bjDay = (t = Date.now()) => new Date(t + 8 * 3600 * 1000).toISOString().slice(0, 10)
+
+/** 将 UTC ts 转北京时间 MM-DD HH:mm */
+const bjTime = (utc: string) => {
+  const d = new Date(new Date(utc.replace(' ', 'T') + 'Z').getTime() + 8 * 3600 * 1000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
+}
 
 const COMMENT_COLS = `id, author, author_link, body, visibility, parent_id, is_admin, created_at`
 const COMMENT_COLS_CID = `id, author, author_link, body, visibility, parent_id, is_admin, author_cid, created_at`
@@ -392,7 +401,7 @@ export function openDb(path: string): Db {
       })
     },
 
-    stats({ trendDays = 30, onlineMinutes = 5 } = {}) {
+    stats({ trendDays = 30, onlineMinutes = 5, visitors: wantVisitors = false } = {}) {
       const today = bjDay()
       const n = (sql: string, ...args: unknown[]) =>
         (db.prepare(sql).get(...args) as { n: number }).n
@@ -446,10 +455,70 @@ export function openDb(path: string): Db {
         clicksByTarget,
       }
 
+      // ---- 访客访问详情(最近活跃的 30 位;仅 opics.visitors 时计算) ----
+      let visitors: VisitorDetail[] = []
+      if (wantVisitors) {
+        const visitorRows = db
+        .prepare(
+          `SELECT cid,
+                  SUM(CASE WHEN type='visit' THEN 1 ELSE 0 END) AS visits,
+                  SUM(CASE WHEN type='resume_download' THEN 1 ELSE 0 END) AS resumeDownloads,
+                  MAX(ts) AS lastTs
+             FROM events WHERE cid != '' GROUP BY cid ORDER BY lastTs DESC LIMIT 30`,
+        )
+        .all() as { cid: string; visits: number; resumeDownloads: number; lastTs: string }[]
+
+      const nickRows = db
+        .prepare(
+          `SELECT author_cid, author FROM comments WHERE archived=0 AND author_cid != '' ORDER BY id DESC`,
+        )
+        .all() as { author_cid: string; author: string }[]
+      const nickMap = new Map<string, string>()
+      for (const r of nickRows) if (!nickMap.has(r.author_cid)) nickMap.set(r.author_cid, r.author)
+
+      const ccRows = db
+        .prepare(
+          `SELECT author_cid, COUNT(*) AS n FROM comments WHERE archived=0 AND author_cid != '' GROUP BY author_cid`,
+        )
+        .all() as { author_cid: string; n: number }[]
+      const ccMap = new Map(ccRows.map((r) => [r.author_cid, r.n]))
+
+      const clickByCidRows = db
+        .prepare(
+          `SELECT cid, target, COUNT(*) AS n FROM events
+            WHERE cid != '' AND type='project_click' AND target != '' GROUP BY cid, target`,
+        )
+        .all() as { cid: string; target: string; n: number }[]
+      const clickByCid = new Map<string, Record<string, number>>()
+      for (const r of clickByCidRows) {
+        const m = clickByCid.get(r.cid) ?? {}
+        m[r.target] = r.n
+        clickByCid.set(r.cid, m)
+      }
+
+      const recentStmt = db.prepare(
+        `SELECT ts, type, target FROM events WHERE cid = ? ORDER BY id DESC LIMIT 8`,
+      )
+
+      visitors = visitorRows.map((r) => ({
+        cid: r.cid,
+        nickname: nickMap.get(r.cid) ?? '',
+        lastSeen: bjTime(r.lastTs),
+        visits: r.visits,
+        resumeDownloads: r.resumeDownloads,
+        commentCount: ccMap.get(r.cid) ?? 0,
+        projectClicks: clickByCid.get(r.cid) ?? {},
+        recent: (recentStmt.all(r.cid) as { ts: string; type: EventType; target: string }[]).map(
+          (e) => ({ ts: bjTime(e.ts), type: e.type, target: e.target }),
+        ),
+      }))
+      }
+
       return {
         visits: { pv, uv, today: { pv: todayPv, uv: todayUv }, online, days },
         comments,
         events,
+        visitors,
       }
     },
 

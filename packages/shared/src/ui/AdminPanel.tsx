@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ArchivedCommentRow, CommentRow, PagedComments, StatsResult } from '../schema.js'
+import type { ArchivedCommentRow, CommentRow, EventType, PagedComments, StatsResult, VisitorDetail } from '../schema.js'
 import { fmtDateTime, fmtInt } from '../format.js'
 import { PROJECTS } from '../content.js'
 import { Pagination } from './Pagination.js'
@@ -15,6 +15,76 @@ async function loadPageData(page: number, pageSize: number): Promise<PagedCommen
   if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error(`加载失败 (${res.status})`)
   return (await res.json()) as PagedComments
+}
+
+const EVENT_LABEL: Record<EventType, string> = {
+  visit: '访问',
+  project_click: '项目点击',
+  resume_download: '简历下载',
+}
+
+function targetLabel(t: string) {
+  return PROJECTS.find((p) => p.id === t)?.name ?? t
+}
+
+/** 访客明细行:点击展开该访客的操作记录 */
+function VisitorDetailRow({
+  v,
+  open,
+  onToggle,
+}: {
+  v: VisitorDetail
+  open: boolean
+  onToggle: () => void
+}) {
+  return (
+    <>
+      <tr className={open ? 'is-open' : ''} onClick={onToggle} style={{ cursor: 'pointer' }}>
+        <td>
+          <div>
+            {v.nickname || `访客 ${v.cid.slice(0, 8)}`}
+            {v.nickname ? (
+              <span className="zx-muted" style={{ fontSize: '0.7rem' }}>
+                {' '}
+                · {v.cid.slice(0, 8)}
+              </span>
+            ) : null}
+          </div>
+          <div className="zx-mono zx-muted" style={{ fontSize: '0.65rem' }}>
+            {v.cid}
+          </div>
+        </td>
+        <td className="num">{fmtInt(v.visits)}</td>
+        <td className="num">{fmtInt(v.commentCount)}</td>
+        <td className="num">{fmtInt(v.resumeDownloads)}</td>
+        <td className="zx-mono zx-muted">{v.lastSeen}</td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={5} className="zx-visitor-detail">
+            {Object.keys(v.projectClicks).length > 0 && (
+              <div className="zx-visitor-line">
+                项目点击:{' '}
+                {Object.entries(v.projectClicks)
+                  .map(([t, n]) => `${targetLabel(t)} ×${n}`)
+                  .join('、')}
+              </div>
+            )}
+            {v.recent.length > 0 && (
+              <div className="zx-visitor-events zx-mono zx-muted">
+                {v.recent.map((e, i) => (
+                  <div key={i}>
+                    {e.ts} · {EVENT_LABEL[e.type]}
+                    {e.target ? ` · ${targetLabel(e.target)}` : ''}
+                  </div>
+                ))}
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  )
 }
 
 export function AdminPanel() {
@@ -95,6 +165,7 @@ export function AdminPanel() {
 
   const [stats, setStats] = useState<StatsResult | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
+  const [statVisitor, setStatVisitor] = useState<string | null>(null)
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true)
@@ -1101,6 +1172,37 @@ export function AdminPanel() {
                         <td className="num">{fmtInt(count)}</td>
                       </tr>
                     ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="zx-panel">
+            <h3>
+              访客明细 <span>最近活跃 · 点击行展开操作记录</span>
+            </h3>
+            {(stats.visitors ?? []).length === 0 ? (
+              <div className="zx-c-empty">暂无访客</div>
+            ) : (
+              <table className="zx-table">
+                <thead>
+                  <tr>
+                    <th>访客</th>
+                    <th className="num">访问</th>
+                    <th className="num">留言</th>
+                    <th className="num">简历</th>
+                    <th>最近活跃</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.visitors!.map((v) => (
+                    <VisitorDetailRow
+                      key={v.cid}
+                      v={v}
+                      open={statVisitor === v.cid}
+                      onToggle={() => setStatVisitor(statVisitor === v.cid ? null : v.cid)}
+                    />
+                  ))}
                 </tbody>
               </table>
             )}

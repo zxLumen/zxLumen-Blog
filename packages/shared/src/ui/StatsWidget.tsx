@@ -7,8 +7,8 @@ import { fmtCompact } from '../format.js'
 import { useFeature } from './theme-context.js'
 
 const POS_KEY = 'zx-stats-pos'
-const POP_W = 260
-const POP_H = 220
+const POP_W = 232
+const POP_H = 230
 
 function Cell({ label, value }: { label: string; value: string }) {
   return (

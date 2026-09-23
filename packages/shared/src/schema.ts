@@ -139,6 +139,30 @@ export interface DayPoint {
   uv: number
 }
 
+/** 单个访客的最近一条操作记录(时间与目标) */
+export interface VisitorEvent {
+  /** 北京时间 MM-DD HH:mm */
+  ts: string
+  type: EventType
+  target: string
+}
+
+/** 单个访客的访问详情(仅站长接口/页面使用) */
+export interface VisitorDetail {
+  cid: string
+  /** 曾在留言中留下的昵称(未留过则空) */
+  nickname: string
+  /** 北京时间 MM-DD HH:mm */
+  lastSeen: string
+  visits: number
+  resumeDownloads: number
+  commentCount: number
+  /** 各项目点击次数(projectId → count) */
+  projectClicks: Record<string, number>
+  /** 最近若干条操作 */
+  recent: VisitorEvent[]
+}
+
 /** 首页统计数据(聚合,不含 cid/ip 等明细) */
 export interface StatsResult {
   visits: {
@@ -165,4 +189,6 @@ export interface StatsResult {
     /** 各项目点击次数(projectId → count) */
     clicksByTarget: Record<string, number>
   }
+  /** 访客访问详情(按最近活跃,仅站长接口) */
+  visitors: VisitorDetail[]
 }
