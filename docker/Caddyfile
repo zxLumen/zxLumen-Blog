@@ -18,6 +18,15 @@ www.{$DOMAIN} {
 	redir https://{$DOMAIN}{uri} permanent
 }
 
+# 邮箱 Webmail / 管理后台 → Poste.io(host 网络,监听宿主机 8443)
+mail.{$DOMAIN} {
+	reverse_proxy host.docker.internal:8443 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
 # 未来项目 demo:每个子域名一条,反代到对应容器
 # 记得把 demo 服务加入 compose 的 web 网络
 #
