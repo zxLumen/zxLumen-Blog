@@ -1,6 +1,7 @@
 'use client'
 
 import type { Contacts } from '../content.js'
+import type { Project } from '../content.js'
 import type { CommentRow, PagedComments, StatsResult, UsageRow } from '../schema.js'
 import type { DataSource, UsageSel } from '../usage-sel.js'
 import { Hero } from './Hero.js'
@@ -29,6 +30,8 @@ interface HomePageProps {
   /** 首页统计聚合(SSR 计算) */
   stats?: StatsResult
   contacts?: Contacts
+  /** 项目(已合并 admin 覆盖;缺省用静态 PROJECTS) */
+  projects?: Project[]
   onSubmitComment?: (input: NewComment) => Promise<CommentRow> | CommentRow
 }
 
@@ -45,6 +48,7 @@ export function HomePage({
   viewerMock,
   stats,
   contacts,
+  projects,
   onSubmitComment,
 }: HomePageProps) {
   return (
@@ -52,7 +56,7 @@ export function HomePage({
       <TrackBeacon path="/" />
       <StatsWidget stats={stats} />
       <Hero />
-      <ProjectsSection clicks={stats?.events.clicksByTarget} pv={stats?.visits.pv} />
+      <ProjectsSection projects={projects} clicks={stats?.events.clicksByTarget} pv={stats?.visits.pv} />
       <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} availableSources={availableSources} />
       <AboutSection contacts={contacts} />
       <GuestbookSection

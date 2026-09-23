@@ -8,6 +8,8 @@ import {
   type NewEventInput,
   type PagedArchived,
   type PagedComments,
+  type ProjectOverrideInput,
+  type ProjectOverrideRecord,
   type StatsResult,
   type UsageRow,
   type Visibility,
@@ -69,6 +71,10 @@ export interface Db {
   stats(opts?: { trendDays?: number; onlineMinutes?: number; visitors?: boolean }): StatsResult
   countComments(): number
   clearComments(): number
+  /** admin 可编辑的项目覆盖配置(空字段=跟随静态默认) */
+  getProjectOverrides(): ProjectOverrideRecord[]
+  setProjectOverride(id: string, input: ProjectOverrideInput): void
+  clearProjectOverride(id: string): void
   getMeta(key: string): string | null
   setMeta(key: string, value: string): void
   delMeta(key: string): void
@@ -600,6 +606,63 @@ export function openDb(path: string): Db {
 
     clearComments() {
       return db.prepare(`DELETE FROM comments`).run().changes
+    },
+
+    getProjectOverrides() {
+      const rows = db
+        .prepare(`SELECT * FROM project_overrides ORDER BY id`)
+        .all() as {
+        id: string
+        name: string
+        desc: string
+        period: string
+        status: string
+        featured: number
+        demo_url: string
+        repo_url: string
+        tech: string
+        updated_at: string
+      }[]
+      return rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        desc: r.desc,
+        period: r.period,
+        status: r.status,
+        featured: r.featured,
+        demoUrl: r.demo_url,
+        repoUrl: r.repo_url,
+        tech: r.tech,
+        updatedAt: r.updated_at,
+      }))
+    },
+
+    setProjectOverride(id, input) {
+      const now = nowIso()
+      db.prepare(
+        `INSERT INTO project_overrides(id, name, desc, period, status, featured, demo_url, repo_url, tech, updated_at)
+         VALUES(@id, @name, @desc, @period, @status, @featured, @demoUrl, @repoUrl, @tech, @updatedAt)
+         ON CONFLICT(id) DO UPDATE SET
+           name=excluded.name, desc=excluded.desc, period=excluded.period,
+           status=excluded.status, featured=excluded.featured,
+           demo_url=excluded.demo_url, repo_url=excluded.repo_url,
+           tech=excluded.tech, updated_at=excluded.updated_at`,
+      ).run({
+        id,
+        name: input.name ?? '',
+        desc: input.desc ?? '',
+        period: input.period ?? '',
+        status: input.status ?? '',
+        featured: input.featured ?? -1,
+        demoUrl: input.demoUrl ?? '',
+        repoUrl: input.repoUrl ?? '',
+        tech: input.tech ?? '',
+        updatedAt: now,
+      })
+    },
+
+    clearProjectOverride(id) {
+      db.prepare(`DELETE FROM project_overrides WHERE id = ?`).run(id)
     },
 
     getMeta(key) {

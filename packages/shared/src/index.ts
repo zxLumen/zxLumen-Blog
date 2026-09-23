@@ -32,6 +32,7 @@ export {
   NAV_INIT_SCRIPT,
   SITE_META,
   CONTACTS,
+  applyProjectOverrides,
 } from './content.js'
 export type {
   LinkItem,
@@ -42,6 +43,9 @@ export type {
   SiteMeta,
   Contacts,
 } from './content.js'
+
+// 项目覆盖配置(admin 后台编辑)
+export type { ProjectOverrideRecord, ProjectOverrideInput } from './schema.js'
 
 // 计价与统计
 export {

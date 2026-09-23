@@ -5,6 +5,7 @@ import type { ArchivedCommentRow, CommentRow, EventType, PagedComments, StatsRes
 import { fmtDateTime, fmtInt } from '../format.js'
 import { PROJECTS } from '../content.js'
 import { Pagination } from './Pagination.js'
+import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
 import { useFeature } from './theme-context.js'
 
 async function loadPageData(page: number, pageSize: number): Promise<PagedComments> {
@@ -158,9 +159,9 @@ export function AdminPanel() {
   const [zpUrl, setZpUrl] = useState('')
   const [zpKey, setZpKey] = useState('')
   const [zpBusy, setZpBusy] = useState(false)
-  type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats'
+  type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats' | 'projects'
   const validTab = (t: unknown): t is TabKey =>
-    t === 'comments' || t === 'archive' || t === 'profile' || t === 'token' || t === 'stats'
+    t === 'comments' || t === 'archive' || t === 'profile' || t === 'token' || t === 'stats' || t === 'projects'
   // 刷新/新标签页都停留在上次 Tab(localStorage;SSR 首帧不渲染 tabs,无 hydration 冲突)
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === 'undefined') return 'comments'
@@ -687,7 +688,7 @@ export function AdminPanel() {
         <span className="zx-sec-tag">// ADMIN</span>
         {showTabs ? (
           <div className="zx-tabs is-inline">
-            {(['comments', 'archive', 'stats', 'profile', 'token'] as const).map((t) => (
+            {(['comments', 'archive', 'stats', 'profile', 'token', 'projects'] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -702,7 +703,9 @@ export function AdminPanel() {
                       ? '统计'
                       : t === 'profile'
                         ? '个人信息'
-                        : 'Token 用量'}
+                        : t === 'projects'
+                          ? '项目'
+                          : 'Token 用量'}
               </button>
             ))}
           </div>
@@ -715,6 +718,10 @@ export function AdminPanel() {
       </div>
 
       {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
+
+      {(!showTabs || tab === 'projects') && (
+        <AdminProjectsPanel active={!showTabs || tab === 'projects'} onNotify={(m) => setMsg(m)} />
+      )}
 
       {(!showTabs || tab === 'profile') && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>

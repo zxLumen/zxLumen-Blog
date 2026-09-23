@@ -51,6 +51,20 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_day_type ON events(day, type);
 CREATE INDEX IF NOT EXISTS idx_events_cid ON events(cid);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+
+-- 项目覆盖配置(admin 可编辑;空字段表示跟随静态默认)
+CREATE TABLE IF NOT EXISTS project_overrides (
+  id         TEXT PRIMARY KEY,
+  name       TEXT DEFAULT '',
+  desc       TEXT DEFAULT '',
+  period     TEXT DEFAULT '',
+  status     TEXT DEFAULT '',          -- ''=默认 | online|demo|building|archived
+  featured   INTEGER DEFAULT -1,       -- -1=默认 | 1=是 | 0=否
+  demo_url   TEXT DEFAULT '',
+  repo_url   TEXT DEFAULT '',
+  tech       TEXT DEFAULT '',          -- JSON 数组字符串
+  updated_at TEXT
+);
 `
 
 export interface CommentRow {
@@ -206,4 +220,34 @@ export interface StatsResult {
   }
   /** 访客访问详情(按最近活跃,仅站长接口) */
   visitors: VisitorDetail[]
+}
+
+/** 项目覆盖配置:admin 在后台编辑的字段;空字段表示跟随静态默认 */
+export interface ProjectOverrideRecord {
+  id: string
+  name: string
+  desc: string
+  period: string
+  /** ''=默认 | online|demo|building|archived */
+  status: string
+  /** -1=默认 | 1=是 | 0=否 */
+  featured: number
+  demoUrl: string
+  repoUrl: string
+  /** JSON 数组字符串('[]' 表示未覆盖) */
+  tech: string
+  updatedAt: string
+}
+
+export interface ProjectOverrideInput {
+  name?: string
+  desc?: string
+  period?: string
+  status?: string
+  /** -1 表示"跟随默认",不传也算默认 */
+  featured?: number
+  demoUrl?: string
+  repoUrl?: string
+  /** 逗号分隔字符串;空表示跟随默认 */
+  tech?: string
 }

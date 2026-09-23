@@ -6,7 +6,9 @@
 
 - **访客统计(悬浮)**:首页**右上角悬浮按钮**(如「访问 12 · 访客 5」),**可拖动**(位置记入 `localStorage`),
   **鼠标悬停展开**浮层(移走自动折叠),显示 **访问量(PV)**、**访客(UV)**、近 7 天 PV 趋势。**公开可见**,功能门控 `visitor-stats`。
-- **项目点击**:每个**项目卡**上常驻显示「N 次点击」(N = 该项目链接点击 + 站内访问量 PV)。
+- **项目点击**:每个**项目卡**上常驻显示「N 次点击」。
+  - 仅当该项目 `demoUrl === '/'`(**指向本站,即「本页 · 个人主页」**)时,N = 该项目链接点击次数 + **全站 PV**(站内访问量);
+  - 其余(外部 demo/repo)项目,N = **链接点击次数**(点「试用/repo」按钮 `project_click` 累计)。
 - **admin「统计」Tab**:`/admin` → 统计,展示 **留言**(总/今日/公开/仅站长可见/留言者)、
   **简历下载**、**项目点击**(按项目列出)、**访客**(PV/UV/今日/在线)、
   **访客明细**(最近活跃的 30 位访客:昵称/匿名 ID、访问/留言/简历/项目点击、最近活跃;
@@ -38,6 +40,17 @@
 | ua | User-Agent(仅用于过滤,不展示) |
 
 聚合在 `Db.stats()`(`packages/shared/src/server/db.ts`);SSR 由 `page.tsx` 计算后下发。
+
+## 项目配置(admin 后台覆盖)
+
+`/admin` → **项目** Tab(或单区模式下的「项目管理」面板)可在线覆盖各项目的
+名称/描述/周期/状态/featured/demoUrl/repoUrl/tech:
+
+- 存储:`project_overrides` 表(`packages/shared/src/schema.ts`);未覆盖字段跟随静态 `PROJECTS`。
+- 接口:`GET/POST/DELETE /api/admin/projects`(仅站长),统一走 `getActiveDb()`。
+- SSR:`page.tsx` 用 `applyProjectOverrides(PROJECTS, db.getProjectOverrides())` 合并后下发,**保存即生效**。
+- 「恢复默认」= 删除该项目的覆盖记录。
+- 口径:字段留空表示「跟随默认」,不会把默认值写死;`featured` 用 `-1=默认 / 1=是 / 0=否`。
 
 ## 口径
 

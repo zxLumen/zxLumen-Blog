@@ -1,6 +1,8 @@
 // 类型、导航等公共部分(可入库)。
 // 个人资料(姓名/邮箱/经历等)在 ./content.local.ts(不入库),缺失时用 example 兜底。
 
+import type { ProjectOverrideRecord } from './schema.js'
+
 export interface LinkItem {
   label: string
   url: string
@@ -72,6 +74,47 @@ export const TIMELINE: TimelineEntry[] = local.TIMELINE
 export const PROJECTS: Project[] = local.PROJECTS
 export const SITE_META: SiteMeta = local.SITE_META
 export const CONTACTS: Contacts = local.CONTACTS
+
+const VALID_PROJECT_STATUS: Project['status'][] = ['online', 'demo', 'building', 'archived']
+
+function parseTechList(techJson: string): string[] | null {
+  if (!techJson) return null
+  try {
+    const arr: unknown = JSON.parse(techJson)
+    return Array.isArray(arr) && arr.every((t) => typeof t === 'string') ? (arr as string[]) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 把 admin 的项目覆盖(project_overrides 表)合并到静态 PROJECTS。
+ * 空字段跟随静态默认;featured -1 跟随默认;tech 空/非法跟随默认。
+ * 注:覆盖只能"改成非空值",无法通过空值删掉静态里已有的链接。
+ */
+export function applyProjectOverrides(projects: Project[], overrides: ProjectOverrideRecord[]): Project[] {
+  const map = new Map(overrides.map((o) => [o.id, o]))
+  return projects.map((p) => {
+    const o = map.get(p.id)
+    if (!o) return p
+    const tech = parseTechList(o.tech)
+    const featured = o.featured === -1 ? p.featured : o.featured === 1
+    const status = VALID_PROJECT_STATUS.includes(o.status as Project['status'])
+      ? (o.status as Project['status'])
+      : p.status
+    return {
+      ...p,
+      name: o.name || p.name,
+      desc: o.desc || p.desc,
+      period: o.period || p.period,
+      status,
+      featured,
+      demoUrl: o.demoUrl || p.demoUrl,
+      repoUrl: o.repoUrl || p.repoUrl,
+      tech: tech ?? p.tech,
+    }
+  })
+}
 
 export const NAV = [
   { label: 'home', href: '/' },

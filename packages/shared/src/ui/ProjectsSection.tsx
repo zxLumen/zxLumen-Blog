@@ -22,13 +22,18 @@ function ProjectCard({
   clicks?: number
   pv?: number
 }) {
-  const total = (clicks ?? 0) + (pv ?? 0)
+  // 只有"本页 · 个人主页"(demoUrl 指向本站根路径)才把站内 PV 累计进点击数
+  const self = project.demoUrl === '/'
+  const total = (clicks ?? 0) + (self ? pv ?? 0 : 0)
   return (
     <article className={`zx-card${project.featured ? ' is-featured' : ''}`} data-idx={String(idx).padStart(2, '0')}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
         <h3 style={{ margin: 0 }}>{project.name}</h3>
         {total > 0 && (
-          <span className="zx-project-clicks" title="链接点击次数 + 站内访问量">
+          <span
+            className="zx-project-clicks"
+            title={self ? '站内访问量 + 链接点击次数' : '链接点击次数'}
+          >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M4 4l7 16 2.5-6.5L20 11 4 4z" />
             </svg>
@@ -100,16 +105,18 @@ function ProjectCard({
 }
 
 export function ProjectsSection({
+  projects = PROJECTS,
   clicks,
   pv,
 }: {
+  projects?: Project[]
   clicks?: Record<string, number>
   pv?: number
 }) {
   return (
     <Section id="projects" tag="// PROJECTS" num="01" title="项目">
       <div className="zx-grid">
-        {PROJECTS.map((p, i) => (
+        {projects.map((p, i) => (
           <ProjectCard key={p.id} project={p} idx={i + 1} clicks={clicks?.[p.id]} pv={pv} />
         ))}
       </div>
