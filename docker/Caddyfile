@@ -31,6 +31,11 @@ mail.{$DOMAIN} {
 	}
 }
 
+# Bark 推送服务(容器 bark-server,与 caddy 同在 docker_web 网络)
+bark.{$DOMAIN} {
+	reverse_proxy bark-server:8080
+}
+
 # 未来项目 demo:每个子域名一条,反代到对应容器
 # 记得把 demo 服务加入 compose 的 web 网络
 #
