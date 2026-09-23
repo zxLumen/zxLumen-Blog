@@ -3129,6 +3129,20 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   font-size: 0.78rem;
 }
 
+.zx-proj-chips {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  display: inline-block;
+}
+
+.zx-visitor-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.1rem;
+  font-size: 0.72rem;
+  margin-bottom: 0.3rem;
+}
+
 .zx-visitor-line {
   margin-bottom: 0.3rem;
 }

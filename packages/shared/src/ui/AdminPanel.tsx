@@ -37,6 +37,14 @@ function VisitorDetailRow({
   open: boolean
   onToggle: () => void
 }) {
+  const proj = Object.entries(v.projectClicks)
+    .sort((a, b) => b[1] - a[1])
+    .map(([t, n]) => `${targetLabel(t)}×${n}`)
+    .join(' ')
+  const m = (sec: number) => {
+    if (sec >= 60) return `${Math.floor(sec / 60)}分${sec % 60 ? ` ${sec % 60}s` : ''}`
+    return `${sec}s`
+  }
   return (
     <>
       <tr className={open ? 'is-open' : ''} onClick={onToggle} style={{ cursor: 'pointer' }}>
@@ -57,15 +65,28 @@ function VisitorDetailRow({
         <td className="num">{fmtInt(v.visits)}</td>
         <td className="num">{fmtInt(v.commentCount)}</td>
         <td className="num">{fmtInt(v.resumeDownloads)}</td>
+        <td>
+          {proj ? <span className="zx-mono zx-muted zx-proj-chips">{proj}</span> : <span className="zx-muted">—</span>}
+        </td>
         <td className="zx-mono zx-muted">{v.lastSeen}</td>
       </tr>
       {open && (
         <tr>
-          <td colSpan={5} className="zx-visitor-detail">
-            {Object.keys(v.projectClicks).length > 0 && (
+          <td colSpan={6} className="zx-visitor-detail">
+            <div className="zx-visitor-meta zx-mono zx-muted">
+              <span>首访 {v.firstSeen}</span>
+              <span>{v.returning ? '回头客' : '新客'}</span>
+              <span>
+                会话 {v.sessions} 次 · 平均 {v.avgSessionSec ? m(v.avgSessionSec) : '—'}
+              </span>
+              <span>{v.device}</span>
+              <span>来源 {v.referrer || '直接打开'}</span>
+            </div>
+            {proj && (
               <div className="zx-visitor-line">
                 项目点击:{' '}
                 {Object.entries(v.projectClicks)
+                  .sort((a, b) => b[1] - a[1])
                   .map(([t, n]) => `${targetLabel(t)} ×${n}`)
                   .join('、')}
               </div>
@@ -1191,6 +1212,7 @@ export function AdminPanel() {
                     <th className="num">访问</th>
                     <th className="num">留言</th>
                     <th className="num">简历</th>
+                    <th>项目</th>
                     <th>最近活跃</th>
                   </tr>
                 </thead>

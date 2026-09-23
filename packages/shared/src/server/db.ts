@@ -87,6 +87,51 @@ const bjTime = (utc: string) => {
   return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
 }
 
+/** UTC ts 字符串 → 毫秒时间戳 */
+const tsMs = (utc: string) => new Date(utc.replace(' ', 'T') + 'Z').getTime()
+
+/** 会话切分阈值:相邻事件间隔超过 30 分钟视为新会话 */
+const SESSION_GAP_MS = 30 * 60 * 1000
+
+/** 从按时间升序的事件里计算会话数与平均时长(秒) */
+function computeSessions(rows: { ts: string }[]) {
+  let count = 0
+  let totalMs = 0
+  let prevMs = 0
+  let sessStartMs = 0
+  for (const row of rows) {
+    const ms = tsMs(row.ts)
+    if (prevMs === 0 || ms - prevMs > SESSION_GAP_MS) {
+      if (prevMs > 0) totalMs += prevMs - sessStartMs
+      count++
+      sessStartMs = ms
+    }
+    prevMs = ms
+  }
+  if (prevMs > 0) totalMs += prevMs - sessStartMs
+  return { count, avgSec: count ? Math.round(totalMs / count / 1000) : 0 }
+}
+
+/** 从 UA 解析 "系统 · 浏览器 · 终端" 描述(够用即可,不上解析库) */
+function parseDevice(ua = '') {
+  let type = '桌面'
+  if (/iPad|Tablet/i.test(ua)) type = '平板'
+  else if (/Mobi|iPhone|Android/i.test(ua)) type = '手机'
+  let os = '其他系统'
+  if (/Windows/i.test(ua)) os = 'Windows'
+  else if (/Mac OS|Macintosh/i.test(ua)) os = 'macOS'
+  else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS'
+  else if (/Android/i.test(ua)) os = 'Android'
+  else if (/Linux/i.test(ua)) os = 'Linux'
+  let browser = '其他浏览器'
+  if (/Edg\//i.test(ua)) browser = 'Edge'
+  else if (/OPR\/|Opera/i.test(ua)) browser = 'Opera'
+  else if (/Chrome\//i.test(ua)) browser = 'Chrome'
+  else if (/Firefox\//i.test(ua)) browser = 'Firefox'
+  else if (/Safari\//i.test(ua)) browser = 'Safari'
+  return `${os} · ${browser} · ${type}`
+}
+
 const COMMENT_COLS = `id, author, author_link, body, visibility, parent_id, is_admin, created_at`
 const COMMENT_COLS_CID = `id, author, author_link, body, visibility, parent_id, is_admin, author_cid, created_at`
 
@@ -112,6 +157,12 @@ export function openDb(path: string): Db {
     db.exec("ALTER TABLE comments ADD COLUMN archived_by_cid TEXT DEFAULT ''")
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_cid ON comments(author_cid)')
+
+  // 迁移:events 表补 referrer 列
+  const ecols = new Set(
+    (db.prepare('PRAGMA table_info(events)').all() as { name: string }[]).map((c) => c.name),
+  )
+  if (!ecols.has('referrer')) db.exec("ALTER TABLE events ADD COLUMN referrer TEXT DEFAULT ''")
 
   const mapUsage = (r: Record<string, unknown>): UsageRow => ({
     id: r.id as number,
@@ -389,8 +440,8 @@ export function openDb(path: string): Db {
 
     addEvent(input) {
       db.prepare(
-        `INSERT INTO events (ts, day, cid, type, target, ua)
-         VALUES (@ts, @day, @cid, @type, @target, @ua)`,
+        `INSERT INTO events (ts, day, cid, type, target, ua, referrer)
+         VALUES (@ts, @day, @cid, @type, @target, @ua, @referrer)`,
       ).run({
         ts: nowIso(),
         day: bjDay(),
@@ -398,6 +449,7 @@ export function openDb(path: string): Db {
         type: input.type,
         target: input.target ?? '',
         ua: input.ua ?? '',
+        referrer: input.referrer ?? '',
       })
     },
 
@@ -496,22 +548,42 @@ export function openDb(path: string): Db {
         clickByCid.set(r.cid, m)
       }
 
-      const recentStmt = db.prepare(
-        `SELECT ts, type, target FROM events WHERE cid = ? ORDER BY id DESC LIMIT 8`,
+      const histStmt = db.prepare(
+        `SELECT ts, type, target, referrer, ua FROM events
+          WHERE cid = ? ORDER BY ts ASC, id ASC LIMIT 500`,
       )
 
-      visitors = visitorRows.map((r) => ({
-        cid: r.cid,
-        nickname: nickMap.get(r.cid) ?? '',
-        lastSeen: bjTime(r.lastTs),
-        visits: r.visits,
-        resumeDownloads: r.resumeDownloads,
-        commentCount: ccMap.get(r.cid) ?? 0,
-        projectClicks: clickByCid.get(r.cid) ?? {},
-        recent: (recentStmt.all(r.cid) as { ts: string; type: EventType; target: string }[]).map(
-          (e) => ({ ts: bjTime(e.ts), type: e.type, target: e.target }),
-        ),
-      }))
+      visitors = visitorRows.map((r) => {
+        const hist = histStmt.all(r.cid) as {
+          ts: string
+          type: EventType
+          target: string
+          referrer: string
+          ua: string
+        }[]
+        const { count: sessions, avgSec } = computeSessions(hist)
+        let referrer = ''
+        for (const h of hist) if (!referrer && h.referrer) referrer = h.referrer
+        return {
+          cid: r.cid,
+          nickname: nickMap.get(r.cid) ?? '',
+          lastSeen: bjTime(r.lastTs),
+          firstSeen: bjTime(hist[0]?.ts ?? r.lastTs),
+          returning: r.visits > 1,
+          device: parseDevice(hist[hist.length - 1]?.ua ?? ''),
+          sessions,
+          avgSessionSec: avgSec,
+          referrer,
+          visits: r.visits,
+          resumeDownloads: r.resumeDownloads,
+          commentCount: ccMap.get(r.cid) ?? 0,
+          projectClicks: clickByCid.get(r.cid) ?? {},
+          recent: hist
+            .slice(-8)
+            .reverse()
+            .map((e) => ({ ts: bjTime(e.ts), type: e.type, target: e.target })),
+        }
+      })
       }
 
       return {

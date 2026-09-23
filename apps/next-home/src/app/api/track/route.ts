@@ -29,16 +29,18 @@ export async function POST(req: Request) {
 
   let type: EventType = 'visit'
   let target = ''
+  let referrer = ''
   try {
-    const j = JSON.parse(await req.text()) as { type?: string; target?: string }
+    const j = JSON.parse(await req.text()) as { type?: string; target?: string; ref?: string }
     if (j.type && TYPES.has(j.type as EventType)) type = j.type as EventType
     target = String(j.target ?? '').slice(0, 200)
+    referrer = String(j.ref ?? '').slice(0, 200)
   } catch {
     /* 空/非法 body 视为 visit */
   }
 
   const { cid, isNew } = await resolveCid()
-  ;(await getActiveDb()).addEvent({ type, target, cid, ua: ua.slice(0, 200) })
+  ;(await getActiveDb()).addEvent({ type, target, cid, ua: ua.slice(0, 200), referrer })
 
   const res = empty()
   if (isNew) res.headers.append('Set-Cookie', cidCookie(cid))

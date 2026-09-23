@@ -52,7 +52,7 @@ export function HomePage({
       <TrackBeacon path="/" />
       <StatsWidget stats={stats} />
       <Hero />
-      <ProjectsSection clicks={stats?.events.clicksByTarget} />
+      <ProjectsSection clicks={stats?.events.clicksByTarget} pv={stats?.visits.pv} />
       <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} availableSources={availableSources} />
       <AboutSection contacts={contacts} />
       <GuestbookSection

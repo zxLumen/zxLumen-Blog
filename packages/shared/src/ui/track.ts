@@ -8,7 +8,8 @@ import type { EventType } from '../schema.js'
 export function trackEvent(type: EventType, target = ''): void {
   if (typeof window === 'undefined') return
   try {
-    const body = JSON.stringify({ type, target })
+    const ref = typeof document !== 'undefined' ? document.referrer.slice(0, 500) : ''
+    const body = JSON.stringify({ type, target, ref })
     if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
       navigator.sendBeacon('/api/track', new Blob([body], { type: 'application/json' }))
       return

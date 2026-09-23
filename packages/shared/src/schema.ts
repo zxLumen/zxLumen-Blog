@@ -38,13 +38,14 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 
 CREATE TABLE IF NOT EXISTS events (
-  id     INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts     TEXT NOT NULL,            -- UTC 'YYYY-MM-DD HH:MM:SS'
-  day    TEXT NOT NULL,            -- 北京时 YYYY-MM-DD
-  cid    TEXT DEFAULT '',          -- 访客匿名 ID(UV 依据)
-  type   TEXT NOT NULL,            -- 'visit' | 'project_click' | 'resume_download'
-  target TEXT DEFAULT '',          -- 路径 / 项目 id / 文件名
-  ua     TEXT DEFAULT ''
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts       TEXT NOT NULL,            -- UTC 'YYYY-MM-DD HH:MM:SS'
+  day      TEXT NOT NULL,            -- 北京时 YYYY-MM-DD
+  cid      TEXT DEFAULT '',          -- 访客匿名 ID(UV 依据)
+  type     TEXT NOT NULL,            -- 'visit' | 'project_click' | 'resume_download'
+  target   TEXT DEFAULT '',          -- 路径 / 项目 id / 文件名
+  ua       TEXT DEFAULT '',
+  referrer TEXT DEFAULT ''           -- 落地来源(访客 document.referrer,仅 admin 可见)
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_day_type ON events(day, type);
@@ -131,6 +132,8 @@ export interface NewEventInput {
   target?: string
   cid?: string
   ua?: string
+  /** 落地来源(referrer) */
+  referrer?: string
 }
 
 export interface DayPoint {
@@ -154,6 +157,18 @@ export interface VisitorDetail {
   nickname: string
   /** 北京时间 MM-DD HH:mm */
   lastSeen: string
+  /** 北京时间 MM-DD HH:mm */
+  firstSeen: string
+  /** 是否回头客(访问 > 1 次) */
+  returning: boolean
+  /** 设备描述,如 "Windows · Chrome · 桌面" */
+  device: string
+  /** 会话数(相邻事件间隔 > 30 分钟切一次) */
+  sessions: number
+  /** 平均会话时长(秒) */
+  avgSessionSec: number
+  /** 落地来源(首个非空 referrer,空表示直接打开) */
+  referrer: string
   visits: number
   resumeDownloads: number
   commentCount: number
