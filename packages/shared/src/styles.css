@@ -2991,10 +2991,16 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0.3rem 0.7rem;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   backdrop-filter: blur(var(--card-blur));
   -webkit-backdrop-filter: blur(var(--card-blur));
   transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.zx-statswidget-btn:active {
+  cursor: grabbing;
 }
 
 .zx-statswidget-btn:hover,
@@ -3077,17 +3083,33 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   margin-bottom: 0.35rem;
 }
 
+/* 趋势两端柱子的提示向内侧对齐,避免溢出被裁切 */
+.zx-statswidget-trend .zx-bar:first-child[data-label]::after {
+  left: 0;
+  transform: none;
+}
+
+.zx-statswidget-trend .zx-bar:last-child[data-label]::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
 .zx-statswidget-foot {
   font-size: 0.6rem;
   text-align: right;
 }
 
 .zx-project-clicks {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
   font-size: 0.66rem;
-  color: var(--accent-2);
-  border: 1px solid color-mix(in srgb, var(--accent-2) 40%, var(--line));
-  border-radius: 999px;
-  padding: 0 0.45rem;
-  line-height: 1.5;
+  color: var(--fg-muted);
   white-space: nowrap;
+}
+
+.zx-project-clicks svg {
+  opacity: 0.7;
 }

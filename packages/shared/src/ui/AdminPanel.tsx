@@ -1057,10 +1057,6 @@ export function AdminPanel() {
               <div className="zx-stat-now">{fmtInt(stats.events.resumeDownloads)}</div>
               <div className="zx-stat-label">简历下载</div>
             </div>
-            <div className="zx-stat">
-              <div className="zx-stat-now">{fmtInt(stats.events.projectClicks)}</div>
-              <div className="zx-stat-label">项目点击</div>
-            </div>
           </div>
 
           <div className="zx-grid-stats" style={{ marginBottom: '1.2rem' }}>
