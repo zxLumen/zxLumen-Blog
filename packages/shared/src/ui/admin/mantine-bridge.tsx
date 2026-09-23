@@ -128,7 +128,7 @@ function derivePrimary(scheme: 'light' | 'dark') {
  * 重新生成 primary 色阶(其余全部走 CSS 变量,无需重挂)。
  */
 export function MantineBridge({ children }: { children: React.ReactNode }) {
-  const { theme } = usePrefs()
+  const { theme, themeMeta } = usePrefs()
   const [tokens, setTokens] = useState<{ accent: string; radius: number } | null>(null)
 
   useLayoutEffect(() => {
@@ -156,7 +156,9 @@ export function MantineBridge({ children }: { children: React.ReactNode }) {
     <MantineProvider
       theme={mantineTheme}
       cssVariablesResolver={zxResolver}
-      defaultColorScheme="auto"
+      // 跟随 zx 主题明暗(浅色主题→Mantine 浅色控件;深色主题→深色控件),
+      // 而不是跟随系统,避免"晚上系统深色导致 admin 输入框变黑"的错配。
+      forceColorScheme={themeMeta.mode}
     >
       {children}
     </MantineProvider>

@@ -74,6 +74,21 @@ cd apps/next-home && npm run lint && npm run build
 - `apps/next-home/public/resume.pdf`、`public/wechat.png`
 - `apps/next-home/resume/resume.md|html|pdf`(仅 `resume.py`/`resume.css` 入库)
 
+## 部署时必须同步的「不入库」内容(**每次上线都要做**)
+
+这些文件被 `.gitignore` 忽略,`git pull` **不会更新**;若只在本地改过,线上仍是旧值:
+
+1. **`packages/shared/src/content.local.ts`** —— 你的真实资料(姓名 / shell / 邮箱 /
+   bio / 合作链接 / 技术栈 / 时间线 / 项目卡 / 联系方式)。**改了它就必须上传到线上**
+   (`scp` 到 `~/zxLumen-Blog/packages/shared/src/content.local.ts`),然后**重新 build
+   + 重建容器**(它编译进 shared dist)。否则线上仍显示旧资料(如左上角 brand)。
+2. **`apps/next-home/public/resume.pdf` / `public/wechat.png`** —— 简历 / 微信二维码。
+3. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
+   改了邮箱/联系方式要**同时更新线上库**(线上 `/admin → 个人信息`,或直接改 `meta`)。
+
+> 一句话:**源码改了 `content.local.ts` / 简历 / 二维码 / 联系方式 → 上线时必须把它们
+> 传到线上并重建**。仅 `git push` + 容器重建是不够的。
+
 ## Git 规范
 
 - 原子提交,Conventional Commits,**中文 subject**(如 `feat(admin): ...`)
