@@ -3023,11 +3023,11 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   top: 6.6rem;
   right: 1rem;
   z-index: 401;
-  width: min(320px, calc(100vw - 2rem));
+  width: min(258px, calc(100vw - 2rem));
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
-  padding: 0.8rem 0.9rem;
+  padding: 0.65rem 0.75rem;
   box-shadow: 0 20px 50px -24px rgba(0, 0, 0, 0.9);
   font-family: var(--font-mono);
 }
@@ -3036,8 +3036,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.6rem;
-  font-size: 0.7rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.62rem;
 }
 
 .zx-statswidget-close {
@@ -3045,7 +3045,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   border: none;
   color: var(--fg-muted);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   padding: 0;
 }
 
@@ -3056,8 +3056,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 .zx-statswidget-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.6rem 0.4rem;
-  margin-bottom: 0.7rem;
+  gap: 0.5rem 0.3rem;
+  margin-bottom: 0.5rem;
 }
 
 .zx-statswidget-cell {
@@ -3065,22 +3065,22 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 .zx-statswidget-val {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--fg);
 }
 
 .zx-statswidget-lbl {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   color: var(--fg-muted);
 }
 
 .zx-statswidget-trend {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
-  height: 54px;
-  margin-bottom: 0.35rem;
+  gap: 6px;
+  height: 46px;
+  margin-bottom: 0.3rem;
 }
 
 /* 趋势两端柱子的提示向内侧对齐,避免溢出被裁切 */
@@ -3096,7 +3096,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 .zx-statswidget-foot {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   text-align: right;
 }
 

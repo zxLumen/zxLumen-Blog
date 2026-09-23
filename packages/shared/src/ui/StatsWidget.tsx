@@ -7,8 +7,8 @@ import { fmtCompact } from '../format.js'
 import { useFeature } from './theme-context.js'
 
 const POS_KEY = 'zx-stats-pos'
-const POP_W = 320
-const POP_H = 250
+const POP_W = 260
+const POP_H = 220
 
 function Cell({ label, value }: { label: string; value: string }) {
   return (
@@ -140,7 +140,8 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   if (!on || !stats) return null
 
   const { visits } = stats
-  const maxPv = Math.max(1, ...visits.days.map((d) => d.pv))
+  const days = visits.days.slice(-7)
+  const maxPv = Math.max(1, ...days.map((d) => d.pv))
 
   const btnStyle = pos ? { left: pos.x, top: pos.y, right: 'auto' } : undefined
 
@@ -165,7 +166,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
               <Cell label="访客(UV)" value={fmtCompact(visits.uv)} />
             </div>
             <div className="zx-statswidget-trend">
-              {visits.days.map((d) => (
+              {days.map((d) => (
                 <div
                   key={d.day}
                   className={`zx-bar${d.pv === 0 ? ' is-zero' : ''}`}
@@ -174,7 +175,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
                 />
               ))}
             </div>
-            <div className="zx-statswidget-foot zx-muted zx-mono">近 30 天 · 访问量(PV)</div>
+            <div className="zx-statswidget-foot zx-muted zx-mono">近 7 天 · 访问量(PV)</div>
           </div>,
           document.body,
         )
