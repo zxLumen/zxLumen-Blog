@@ -21,9 +21,9 @@ www.{$DOMAIN} {
 # 邮箱 Webmail / 管理后台 → Poste.io(host 网络,监听宿主机 8443)
 mail.{$DOMAIN} {
 	reverse_proxy host.docker.internal:8443 {
-		# 保留原始 Host / 转发头,避免 Poste 生成 host.docker.internal 的跳转
-		header_up Host {host}
-		header_up X-Forwarded-Host {host}
+		# 强制把外部 Host 传给 Poste(它按 Host 拼绝对跳转)
+		header_up Host {http.request.host}
+		header_up X-Forwarded-Host {http.request.host}
 		header_up X-Forwarded-Proto {scheme}
 		transport http {
 			tls_insecure_skip_verify
