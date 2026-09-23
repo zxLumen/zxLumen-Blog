@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { StatsResult } from '../schema.js'
-import { fmtCompact, fmtInt } from '../format.js'
+import { fmtCompact } from '../format.js'
 import { useFeature } from './theme-context.js'
 
 const POS_KEY = 'zx-stats-pos'
@@ -29,9 +29,27 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null)
-  const suppressClick = useRef(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }, [])
+  const scheduleClose = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    closeTimer.current = setTimeout(() => setOpen(false), 200)
+  }, [])
 
   useEffect(() => setMounted(true), [])
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current)
+    },
+    [],
+  )
 
   // 恢复上次拖动位置(限定在视口内)
   useEffect(() => {
@@ -62,7 +80,6 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
       const d = dragRef.current
       dragRef.current = null
       if (d?.moved) {
-        suppressClick.current = true
         setPos((p) => {
           if (p) {
             try {
@@ -108,21 +125,14 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
     }
   }, [open, pos, placePop])
 
-  // 点击外部 / Esc 关闭
+  // Esc 关闭
   useEffect(() => {
     if (!open) return
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node
-      if (btnRef.current?.contains(t) || popRef.current?.contains(t)) return
-      setOpen(false)
-    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
   }, [open])
@@ -137,7 +147,13 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   const popover =
     open && mounted && popPos
       ? createPortal(
-          <div ref={popRef} className="zx-statswidget-pop" style={{ left: popPos.left, top: popPos.top }}>
+          <div
+            ref={popRef}
+            className="zx-statswidget-pop"
+            style={{ left: popPos.left, top: popPos.top }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+          >
             <div className="zx-statswidget-head">
               <span className="zx-mono zx-muted">{'// VISITOR STATS'}</span>
               <button type="button" className="zx-statswidget-close" onClick={() => setOpen(false)} aria-label="关闭">
@@ -145,11 +161,8 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
               </button>
             </div>
             <div className="zx-statswidget-grid">
-              <Cell label="总访问" value={fmtCompact(visits.pv)} />
-              <Cell label="独立访客" value={fmtCompact(visits.uv)} />
-              <Cell label="今日访问" value={fmtInt(visits.today.pv)} />
-              <Cell label="今日访客" value={fmtInt(visits.today.uv)} />
-              <Cell label="在线" value={fmtInt(visits.online)} />
+              <Cell label="访问量(PV)" value={fmtCompact(visits.pv)} />
+              <Cell label="访客(UV)" value={fmtCompact(visits.uv)} />
             </div>
             <div className="zx-statswidget-trend">
               {visits.days.map((d) => (
@@ -180,19 +193,17 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
           const r = el.getBoundingClientRect()
           dragRef.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false }
         }}
-        onClick={() => {
-          if (suppressClick.current) {
-            suppressClick.current = false
-            return
-          }
-          setOpen((o) => !o)
+        onMouseEnter={() => {
+          cancelClose()
+          setOpen(true)
         }}
+        onMouseLeave={scheduleClose}
         title="访客统计(可拖动)"
       >
         <span className="zx-envdot" />
-        <span className="zx-mono">PV {fmtCompact(visits.pv)}</span>
+        <span className="zx-mono">访问 {fmtCompact(visits.pv)}</span>
         <span className="zx-statswidget-sep">·</span>
-        <span className="zx-mono zx-muted">在线 {visits.online}</span>
+        <span className="zx-mono zx-muted">访客 {fmtCompact(visits.uv)}</span>
       </button>
       {popover}
     </>
