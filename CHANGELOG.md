@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **admin 输入框/勾选框夜间变黑**:`MantineBridge` 由 `defaultColorScheme="auto"`(跟随系统深色)改为 `forceColorScheme=当前 zx 主题 mode`,admin 控件明暗与站点主题一致,不再因系统夜间模式错配
+
 ### 新增
 
 - **区块浏览统计**:用 `IntersectionObserver` 观察各区块(projects/usage/about/guestbook),访客**看到**区块时上报 `section_view`(target=`/#usage` 等,dwell=可见秒数,<1s 不计)。`section_view` 不影响 PV/UV
