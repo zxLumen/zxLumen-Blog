@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **外观配置(admin 可配)**:`/admin` 新增「外观」Tab,可勾选对访客开放的主题/布局(默认全部),并设定默认项;配置存 `meta` 键 `appearance_config`,接口 `GET/POST /api/admin/theme-config`,首帧注入随配置变化。约束:至少保留 1 个主题 + 1 个布局,默认项必须处于放行集合内(取消会自动切换)
+
 ### 变更
 
 - **收敛为单环境、单数据库**:移除整站 TEST/LIVE 双模式 —— 删除 `EnvSwitch`、`GET/POST /api/env`、`zx_env` cookie、`isTestMode()`/`testModeAvailable()`、`ALLOW_TEST_MODE`、`DB_TEST_PATH` 与 `seed:test`;`getActiveDb()` 整体删除,所有数据读写统一走 `getDb()`(唯一库 `DB_PATH`)。本地原测试库数据已迁移覆盖为唯一库(旧库备份)。见 `AGENTS.md`

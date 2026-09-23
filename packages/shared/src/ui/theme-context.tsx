@@ -10,8 +10,6 @@ import {
   useState,
 } from 'react'
 import {
-  DEFAULT_LAYOUT,
-  DEFAULT_THEME,
   LAYOUTS,
   THEMES,
   LAYOUT_STORAGE_KEY,
@@ -40,30 +38,35 @@ const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : use
 export function PreferencesProvider({
   allowedThemeIds,
   allowedLayoutIds,
+  defaultTheme,
+  defaultLayout,
   mockId,
   children,
 }: {
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
+  /** admin 配置的默认主题/布局(须在放行集合内) */
+  defaultTheme?: string
+  defaultLayout?: LayoutId
   /** 模拟访客身份:主题偏好按身份分键(等价于该访客设备的主题) */
   mockId?: string
   children: React.ReactNode
 }) {
-  const themes = useMemo(
-    () => THEMES.filter((t) => allowedThemeIds.includes(t.id)),
-    [allowedThemeIds],
-  )
-  const layouts = useMemo(
-    () => LAYOUTS.filter((l) => allowedLayoutIds.includes(l.id)),
-    [allowedLayoutIds],
-  )
+  const themes = useMemo(() => {
+    const list = THEMES.filter((t) => allowedThemeIds.includes(t.id))
+    return list.length > 0 ? list : THEMES
+  }, [allowedThemeIds])
+  const layouts = useMemo(() => {
+    const list = LAYOUTS.filter((l) => allowedLayoutIds.includes(l.id))
+    return list.length > 0 ? list : LAYOUTS
+  }, [allowedLayoutIds])
 
-  const [theme, setThemeState] = useState(
-    themes.some((t) => t.id === DEFAULT_THEME) ? DEFAULT_THEME : (themes[0]?.id ?? DEFAULT_THEME),
-  )
-  const [layout, setLayoutState] = useState<LayoutId>(
-    layouts.some((l) => l.id === DEFAULT_LAYOUT) ? DEFAULT_LAYOUT : (layouts[0]?.id ?? DEFAULT_LAYOUT),
-  )
+  const fallbackTheme = defaultTheme && themes.some((t) => t.id === defaultTheme) ? defaultTheme : themes[0].id
+  const fallbackLayout =
+    defaultLayout && layouts.some((l) => l.id === defaultLayout) ? defaultLayout : layouts[0].id
+
+  const [theme, setThemeState] = useState(fallbackTheme)
+  const [layout, setLayoutState] = useState<LayoutId>(fallbackLayout)
 
   const applyTheme = useCallback((id: string) => {
     const t = getTheme(id)
@@ -88,19 +91,19 @@ export function PreferencesProvider({
       }
     }
     const savedTheme = read(tk)
-    const nextTheme = savedTheme && themes.some((t) => t.id === savedTheme) ? savedTheme : themes[0].id
+    const nextTheme = savedTheme && themes.some((t) => t.id === savedTheme) ? savedTheme : fallbackTheme
     const savedLayout = read(LAYOUT_STORAGE_KEY)
     const nextLayout =
       savedLayout && layouts.some((l) => l.id === savedLayout)
         ? (savedLayout as LayoutId)
-        : (layouts[0]?.id ?? DEFAULT_LAYOUT)
+        : fallbackLayout
 
     setThemeState(nextTheme)
     setLayoutState(nextLayout)
     applyTheme(nextTheme)
     applyLayout(nextLayout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [themes, layouts, mockId])
+  }, [themes, layouts, mockId, fallbackTheme, fallbackLayout])
 
   const setTheme = useCallback(
     (id: string) => {

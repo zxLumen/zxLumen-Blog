@@ -14,9 +14,12 @@ interface ShellProps {
   pathname?: string
   link?: LinkComponent
   contacts?: Contacts
-  /** 允许的主题 / 布局(单环境为全量) */
+  /** 允许的主题 / 布局(admin 配置的放行集合) */
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
+  /** admin 配置的默认主题 / 布局(须在放行集合内) */
+  defaultTheme?: string
+  defaultLayout?: LayoutId
   /** 模拟访客身份:主题等偏好按身份分键(等价于一台独立设备) */
   mockId?: string
   extra?: React.ReactNode
@@ -32,6 +35,8 @@ export function Shell({
   contacts,
   allowedThemeIds,
   allowedLayoutIds,
+  defaultTheme,
+  defaultLayout,
   mockId,
   extra,
   children,
@@ -40,6 +45,8 @@ export function Shell({
     <PreferencesProvider
       allowedThemeIds={allowedThemeIds}
       allowedLayoutIds={allowedLayoutIds}
+      defaultTheme={defaultTheme}
+      defaultLayout={defaultLayout}
       mockId={mockId}
     >
       <div className="zx-app">

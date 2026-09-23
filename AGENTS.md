@@ -36,8 +36,14 @@ cd apps/next-home && npm run lint && npm run build
 
 ## 工作流:本地开发 → 打包 → 部署线上(单环境)
 
-全站**只有一个环境、一套数据**。没有 TEST/LIVE 之分,也没有主题/布局/功能白名单门控 ——
-18 套主题、10 套布局、全部功能一律放行,各 API 只读写唯一数据库(`DB_PATH`)。
+全站**只有一个环境、一套数据**。没有 TEST/LIVE 之分,也没有功能白名单门控 ——
+全部功能一律放行,各 API 只读写唯一数据库(`DB_PATH`)。
+
+**主题 / 布局的放行由 admin 配置**(`/admin` → 「外观」Tab):可勾选对访客开放哪些
+主题/布局,并设定默认项。配置存 `meta` 表键 `appearance_config`(JSON),读取/写入见
+`apps/next-home/src/lib/theme-config.ts`,接口 `GET/POST /api/admin/theme-config`。
+约束:**至少保留 1 个主题 + 1 个布局;默认项必须处于放行集合内**(取消默认项会自动切到
+集合内其它项)。未配置时默认全部放行。首帧注入见 `themeInitScript(...)`,随配置变化。
 
 规则:
 

@@ -3,6 +3,8 @@ export {
   THEMES,
   THEME_IDS,
   DEFAULT_THEME,
+  DEFAULT_APPEARANCE,
+  APPEARANCE_META_KEY,
   THEME_STORAGE_KEY,
   themeInitScript,
   isValidTheme,
@@ -13,7 +15,7 @@ export {
   LAYOUT_STORAGE_KEY,
   isValidLayout,
 } from './theme.js'
-export type { Theme, Texture, Mode, Layout, LayoutId } from './theme.js'
+export type { Theme, Texture, Mode, Layout, LayoutId, AppearanceConfig } from './theme.js'
 
 // 功能特性 id(单环境,全部放行)
 export { FEATURE_IDS } from './features.js'

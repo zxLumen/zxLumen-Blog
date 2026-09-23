@@ -6,6 +6,7 @@ import { fmtDateTime, fmtInt } from '../format.js'
 import { PROJECTS } from '../content.js'
 import { Pagination } from './Pagination.js'
 import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
+import { AdminThemePanel } from './admin/AdminThemePanel.js'
 
 async function loadPageData(page: number, pageSize: number): Promise<PagedComments> {
   const res = await fetch(`/api/admin/comments?page=${page}&pageSize=${pageSize}`, {
@@ -158,9 +159,9 @@ export function AdminPanel() {
   const [zpUrl, setZpUrl] = useState('')
   const [zpKey, setZpKey] = useState('')
   const [zpBusy, setZpBusy] = useState(false)
-  type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats' | 'projects'
+  type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats' | 'projects' | 'themes'
   const validTab = (t: unknown): t is TabKey =>
-    t === 'comments' || t === 'archive' || t === 'profile' || t === 'token' || t === 'stats' || t === 'projects'
+    t === 'comments' || t === 'archive' || t === 'profile' || t === 'token' || t === 'stats' || t === 'projects' || t === 'themes'
   // 刷新/新标签页都停留在上次 Tab(localStorage;SSR 首帧不渲染 tabs,无 hydration 冲突)
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === 'undefined') return 'comments'
@@ -687,7 +688,7 @@ export function AdminPanel() {
         <span className="zx-sec-tag">// ADMIN</span>
         {showTabs ? (
           <div className="zx-tabs is-inline">
-            {(['comments', 'archive', 'stats', 'profile', 'token', 'projects'] as const).map((t) => (
+            {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'themes'] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -704,7 +705,9 @@ export function AdminPanel() {
                         ? '个人信息'
                         : t === 'projects'
                           ? '项目'
-                          : 'Token 用量'}
+                          : t === 'themes'
+                            ? '外观'
+                            : 'Token 用量'}
               </button>
             ))}
           </div>
@@ -720,6 +723,10 @@ export function AdminPanel() {
 
       {(!showTabs || tab === 'projects') && (
         <AdminProjectsPanel active={!showTabs || tab === 'projects'} onNotify={(m) => setMsg(m)} showTabs={showTabs} tab={tab} />
+      )}
+
+      {(!showTabs || tab === 'themes') && (
+        <AdminThemePanel active={!showTabs || tab === 'themes'} onNotify={(m) => setMsg(m)} showTabs={showTabs} tab={tab} />
       )}
 
       {(!showTabs || tab === 'profile') && (

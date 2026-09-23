@@ -13,6 +13,8 @@ export function AppShell({
   contacts,
   allowedThemeIds,
   allowedLayoutIds,
+  defaultTheme,
+  defaultLayout,
   mockId,
   extra,
   children,
@@ -21,6 +23,9 @@ export function AppShell({
   contacts?: Contacts
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
+  /** admin 配置的默认主题 / 布局 */
+  defaultTheme?: string
+  defaultLayout?: LayoutId
   /** 模拟访客身份:主题等偏好按身份分键 */
   mockId?: string
   extra?: React.ReactNode
@@ -35,6 +40,8 @@ export function AppShell({
       contacts={contacts}
       allowedThemeIds={allowedThemeIds}
       allowedLayoutIds={allowedLayoutIds}
+      defaultTheme={defaultTheme}
+      defaultLayout={defaultLayout}
       mockId={mockId}
       extra={extra}
     >

@@ -92,7 +92,7 @@ const MOTIF_WAVE = [
   '   ╰──────────────────╯ ',
 ].join('\n')
 
-/* ---------- 18 套主题:前 6 为正式集(键 1–6;正式环境仅放行这 6 个) ---------- */
+/* ---------- 18 套主题:全部可选,放行集合由 admin 配置(默认全放行) ---------- */
 
 export const THEMES: Theme[] = [
   {
@@ -295,7 +295,7 @@ export const THEMES: Theme[] = [
   },
 ]
 
-/* ---------- 10 套布局:正式集仅 SIDEBAR ---------- */
+/* ---------- 10 套布局:全部可选,放行集合由 admin 配置(默认全放行) ---------- */
 
 export const LAYOUTS: Layout[] = [
   { id: 'classic', label: 'CLASSIC', tagline: '经典:左文右 ASCII,卡片网格', key: '1' },
@@ -310,11 +310,34 @@ export const LAYOUTS: Layout[] = [
   { id: 'showcase', label: 'SHOWCASE', tagline: '展示:视觉优先,ASCII 主视觉', key: '0' },
 ]
 
+/** 出厂默认(admin 可改放行集合与默认项,但默认项必须在放行集内) */
 export const DEFAULT_THEME = 'github-light'
 export const DEFAULT_LAYOUT: LayoutId = 'sidebar'
 
 export const THEME_IDS = THEMES.map((t) => t.id)
 export const LAYOUT_IDS = LAYOUTS.map((l) => l.id)
+
+/**
+ * 外观放行配置(admin 可配):访客可选的主题/布局集合 + 默认选中项。
+ * 默认项必须包含在放行集合内(由 API 与读取端保证)。
+ */
+export interface AppearanceConfig {
+  themes: string[]
+  layouts: LayoutId[]
+  defaultTheme: string
+  defaultLayout: LayoutId
+}
+
+/** 出厂默认配置:全部放行,默认 github-light / sidebar */
+export const DEFAULT_APPEARANCE: AppearanceConfig = {
+  themes: THEME_IDS,
+  layouts: LAYOUT_IDS,
+  defaultTheme: DEFAULT_THEME,
+  defaultLayout: DEFAULT_LAYOUT,
+}
+
+/** meta 表存储键 */
+export const APPEARANCE_META_KEY = 'appearance_config'
 
 export const getTheme = (id: string | null | undefined): Theme =>
   THEMES.find((t) => t.id === id) ?? THEMES.find((t) => t.id === DEFAULT_THEME) ?? THEMES[0]
@@ -334,18 +357,24 @@ const THEME_MAP = THEMES.reduce<Record<string, { t: Texture; m: Mode }>>((acc, t
 }, {})
 
 /**
- * 首帧无闪烁脚本:只接受 allowed 集合内的主题/布局,其余回退默认。
- * 由服务端按模式(正式/测试)生成 allowed 列表后注入 <head>。
+ * 首帧无闪烁脚本:只接受 allowed 集合内的主题/布局,其余回退到 default(默认项)。
+ * 由服务端读取 admin 配置后注入 <head>;default 始终包含在 allowed 内。
  * mockId:模拟访客身份时,主题键按身份后缀(等价于该访客设备的偏好)。
  */
-export function themeInitScript(allowedThemes: string[], allowedLayouts: string[], mockId?: string): string {
+export function themeInitScript(
+  allowedThemes: string[],
+  allowedLayouts: string[],
+  defaultTheme: string,
+  defaultLayout: string,
+  mockId?: string,
+): string {
   const themeStorageKey = `${THEME_STORAGE_KEY}${mockId ? `.${mockId}` : ''}`
   return `(function(){try{
 var T=${JSON.stringify(allowedThemes)},Tm=${JSON.stringify(THEME_MAP)},L=${JSON.stringify(allowedLayouts)};
 var D=document.documentElement;
-var th=localStorage.getItem('${themeStorageKey}');if(T.indexOf(th)<0)th='${DEFAULT_THEME}';
-var ly=localStorage.getItem('${LAYOUT_STORAGE_KEY}');if(L.indexOf(ly)<0)ly='${DEFAULT_LAYOUT}';
+var th=localStorage.getItem('${themeStorageKey}');if(T.indexOf(th)<0)th='${defaultTheme}';
+var ly=localStorage.getItem('${LAYOUT_STORAGE_KEY}');if(L.indexOf(ly)<0)ly='${defaultLayout}';
 var info=Tm[th]||{t:'none',m:'dark'};
 D.dataset.theme=th;D.dataset.layout=ly;D.dataset.texture=info.t;D.dataset.mode=info.m;
-}catch(e){document.documentElement.dataset.theme='${DEFAULT_THEME}';document.documentElement.dataset.layout='${DEFAULT_LAYOUT}';document.documentElement.dataset.texture='none';document.documentElement.dataset.mode='dark'}})()`
+}catch(e){document.documentElement.dataset.theme='${defaultTheme}';document.documentElement.dataset.layout='${defaultLayout}';document.documentElement.dataset.texture='none';document.documentElement.dataset.mode='dark'}})()`
 }
