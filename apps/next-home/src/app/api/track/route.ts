@@ -6,7 +6,7 @@ import { cidCookie, isMockActive, resolveCid } from '@/lib/clientid'
 
 export const dynamic = 'force-dynamic'
 
-const TYPES = new Set<EventType>(['visit', 'project_click', 'resume_download'])
+const TYPES = new Set<EventType>(['visit', 'project_click', 'resume_download', 'leave', 'section_view'])
 /** 常见爬虫/扫描器 UA(beacon 为 JS 触发,这里再兜一层) */
 const BOT_RE =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora|pinterest|headless|python-requests|curl|wget|go-http-client|axios|node-fetch/i
@@ -32,17 +32,19 @@ export async function POST(req: Request) {
   let type: EventType = 'visit'
   let target = ''
   let referrer = ''
+  let dwell = 0
   try {
-    const j = JSON.parse(await req.text()) as { type?: string; target?: string; ref?: string }
+    const j = JSON.parse(await req.text()) as { type?: string; target?: string; ref?: string; dwell?: number }
     if (j.type && TYPES.has(j.type as EventType)) type = j.type as EventType
     target = String(j.target ?? '').slice(0, 200)
     referrer = String(j.ref ?? '').slice(0, 200)
+    dwell = type === 'leave' || type === 'section_view' ? Math.max(0, Math.min(86400, Math.round(Number(j.dwell) || 0))) : 0
   } catch {
     /* 空/非法 body 视为 visit */
   }
 
   const { cid, isNew } = await resolveCid()
-  ;(await getDb()).addEvent({ type, target, cid, ua: ua.slice(0, 200), referrer })
+  ;(await getDb()).addEvent({ type, target, cid, ua: ua.slice(0, 200), referrer, dwell })
 
   const res = empty()
   if (isNew) res.headers.append('Set-Cookie', cidCookie(cid))

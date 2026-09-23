@@ -42,29 +42,16 @@ CREATE TABLE IF NOT EXISTS events (
   ts       TEXT NOT NULL,            -- UTC 'YYYY-MM-DD HH:MM:SS'
   day      TEXT NOT NULL,            -- 北京时 YYYY-MM-DD
   cid      TEXT DEFAULT '',          -- 访客匿名 ID(UV 依据)
-  type     TEXT NOT NULL,            -- 'visit' | 'project_click' | 'resume_download'
+  type     TEXT NOT NULL,            -- 'visit' | 'project_click' | 'resume_download' | 'leave'
   target   TEXT DEFAULT '',          -- 路径 / 项目 id / 文件名
   ua       TEXT DEFAULT '',
-  referrer TEXT DEFAULT ''           -- 落地来源(访客 document.referrer,仅 admin 可见)
+  referrer TEXT DEFAULT '',          -- 落地来源(访客 document.referrer,仅 admin 可见)
+  dwell    INTEGER DEFAULT 0         -- 前台停留秒数(仅 leave 事件)
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_day_type ON events(day, type);
 CREATE INDEX IF NOT EXISTS idx_events_cid ON events(cid);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
-
--- 项目覆盖配置(admin 可编辑;空字段表示跟随静态默认)
-CREATE TABLE IF NOT EXISTS project_overrides (
-  id         TEXT PRIMARY KEY,
-  name       TEXT DEFAULT '',
-  desc       TEXT DEFAULT '',
-  period     TEXT DEFAULT '',
-  status     TEXT DEFAULT '',          -- ''=默认 | online|demo|building|archived
-  featured   INTEGER DEFAULT -1,       -- -1=默认 | 1=是 | 0=否
-  demo_url   TEXT DEFAULT '',
-  repo_url   TEXT DEFAULT '',
-  tech       TEXT DEFAULT '',          -- JSON 数组字符串
-  updated_at TEXT
-);
 `
 
 export interface CommentRow {
@@ -138,8 +125,8 @@ export interface UsageRow {
 
 export type Visibility = 'public' | 'private'
 
-/** 埋点事件类型 */
-export type EventType = 'visit' | 'project_click' | 'resume_download'
+/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数) */
+export type EventType = 'visit' | 'project_click' | 'resume_download' | 'leave' | 'section_view'
 
 export interface NewEventInput {
   type: EventType
@@ -148,6 +135,8 @@ export interface NewEventInput {
   ua?: string
   /** 落地来源(referrer) */
   referrer?: string
+  /** 前台停留秒数(仅 leave 事件) */
+  dwell?: number
 }
 
 export interface DayPoint {
@@ -156,12 +145,14 @@ export interface DayPoint {
   uv: number
 }
 
-/** 单个访客的最近一条操作记录(时间与目标) */
+/** 单个访客的最近一条操作记录(时间与目标;区块浏览 target 形如 `/#usage`) */
 export interface VisitorEvent {
-  /** 北京时间 MM-DD HH:mm */
+  /** 北京时间 MM-DD HH:mm:ss */
   ts: string
   type: EventType
   target: string
+  /** 停留秒数(仅 leave 事件) */
+  dwell?: number
 }
 
 /** 单个访客的访问详情(仅站长接口/页面使用) */
@@ -222,32 +213,21 @@ export interface StatsResult {
   visitors: VisitorDetail[]
 }
 
-/** 项目覆盖配置:admin 在后台编辑的字段;空字段表示跟随静态默认 */
-export interface ProjectOverrideRecord {
+/**
+ * admin 可增删/排序的项目(整表覆盖模式,存 meta 键 `projects_config`)。
+ * 存 DB 时按数组顺序即展示顺序;`deleted=true` 表示已移入垃圾箱(首页不显示)。
+ * 含 deleted 字段是为了支持「软删除 + 可恢复/彻底删除」。
+ */
+export interface StoredProject {
   id: string
   name: string
   desc: string
-  period: string
-  /** ''=默认 | online|demo|building|archived */
-  status: string
-  /** -1=默认 | 1=是 | 0=否 */
-  featured: number
-  demoUrl: string
-  repoUrl: string
-  /** JSON 数组字符串('[]' 表示未覆盖) */
-  tech: string
-  updatedAt: string
-}
-
-export interface ProjectOverrideInput {
-  name?: string
-  desc?: string
+  tech: string[]
+  status: 'online' | 'demo' | 'building' | 'archived'
   period?: string
-  status?: string
-  /** -1 表示"跟随默认",不传也算默认 */
-  featured?: number
   demoUrl?: string
   repoUrl?: string
-  /** 逗号分隔字符串;空表示跟随默认 */
-  tech?: string
+  featured?: boolean
+  /** true=在垃圾箱(首页不显示);缺省/false=正常 */
+  deleted?: boolean
 }

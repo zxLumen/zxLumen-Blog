@@ -1,39 +1,34 @@
-import { isAdmin } from "@/lib/auth";
-import { readJson } from "@/lib/db";
-import { getDb } from "@/lib/db";
+import { isAdmin } from '@/lib/auth'
+import { readJson } from '@/lib/db'
 import {
-  applyProjectOverrides,
-  PROJECTS,
-  type ProjectOverrideInput,
-} from "@zx/shared";
+  getStoredProjects,
+  saveStoredProjects,
+  resetStoredProjects,
+} from '@/lib/projects-config'
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic'
 
-// admin 项目覆盖接口:
-//   GET    → { projects: 已合并覆盖的 PROJECTS, overrides: 覆盖记录[] }
-//   POST   → { id, input: ProjectOverrideInput } 保存覆盖
-//   DELETE → { id } 清除覆盖(恢复静态默认)
+// admin 项目管理接口(整表覆盖模式):
+//   GET    → { projects: 全部(含垃圾箱) }  数组顺序 = 展示顺序
+//   POST   → { projects: StoredProject[] }  整表保存(新增/编辑/排序/软删除都走这里)
+//   DELETE → 恢复为静态默认(删除配置)
 export async function GET() {
-  if (!(await isAdmin())) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const db = await getDb();
-  const overrides = db.getProjectOverrides();
-  return Response.json({ projects: applyProjectOverrides(PROJECTS, overrides), overrides });
+  if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  return Response.json({ projects: getStoredProjects() })
 }
 
 export async function POST(req: Request) {
-  if (!(await isAdmin())) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const body = await readJson<{ id: string; input: ProjectOverrideInput }>(req).catch(() => null);
-  if (!body?.id || !body.input) return Response.json({ error: "缺少 id/input" }, { status: 400 });
-  const db = await getDb();
-  db.setProjectOverride(body.id, body.input);
-  return Response.json({ ok: true });
+  if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const body = await readJson<{ projects?: unknown }>(req).catch(() => null)
+  if (!body || !Array.isArray(body.projects)) {
+    return Response.json({ error: '缺少 projects 数组' }, { status: 400 })
+  }
+  const projects = saveStoredProjects(body.projects)
+  return Response.json({ ok: true, projects })
 }
 
-export async function DELETE(req: Request) {
-  if (!(await isAdmin())) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const body = await readJson<{ id: string }>(req).catch(() => null);
-  if (!body?.id) return Response.json({ error: "缺少 id" }, { status: 400 });
-  const db = await getDb();
-  db.clearProjectOverride(body.id);
-  return Response.json({ ok: true });
+export async function DELETE() {
+  if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const projects = resetStoredProjects()
+  return Response.json({ ok: true, projects })
 }

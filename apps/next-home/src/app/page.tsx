@@ -8,7 +8,7 @@ import { effectiveCid, isMockActive, MOCK_COOKIE } from "@/lib/clientid";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
 import { fetchUsage } from "@/lib/deepseek";
 import { getSourceAvailability } from "@/lib/usage-sources";
-import { applyProjectOverrides, PROJECTS } from "@zx/shared";
+import { getVisibleProjects } from "@/lib/projects-config";
 export const dynamic = "force-dynamic";
 
 /** 昵称 cookie 键:模拟访客时按身份分键(与 shared nickKey 规则一致) */
@@ -66,8 +66,8 @@ export default async function Home() {
     usageWindow = undefined;
   }
 
-  // 项目 admin 覆盖(admin 后台编辑)合并到静态 PROJECTS:首页项目卡按覆盖渲染
-  const projects = applyProjectOverrides(PROJECTS, db.getProjectOverrides());
+  // 项目(admin 后台增删/排序/软删;未配置时用静态 PROJECTS)
+  const projects = getVisibleProjects();
 
   return (
     <HomePage

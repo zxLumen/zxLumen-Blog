@@ -8,6 +8,7 @@
 - `packages/shared`:设计系统(主题/布局)+ 共享 React 组件 + 类型 + SQLite 数据层(`@zx/shared`)
 - `docker/`:Dockerfile / compose / Caddyfile / 备份脚本
 - `docs/`:部署、上报等文档
+- `TODO.md`:待办清单 / Roadmap(新需求先记这里)
 
 ## 常用命令
 

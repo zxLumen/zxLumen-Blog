@@ -30,9 +30,9 @@ export {
   PROJECTS,
   NAV,
   NAV_INIT_SCRIPT,
+  SECTION_LABELS,
   SITE_META,
   CONTACTS,
-  applyProjectOverrides,
 } from './content.js'
 export type {
   LinkItem,
@@ -44,8 +44,8 @@ export type {
   Contacts,
 } from './content.js'
 
-// 项目覆盖配置(admin 后台编辑)
-export type { ProjectOverrideRecord, ProjectOverrideInput } from './schema.js'
+// 项目数据(整表覆盖:admin 可增删/排序/软删,存 meta 键 projects_config)
+export type { StoredProject } from './schema.js'
 
 // 计价与统计
 export {

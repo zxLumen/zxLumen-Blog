@@ -6,9 +6,20 @@
 
 ### 新增
 
+- **区块浏览统计**:用 `IntersectionObserver` 观察各区块(projects/usage/about/guestbook),访客**看到**区块时上报 `section_view`(target=`/#usage` 等,dwell=可见秒数,<1s 不计)。`section_view` 不影响 PV/UV
+  - 修复:`TrackBeacon` 的 `fired` 守卫导致 React StrictMode「挂载→清理→再挂载」后监听器/observer 被清除且不再注册,`section_view`/`leave` 曾全部丢失;改为模块级 `visit` 去重、effect 每次正常注册/清理
+  - 区块判定由「可见比例 ≥50%」(高区块永不可达)改为「可见高度 ≥160px」
+
+- **访客真实停留时长**:新增埋点事件 `leave`,`TrackBeacon` 统计页面**前台可见**时长(切后台暂停、回来累加),离开时上报 `dwell` 秒数(`events` 表加 `dwell` 列)。admin「访客明细」的「平均」改为优先取真实停留;无 `dwell` 的老数据回退原「首末事件间隔」估算。`leave` 不计入 PV/UV
+
+- **项目管理支持增删/排序**:`/admin` → 「项目」Tab 可**新增**(自动生成 id)、**编辑**、**上移/下移排序**、**软删除**(移入垃圾箱,可恢复或彻底删除);第一次未配置时以静态 `PROJECTS` 为初始列表。存储改为 `meta` 键 `projects_config`(完整有序 JSON),`page.tsx` 用 `getVisibleProjects()` 下发;旧 `project_overrides` 表与 `applyProjectOverrides` 已移除
+
 - **外观配置(admin 可配)**:`/admin` 新增「外观」Tab,可勾选对访客开放的主题/布局(默认全部),并设定默认项;配置存 `meta` 键 `appearance_config`,接口 `GET/POST /api/admin/theme-config`,首帧注入随配置变化。约束:至少保留 1 个主题 + 1 个布局,默认项必须处于放行集合内(取消会自动切换)
 
 ### 变更
+
+- **访客明细可读性**:展开后改为「看过区块」(按区块聚合计数,中文名,如 `Token 用量 ×2`)+「最近操作」两栏;操作流水逐行对齐(时间到秒 / 类型 / 目标),保留全部事件(访问/点击/下载/区块浏览/离开-带停留秒数),**连续同路径去重**,不再是一长串平铺;`recent` 上限 8→30
+- **导航文案中文化**:顶栏/侧栏导航由 `home/projects/...` 改为 主页 / 项目 / 用量 / 关于 / 留言板;新增 `SECTION_LABELS`(区块 id → 中文名)供访客明细复用
 
 - **收敛为单环境、单数据库**:移除整站 TEST/LIVE 双模式 —— 删除 `EnvSwitch`、`GET/POST /api/env`、`zx_env` cookie、`isTestMode()`/`testModeAvailable()`、`ALLOW_TEST_MODE`、`DB_TEST_PATH` 与 `seed:test`;`getActiveDb()` 整体删除,所有数据读写统一走 `getDb()`(唯一库 `DB_PATH`)。本地原测试库数据已迁移覆盖为唯一库(旧库备份)。见 `AGENTS.md`
 - **放开全部主题/布局/功能**:删除白名单门控 `LIVE_THEME_IDS`/`LIVE_LAYOUT_IDS`/`LIVE_FEATURES`/`isFeatureAllowed`/`featureOn`/`useFeature` 及 `allowedFeatures` 传递链路;18 套主题、10 套布局、全部功能一律放行

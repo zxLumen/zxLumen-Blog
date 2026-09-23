@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ArchivedCommentRow, CommentRow, EventType, PagedComments, StatsResult, VisitorDetail } from '../schema.js'
 import { fmtDateTime, fmtInt } from '../format.js'
-import { PROJECTS } from '../content.js'
+import { PROJECTS, SECTION_LABELS } from '../content.js'
 import { Pagination } from './Pagination.js'
 import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
 import { AdminThemePanel } from './admin/AdminThemePanel.js'
@@ -22,6 +22,8 @@ const EVENT_LABEL: Record<EventType, string> = {
   visit: '访问',
   project_click: '项目点击',
   resume_download: '简历下载',
+  leave: '离开',
+  section_view: '区块浏览',
 }
 
 function targetLabel(t: string) {
@@ -46,6 +48,27 @@ function VisitorDetailRow({
     if (sec >= 60) return `${Math.floor(sec / 60)}分${sec % 60 ? ` ${sec % 60}s` : ''}`
     return `${sec}s`
   }
+  // 区块浏览聚合:区块名 → { count }
+  const sectionAgg = new Map<string, { count: number }>()
+  for (const e of v.recent) {
+    if (e.type !== 'section_view' || !e.target) continue
+    const id = e.target.split('#')[1] ?? e.target
+    const cur = sectionAgg.get(id) ?? { count: 0 }
+    cur.count += 1
+    sectionAgg.set(id, cur)
+  }
+  const sectionList = [...sectionAgg.entries()].sort((a, b) => b[1].count - a[1].count)
+  // 目标显示:区块浏览 → 中文区块名;离开 → 停留时长;其它 → 项目名/原值
+  const showTarget = (type: string, target: string, dwell?: number) => {
+    if (type === 'leave') return dwell ? `停留 ${m(dwell)}` : ''
+    if (!target) return ''
+    if (type === 'section_view') {
+      const id = target.split('#')[1] ?? target
+      return SECTION_LABELS[id] ?? target
+    }
+    return targetLabel(target)
+  }
+  const ops = v.recent
   return (
     <>
       <tr className={open ? 'is-open' : ''} onClick={onToggle} style={{ cursor: 'pointer' }}>
@@ -83,6 +106,7 @@ function VisitorDetailRow({
               <span>{v.device}</span>
               <span>来源 {v.referrer || '直接打开'}</span>
             </div>
+
             {proj && (
               <div className="zx-visitor-line">
                 项目点击:{' '}
@@ -92,14 +116,36 @@ function VisitorDetailRow({
                   .join('、')}
               </div>
             )}
-            {v.recent.length > 0 && (
-              <div className="zx-visitor-events zx-mono zx-muted">
-                {v.recent.map((e, i) => (
-                  <div key={i}>
-                    {e.ts} · {EVENT_LABEL[e.type]}
-                    {e.target ? ` · ${targetLabel(e.target)}` : ''}
-                  </div>
-                ))}
+
+            <div className="zx-visitor-block">
+              <span className="zx-visitor-block-title">看过区块</span>
+              {sectionList.length > 0 ? (
+                <span className="zx-proj-chips">
+                  {sectionList.map(([id, s]) => (
+                    <span key={id} className="zx-sec-chip">
+                      {SECTION_LABELS[id] ?? `#${id}`} ×{s.count}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span className="zx-muted">—</span>
+              )}
+            </div>
+
+            {ops.length > 0 && (
+              <div className="zx-visitor-block">
+                <span className="zx-visitor-block-title">最近操作</span>
+                <div className="zx-visitor-ops zx-mono zx-muted">
+                  {ops.map((e, i) => (
+                    <div key={i} className="zx-visitor-op">
+                      <span className="zx-op-time">{e.ts}</span>
+                      <span className="zx-op-type">{EVENT_LABEL[e.type]}</span>
+                      {showTarget(e.type, e.target, e.dwell) ? (
+                        <span className="zx-op-target">{showTarget(e.type, e.target, e.dwell)}</span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </td>

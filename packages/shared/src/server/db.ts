@@ -8,8 +8,6 @@ import {
   type NewEventInput,
   type PagedArchived,
   type PagedComments,
-  type ProjectOverrideInput,
-  type ProjectOverrideRecord,
   type StatsResult,
   type UsageRow,
   type Visibility,
@@ -71,10 +69,6 @@ export interface Db {
   stats(opts?: { trendDays?: number; onlineMinutes?: number; visitors?: boolean }): StatsResult
   countComments(): number
   clearComments(): number
-  /** admin 可编辑的项目覆盖配置(空字段=跟随静态默认) */
-  getProjectOverrides(): ProjectOverrideRecord[]
-  setProjectOverride(id: string, input: ProjectOverrideInput): void
-  clearProjectOverride(id: string): void
   getMeta(key: string): string | null
   setMeta(key: string, value: string): void
   delMeta(key: string): void
@@ -93,28 +87,77 @@ const bjTime = (utc: string) => {
   return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
 }
 
+/** 将 UTC ts 转北京时间 MM-DD HH:mm:ss(访客明细流水用) */
+const bjTimeSec = (utc: string) => {
+  const d = new Date(new Date(utc.replace(' ', 'T') + 'Z').getTime() + 8 * 3600 * 1000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`
+}
+
 /** UTC ts 字符串 → 毫秒时间戳 */
 const tsMs = (utc: string) => new Date(utc.replace(' ', 'T') + 'Z').getTime()
 
 /** 会话切分阈值:相邻事件间隔超过 30 分钟视为新会话 */
 const SESSION_GAP_MS = 30 * 60 * 1000
 
-/** 从按时间升序的事件里计算会话数与平均时长(秒) */
-function computeSessions(rows: { ts: string }[]) {
+/** 访客明细「最近操作」保留的最大条数 */
+const RECENT_MAX = 30
+
+/**
+ * 构造访客明细的「最近操作」流水(时间倒序)。
+ * - **保留全部事件**(visit / project_click / resume_download / section_view / leave);
+ * - **连续去重**:相邻两条若 type 与 target 都相同,只留一条(如连续多次 `访问 /`);
+ * - 只取最近 RECENT_MAX 条。
+ */
+function buildRecent(
+  rows: { ts: string; type: EventType; target: string; dwell?: number }[],
+): { ts: string; type: EventType; target: string; dwell?: number }[] {
+  const out: { ts: string; type: EventType; target: string; dwell?: number }[] = []
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const cur = rows[i]
+    const prev = out[out.length - 1]
+    if (prev && prev.type === cur.type && prev.target === cur.target) continue
+    out.push(cur)
+    if (out.length >= RECENT_MAX) break
+  }
+  return out.map((e) => ({
+    ts: bjTimeSec(e.ts),
+    type: e.type,
+    target: e.target,
+    ...(e.type === 'leave' && e.dwell ? { dwell: e.dwell } : {}),
+  }))
+}
+
+/**
+ * 从按时间升序的事件里计算会话数与平均时长(秒)。
+ *
+ * 会话时长优先用 `leave` 事件的 `dwell`(前台可见停留秒数)求和;
+ * 若该会话没有任何 dwell(老数据 / 未触发离开上报),回退为「首末事件间隔」估算。
+ */
+function computeSessions(rows: { ts: string; type?: string; dwell?: number }[]) {
   let count = 0
   let totalMs = 0
-  let prevMs = 0
   let sessStartMs = 0
+  let sessDwell = 0
+  let prevMs = 0
+
+  const flush = () => {
+    // 有 dwell 用真实停留;否则用首末事件跨度
+    totalMs += sessDwell > 0 ? sessDwell * 1000 : Math.max(0, prevMs - sessStartMs)
+  }
+
   for (const row of rows) {
     const ms = tsMs(row.ts)
     if (prevMs === 0 || ms - prevMs > SESSION_GAP_MS) {
-      if (prevMs > 0) totalMs += prevMs - sessStartMs
+      if (prevMs > 0) flush()
       count++
       sessStartMs = ms
+      sessDwell = 0
     }
+    if (row.type === 'leave') sessDwell += Math.max(0, Number(row.dwell) || 0)
     prevMs = ms
   }
-  if (prevMs > 0) totalMs += prevMs - sessStartMs
+  if (prevMs > 0) flush()
   return { count, avgSec: count ? Math.round(totalMs / count / 1000) : 0 }
 }
 
@@ -164,11 +207,12 @@ export function openDb(path: string): Db {
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_comments_cid ON comments(author_cid)')
 
-  // 迁移:events 表补 referrer 列
+  // 迁移:events 表补 referrer / dwell 列
   const ecols = new Set(
     (db.prepare('PRAGMA table_info(events)').all() as { name: string }[]).map((c) => c.name),
   )
   if (!ecols.has('referrer')) db.exec("ALTER TABLE events ADD COLUMN referrer TEXT DEFAULT ''")
+  if (!ecols.has('dwell')) db.exec('ALTER TABLE events ADD COLUMN dwell INTEGER DEFAULT 0')
 
   const mapUsage = (r: Record<string, unknown>): UsageRow => ({
     id: r.id as number,
@@ -446,8 +490,8 @@ export function openDb(path: string): Db {
 
     addEvent(input) {
       db.prepare(
-        `INSERT INTO events (ts, day, cid, type, target, ua, referrer)
-         VALUES (@ts, @day, @cid, @type, @target, @ua, @referrer)`,
+        `INSERT INTO events (ts, day, cid, type, target, ua, referrer, dwell)
+         VALUES (@ts, @day, @cid, @type, @target, @ua, @referrer, @dwell)`,
       ).run({
         ts: nowIso(),
         day: bjDay(),
@@ -456,6 +500,7 @@ export function openDb(path: string): Db {
         target: input.target ?? '',
         ua: input.ua ?? '',
         referrer: input.referrer ?? '',
+        dwell: Math.max(0, Math.round(Number(input.dwell) || 0)),
       })
     },
 
@@ -555,7 +600,7 @@ export function openDb(path: string): Db {
       }
 
       const histStmt = db.prepare(
-        `SELECT ts, type, target, referrer, ua FROM events
+        `SELECT ts, type, target, referrer, ua, dwell FROM events
           WHERE cid = ? ORDER BY ts ASC, id ASC LIMIT 500`,
       )
 
@@ -566,6 +611,7 @@ export function openDb(path: string): Db {
           target: string
           referrer: string
           ua: string
+          dwell: number
         }[]
         const { count: sessions, avgSec } = computeSessions(hist)
         let referrer = ''
@@ -584,10 +630,7 @@ export function openDb(path: string): Db {
           resumeDownloads: r.resumeDownloads,
           commentCount: ccMap.get(r.cid) ?? 0,
           projectClicks: clickByCid.get(r.cid) ?? {},
-          recent: hist
-            .slice(-8)
-            .reverse()
-            .map((e) => ({ ts: bjTime(e.ts), type: e.type, target: e.target })),
+          recent: buildRecent(hist),
         }
       })
       }
@@ -606,63 +649,6 @@ export function openDb(path: string): Db {
 
     clearComments() {
       return db.prepare(`DELETE FROM comments`).run().changes
-    },
-
-    getProjectOverrides() {
-      const rows = db
-        .prepare(`SELECT * FROM project_overrides ORDER BY id`)
-        .all() as {
-        id: string
-        name: string
-        desc: string
-        period: string
-        status: string
-        featured: number
-        demo_url: string
-        repo_url: string
-        tech: string
-        updated_at: string
-      }[]
-      return rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        desc: r.desc,
-        period: r.period,
-        status: r.status,
-        featured: r.featured,
-        demoUrl: r.demo_url,
-        repoUrl: r.repo_url,
-        tech: r.tech,
-        updatedAt: r.updated_at,
-      }))
-    },
-
-    setProjectOverride(id, input) {
-      const now = nowIso()
-      db.prepare(
-        `INSERT INTO project_overrides(id, name, desc, period, status, featured, demo_url, repo_url, tech, updated_at)
-         VALUES(@id, @name, @desc, @period, @status, @featured, @demoUrl, @repoUrl, @tech, @updatedAt)
-         ON CONFLICT(id) DO UPDATE SET
-           name=excluded.name, desc=excluded.desc, period=excluded.period,
-           status=excluded.status, featured=excluded.featured,
-           demo_url=excluded.demo_url, repo_url=excluded.repo_url,
-           tech=excluded.tech, updated_at=excluded.updated_at`,
-      ).run({
-        id,
-        name: input.name ?? '',
-        desc: input.desc ?? '',
-        period: input.period ?? '',
-        status: input.status ?? '',
-        featured: input.featured ?? -1,
-        demoUrl: input.demoUrl ?? '',
-        repoUrl: input.repoUrl ?? '',
-        tech: input.tech ?? '',
-        updatedAt: now,
-      })
-    },
-
-    clearProjectOverride(id) {
-      db.prepare(`DELETE FROM project_overrides WHERE id = ?`).run(id)
     },
 
     getMeta(key) {

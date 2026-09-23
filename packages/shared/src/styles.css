@@ -1835,7 +1835,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 [data-layout='window'] .zx-app::before {
-  content: '● ● ●      zx.dev — /home';
+  content: '● ● ●      zxlumen.cn — /home';
   display: block;
   padding: 0.5rem 0.9rem;
   font-family: var(--font-mono);
@@ -3089,6 +3089,61 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 .zx-visitor-line {
   margin-bottom: 0.3rem;
+}
+
+.zx-visitor-block {
+  margin-top: 0.35rem;
+}
+
+.zx-visitor-block-title {
+  display: inline-block;
+  min-width: 4.4rem;
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  vertical-align: top;
+}
+
+.zx-sec-chip {
+  display: inline-block;
+  margin: 0 0.35rem 0.25rem 0;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  font-size: 0.7rem;
+}
+
+/* 操作流水:单列逐行,时间/类型/目标对齐,便于阅读 */
+.zx-visitor-ops {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  vertical-align: top;
+  font-size: 0.72rem;
+  max-width: 100%;
+}
+
+.zx-visitor-op {
+  display: flex;
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+
+.zx-visitor-op .zx-op-time {
+  color: var(--fg-muted);
+  min-width: 6.4rem;
+}
+
+.zx-visitor-op .zx-op-type {
+  color: var(--fg-dim);
+  min-width: 4rem;
+}
+
+.zx-visitor-op .zx-op-target {
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .zx-visitor-events {

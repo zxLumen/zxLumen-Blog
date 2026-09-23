@@ -19,6 +19,12 @@
 
 - 页面加载时,`TrackBeacon` 向 `POST /api/track` 上报 `{type:'visit', target: pathname}`。
 - 项目「试用/repo」链接、简历「下载」按钮点击时上报 `project_click`(target=项目 id)/ `resume_download`。
+- **停留时长**:页面**前台可见**时计时(切后台/隐藏暂停,回来继续累加),在离开
+  (`pagehide` / `visibilitychange→hidden`)时上报 `{type:'leave', dwell: 秒数}`。
+  仅前台计时,后台挂机不计入 → 更接近真实阅读时长。
+- **区块浏览**:用 `IntersectionObserver` 观察 `section[id]`(projects/usage/about/guestbook),
+  区块可见(≥50%)时计时,离开视口/卸载时上报 `{type:'section_view', target:'/#<id>', dwell: 秒数}`
+  (可见 < 1s 不计)。`section_view` **不计入 PV/UV**。
 - 服务端 `POST /api/track`:
   - **始终采集**(匿名聚合);
   - **排除**:站长本人(`isAdmin`)、常见爬虫/扫描器 UA;
@@ -37,26 +43,29 @@
 | ts | UTC `YYYY-MM-DD HH:MM:SS` |
 | day | 北京时 `YYYY-MM-DD`(UV/PV 按此聚合) |
 | cid | 访客匿名 ID(UV 依据) |
-| type | `visit` / `project_click` / `resume_download` |
-| target | 路径 / 项目 id / 文件名 |
+| type | `visit` / `project_click` / `resume_download` / `leave` / `section_view` |
+| target | 路径 / 项目 id / 文件名 / 区块(`/#usage`) |
 | ua | User-Agent(仅用于过滤,不展示) |
+| referrer | 落地来源(document.referrer,仅 admin 可见) |
+| dwell | 停留秒数(`leave` = 整页前台停留;`section_view` = 该区块可见时长) |
 
 聚合在 `Db.stats()`(`packages/shared/src/server/db.ts`);SSR 由 `page.tsx` 计算后下发。
 
-## 项目配置(admin 后台覆盖)
+## 项目(admin 可增删/排序)
 
-`/admin` → **项目** Tab(或单区模式下的「项目管理」面板)可在线覆盖各项目的
-名称/描述/周期/状态/featured/demoUrl/repoUrl/tech:
+`/admin` → **项目** Tab 可**新增 / 编辑 / 排序(上移下移)/ 删除**项目:
 
-- 存储:`project_overrides` 表(`packages/shared/src/schema.ts`);未覆盖字段跟随静态 `PROJECTS`。
-- 接口:`GET/POST/DELETE /api/admin/projects`(仅站长)。
-- SSR:`page.tsx` 用 `applyProjectOverrides(PROJECTS, db.getProjectOverrides())` 合并后下发,**保存即生效**。
-- 「恢复默认」= 删除该项目的覆盖记录。
-- 口径:字段留空表示「跟随默认」,不会把默认值写死;`featured` 用 `-1=默认 / 1=是 / 0=否`。
+- 存储:`meta` 键 `projects_config`(完整有序 JSON 数组;顺序即展示顺序)。首次未配置时以静态 `PROJECTS`(content.local.ts)为初始列表。
+- **软删除**:删除 = 移入「垃圾箱」(标记 `deleted`,`/admin` 可恢复或彻底删除);首页不显示垃圾箱项目。
+- 接口:`GET/POST/DELETE /api/admin/projects`(仅站长):GET 取全部(含垃圾箱)、POST 整表保存、DELETE 恢复静态默认。
+- SSR:`page.tsx` 用 `getVisibleProjects()`(排除垃圾箱)下发给首页,**保存即生效**。
 
 ## 口径
 
-- **PV** = `type='visit'` 行数;**UV** = 按 `(day, cid)` 去重;**在线** = 近 N 分钟(默认 5)内出现过的 cid 数(粗略估算)。
+- **PV** = `type='visit'` 行数(`leave` 不计入 PV);**UV** = 按 `(day, cid)` 去重;**在线** = 近 N 分钟(默认 5)内出现过的 cid 数(粗略估算)。
+- **会话**:同一 cid 相邻事件间隔 > 30 分钟切一次。
+- **平均会话时长**:优先用会话内 `leave` 事件的 `dwell` 求和(真实前台停留);若该会话无 `dwell`(老数据 / 未触发离开上报),回退为「会话内首末事件间隔」估算。
+- **admin 访客明细**:展开后显示「看过区块」(按区块聚合计数,用中文名)与「最近操作」(访问/点击/下载,`leave`/`section_view` 不重复列流水);区块目标形如 `/#usage`,显示为友好名(见 `SECTION_LABELS`)。
 - 访客口径:**排除站长本人与 MOCK**;过滤爬虫;UV 按天去重。
 
 ## 隐私
