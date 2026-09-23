@@ -24,8 +24,10 @@ export async function POST(req: Request) {
   if (!rateLimit(`track:${ip}`, 120)) return empty()
   const ua = req.headers.get('user-agent') ?? ''
   if (BOT_RE.test(ua)) return empty()
-  if (await isAdmin()) return empty()
-  if (await isMockActive()) return empty()
+  // 站长本人不计入;但测试模式下开启 MOCK(=以某匿名访客身份浏览)时放行,
+  // 便于在测试库里验收 多身份 PV/UV/点击 等统计链路(仅测试模式 + 站长可设 mock)。
+  const mocking = await isMockActive()
+  if (!mocking && (await isAdmin())) return empty()
 
   let type: EventType = 'visit'
   let target = ''
