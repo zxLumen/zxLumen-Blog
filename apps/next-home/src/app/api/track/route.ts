@@ -1,6 +1,6 @@
 import type { EventType } from '@zx/shared'
 import { isAdmin } from '@/lib/auth'
-import { getActiveDb } from '@/lib/env'
+import { getDb } from '@/lib/db'
 import { clientIp, rateLimit } from '@/lib/db'
 import { cidCookie, isMockActive, resolveCid } from '@/lib/clientid'
 
@@ -24,8 +24,8 @@ export async function POST(req: Request) {
   if (!rateLimit(`track:${ip}`, 120)) return empty()
   const ua = req.headers.get('user-agent') ?? ''
   if (BOT_RE.test(ua)) return empty()
-  // 站长本人不计入;但测试模式下开启 MOCK(=以某匿名访客身份浏览)时放行,
-  // 便于在测试库里验收 多身份 PV/UV/点击 等统计链路(仅测试模式 + 站长可设 mock)。
+  // 站长本人不计入;但开启 MOCK(=以某匿名访客身份浏览)时放行,
+  // 便于验收 多身份 PV/UV/点击 等统计链路(仅站长可设 mock)。
   const mocking = await isMockActive()
   if (!mocking && (await isAdmin())) return empty()
 
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   }
 
   const { cid, isNew } = await resolveCid()
-  ;(await getActiveDb()).addEvent({ type, target, cid, ua: ua.slice(0, 200), referrer })
+  ;(await getDb()).addEvent({ type, target, cid, ua: ua.slice(0, 200), referrer })
 
   const res = empty()
   if (isNew) res.headers.append('Set-Cookie', cidCookie(cid))

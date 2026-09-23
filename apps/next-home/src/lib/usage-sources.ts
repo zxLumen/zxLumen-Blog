@@ -1,7 +1,7 @@
 import { getToken, fetchUsage } from './deepseek'
 import { getServiceKey, fetchUsageOpenCode } from './opencode'
 import { getApiKey, fetchUsageZhipu } from './zhipu'
-import { getActiveDb, featureOn } from './env'
+import { getDb } from './db'
 
 /** 各数据源是否应在面板显示:已配置 且 近 30 天有数据 */
 export interface SourceAvailability {
@@ -20,7 +20,7 @@ async function hasDeepseekData(): Promise<boolean> {
   } catch {
     /* fall through to local */
   }
-  const local = (await getActiveDb()).listUsage(30)
+  const local = getDb().listUsage(30)
   return local.length > 0
 }
 
@@ -46,8 +46,8 @@ async function hasZhipuData(): Promise<boolean> {
 export async function getSourceAvailability(): Promise<SourceAvailability> {
   const [deepseek, opencode, zhipu] = await Promise.all([
     hasDeepseekData(),
-    featureOn('usage-opencode').then((on) => (on ? hasOpenCodeData() : false)),
-    featureOn('usage-zhipu').then((on) => (on ? hasZhipuData() : false)),
+    hasOpenCodeData(),
+    hasZhipuData(),
   ])
   return { deepseek, opencode, zhipu }
 }

@@ -2,8 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { openDb, type Db } from '@zx/shared/server'
 
-const g = globalThis as unknown as { __zxDb?: Db; __zxTestDb?: Db }
+const g = globalThis as unknown as { __zxDb?: Db }
 
+/** 全站唯一数据库(单环境) */
 export function getDb(): Db {
   if (!g.__zxDb) {
     const dbPath = process.env.DB_PATH || path.join(process.cwd(), 'data', 'zx.db')
@@ -11,16 +12,6 @@ export function getDb(): Db {
     g.__zxDb = openDb(dbPath)
   }
   return g.__zxDb
-}
-
-/** 独立测试库:沙盒专用,与线上数据完全隔离 */
-export function getTestDb(): Db {
-  if (!g.__zxTestDb) {
-    const dbPath = process.env.DB_TEST_PATH || path.join(process.cwd(), 'data', 'zx.test.db')
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true })
-    g.__zxTestDb = openDb(dbPath)
-  }
-  return g.__zxTestDb
 }
 
 /** 环境变量回退密码:未配置则为空(此时若库中也无哈希,登录被禁用,不再默认弱密码) */

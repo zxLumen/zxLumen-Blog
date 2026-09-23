@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { StatsResult } from '../schema.js'
 import { fmtCompact } from '../format.js'
-import { useFeature } from './theme-context.js'
 
 const POS_KEY = 'zx-stats-pos'
 const POP_W = 232
@@ -21,7 +20,6 @@ function Cell({ label, value }: { label: string; value: string }) {
 
 /** 右上角悬浮访客统计:可拖动,点击展开浮层(仅访客维度) */
 export function StatsWidget({ stats }: { stats?: StatsResult }) {
-  const on = useFeature('visitor-stats')
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
@@ -137,7 +135,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
     }
   }, [open])
 
-  if (!on || !stats) return null
+  if (!stats) return null
 
   const { visits } = stats
   const days = visits.days.slice(-7)

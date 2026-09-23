@@ -2295,41 +2295,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   margin-left: auto;
 }
 
-/* ---------- 测试模式开关 ---------- */
-
-.zx-envswitch {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.zx-envbtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--fg-dim);
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 0.3rem 0.6rem;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
-
-.zx-envbtn:hover {
-  border-color: var(--line-strong);
-  color: var(--fg);
-}
-
-.zx-envbtn.is-on {
-  color: var(--accent-2);
-  border-color: var(--accent-2);
-  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
-  box-shadow: 0 0 14px -4px var(--glow-2);
-}
+/* ---------- 状态指示点(顶栏工具) ---------- */
 
 .zx-envdot {
   width: 8px;
@@ -2338,29 +2304,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   background: var(--fg-muted);
 }
 
-.zx-envbtn.is-on .zx-envdot {
-  background: var(--accent-2);
-  box-shadow: 0 0 8px var(--accent-2);
-  animation: zx-blink 1.6s steps(2, start) infinite;
-}
-
-.zx-envreset {
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  color: var(--fg-muted);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.zx-envreset:hover {
-  color: var(--accent-2);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-/* ---------- 模拟访客(仅测试模式) ---------- */
+/* ---------- 模拟访客(仅站长) ---------- */
 
 .zx-admintools {
   display: inline-flex;

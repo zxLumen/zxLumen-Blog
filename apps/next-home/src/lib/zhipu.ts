@@ -1,5 +1,5 @@
 import type { UsageRow } from '@zx/shared'
-import { getActiveDb } from './env'
+import { getDb } from './db'
 import { windowOf, type UsageRange } from './deepseek'
 
 /**
@@ -26,16 +26,16 @@ const CACHE_TTL = 5 * 60 * 1000
 /* ---------- 配置(meta / env) ---------- */
 
 export const getApiKey = async () =>
-  process.env.ZHIPU_API_KEY || (await getActiveDb()).getMeta(K_KEY) || ''
+  process.env.ZHIPU_API_KEY || (await getDb()).getMeta(K_KEY) || ''
 export const getBaseUrl = async () =>
-  process.env.ZHIPU_BASE_URL || (await getActiveDb()).getMeta(K_BASE) || DEFAULT_BASE
-export const setApiKey = async (k: string) => (await getActiveDb()).setMeta(K_KEY, k.trim())
-export const setBaseUrl = async (u: string) => (await getActiveDb()).setMeta(K_BASE, u.trim().replace(/\/$/, ''))
+  process.env.ZHIPU_BASE_URL || (await getDb()).getMeta(K_BASE) || DEFAULT_BASE
+export const setApiKey = async (k: string) => (await getDb()).setMeta(K_KEY, k.trim())
+export const setBaseUrl = async (u: string) => (await getDb()).setMeta(K_BASE, u.trim().replace(/\/$/, ''))
 
-export const getLastError = async () => (await getActiveDb()).getMeta(K_ERR) ?? ''
-export const setLastError = async (e: string) => (await getActiveDb()).setMeta(K_ERR, e)
-export const getLastData = async () => (await getActiveDb()).getMeta(K_DATA) ?? ''
-export const clearLastData = async () => (await getActiveDb()).setMeta(K_DATA, '')
+export const getLastError = async () => (await getDb()).getMeta(K_ERR) ?? ''
+export const setLastError = async (e: string) => (await getDb()).setMeta(K_ERR, e)
+export const getLastData = async () => (await getDb()).getMeta(K_DATA) ?? ''
+export const clearLastData = async () => (await getDb()).setMeta(K_DATA, '')
 
 /* ---------- 拉取 ---------- */
 
@@ -168,7 +168,7 @@ export async function fetchUsageZhipu(range: UsageRange, filter?: { start?: stri
   }
 
   await setLastError('')
-  ;(await getActiveDb()).setMeta(K_DATA, JSON.stringify({ at: Date.now(), rows }))
+  ;(await getDb()).setMeta(K_DATA, JSON.stringify({ at: Date.now(), rows }))
   return {
     rows,
     models: rows.map((r) => r.model),

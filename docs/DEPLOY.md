@@ -56,10 +56,8 @@ cp .env.example .env
 vim .env      # 填 DOMAIN / ACME_EMAIL / ADMIN_PASSWORD / REPORT_TOKEN
 ```
 
-> **环境隔离**:线上**只有一个生产环境**(`NODE_ENV=production`),试验在本地做。
-> 生产下整站 TEST 模式被禁用(`isTestMode()` 恒 false),`APP` 容器默认挂
-> `DB_PATH=/data/zx.db`、`DB_TEST_PATH=/data/zx.test.db`(均在 `zx-data` 卷,持久化)。
-> 确需在线上临时开通 TEST(不推荐)才在 `.env` 加 `ALLOW_TEST_MODE=1`。
+> **单环境**:全站**只有一个环境、一套数据**,试验在本地做。
+> `APP` 容器挂 `DB_PATH=/data/zx.db`(`zx-data` 卷,持久化)。
 
 ## 4. 启动
 

@@ -20,15 +20,13 @@
 - 页面加载时,`TrackBeacon` 向 `POST /api/track` 上报 `{type:'visit', target: pathname}`。
 - 项目「试用/repo」链接、简历「下载」按钮点击时上报 `project_click`(target=项目 id)/ `resume_download`。
 - 服务端 `POST /api/track`:
-  - **始终采集**(匿名聚合,便于放行前积累历史);
+  - **始终采集**(匿名聚合);
   - **排除**:站长本人(`isAdmin`)、常见爬虫/扫描器 UA;
-  - **例外(MOCK)**:测试模式下开启 MOCK(`zx_mock`,即以某匿名访客身份浏览)时**放行**,
-    按该 mock cid 写入**测试库**,便于验收 多身份 PV/UV/点击 等链路;正常/生产模式无 MOCK,不受影响;
+  - **例外(MOCK)**:站长开启 MOCK(`zx_mock`,即以某匿名访客身份浏览)时**放行**,
+    按该 mock cid 写入数据库,便于验收 多身份 PV/UV/点击 等链路;
   - 按 IP 宽松限流(120/分钟),超限静默丢弃;
   - 首次访问下发访客匿名 ID `zx_cid`(httpOnly)。
-- **测试模式本身需站长**(`isTestMode()` = 可用 + `isAdmin` + `zx_env=test`),因此 TEST 下未开 MOCK
-  时,站长的浏览仍被排除 → 想产生统计数据请用 MOCK 切换身份(每个 mock 身份 = 一台独立设备)。
-- 是否**对外展示**由功能门控 `visitor-stats` 决定(见 `packages/shared/src/features.ts`)。
+- 想产生统计数据请用 MOCK 切换身份(每个 mock 身份 = 一台独立设备)。
 
 ## 数据模型
 
@@ -51,7 +49,7 @@
 名称/描述/周期/状态/featured/demoUrl/repoUrl/tech:
 
 - 存储:`project_overrides` 表(`packages/shared/src/schema.ts`);未覆盖字段跟随静态 `PROJECTS`。
-- 接口:`GET/POST/DELETE /api/admin/projects`(仅站长),统一走 `getActiveDb()`。
+- 接口:`GET/POST/DELETE /api/admin/projects`(仅站长)。
 - SSR:`page.tsx` 用 `applyProjectOverrides(PROJECTS, db.getProjectOverrides())` 合并后下发,**保存即生效**。
 - 「恢复默认」= 删除该项目的覆盖记录。
 - 口径:字段留空表示「跟随默认」,不会把默认值写死;`featured` 用 `-1=默认 / 1=是 / 0=否`。

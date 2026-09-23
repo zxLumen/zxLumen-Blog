@@ -25,7 +25,7 @@ interface MockRow {
   color: string
 }
 
-/** 模拟访客身份(仅测试模式 + 站长):以指定匿名 ID 浏览/留言 */
+/** 模拟访客身份(仅站长):以指定匿名 ID 浏览/留言 */
 export function MockUserSwitch({ current }: { current: string }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -192,7 +192,7 @@ export function MockUserSwitch({ current }: { current: string }) {
         type="button"
         className={`zx-mockbtn${current ? ' is-on' : ''}`}
         onClick={() => setOpen((o) => !o)}
-        title="模拟访客身份(仅测试模式)"
+        title="模拟访客身份(仅站长)"
       >
         <span className="zx-envdot" />
         <span className="zx-mockbtn-label">

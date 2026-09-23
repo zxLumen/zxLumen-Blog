@@ -21,7 +21,6 @@ import {
   type Theme,
 } from '../theme.js'
 import { themeKey } from './identity.js'
-import type { FeatureId } from '../features.js'
 
 interface PrefsValue {
   theme: string
@@ -30,8 +29,6 @@ interface PrefsValue {
   layoutMeta: Layout
   themes: Theme[]
   layouts: Layout[]
-  /** 当前模式下放行的功能(正式为白名单,测试为全集) */
-  features: FeatureId[]
   setTheme: (id: string) => void
   setLayout: (id: LayoutId) => void
   cycleTheme: (dir: 1 | -1) => void
@@ -43,13 +40,11 @@ const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : use
 export function PreferencesProvider({
   allowedThemeIds,
   allowedLayoutIds,
-  allowedFeatures = [],
   mockId,
   children,
 }: {
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
-  allowedFeatures?: FeatureId[]
   /** 模拟访客身份:主题偏好按身份分键(等价于该访客设备的主题) */
   mockId?: string
   children: React.ReactNode
@@ -182,12 +177,11 @@ export function PreferencesProvider({
       layoutMeta: LAYOUTS.find((l) => l.id === layout) ?? LAYOUTS[0],
       themes,
       layouts,
-      features: allowedFeatures,
       setTheme,
       setLayout,
       cycleTheme,
     }),
-    [theme, layout, themes, layouts, allowedFeatures, setTheme, setLayout, cycleTheme],
+    [theme, layout, themes, layouts, setTheme, setLayout, cycleTheme],
   )
 
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>
@@ -201,9 +195,3 @@ export function usePrefs(): PrefsValue {
 
 /** 兼容旧命名 */
 export const useTheme = usePrefs
-
-/** 当前模式下某功能是否放行(如 'admin-tabs');无 Provider 时视为关闭 */
-export function useFeature(id: FeatureId): boolean {
-  const ctx = useContext(PrefsContext)
-  return ctx ? ctx.features.includes(id) : false
-}

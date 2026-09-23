@@ -1,5 +1,5 @@
 import { isAdmin } from '@/lib/auth'
-import { getActiveDb } from '@/lib/env'
+import { getDb } from '@/lib/db'
 import { readJson } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +12,6 @@ export async function POST(req: Request) {
   if (typeof data?.id !== 'number') {
     return Response.json({ error: 'id required' }, { status: 400 })
   }
-  const db = await getActiveDb()
+  const db = await getDb()
   return Response.json({ ok: db.archiveComment(data.id, 'admin') })
 }

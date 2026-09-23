@@ -1,6 +1,5 @@
 import { cookies } from 'next/headers'
 import { isAdmin } from '@/lib/auth'
-import { isTestMode } from '@/lib/env'
 import { readJson } from '@/lib/db'
 import { MOCK_COOKIE } from '@/lib/clientid'
 
@@ -8,12 +7,9 @@ export const dynamic = 'force-dynamic'
 
 const ID_RE = /^[a-z0-9_-]{1,32}$/
 
-/** 设置 / 清除"模拟访客"身份(仅站长 + 测试模式) */
+/** 设置 / 清除"模拟访客"身份(仅站长) */
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  if (!(await isTestMode())) {
-    return Response.json({ error: '模拟访客仅在测试模式可用' }, { status: 403 })
-  }
 
   const data = await readJson<{ cid?: string }>(req)
   const cid = (data?.cid ?? '').trim()

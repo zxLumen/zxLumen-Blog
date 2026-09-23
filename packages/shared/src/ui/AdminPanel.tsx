@@ -6,7 +6,6 @@ import { fmtDateTime, fmtInt } from '../format.js'
 import { PROJECTS } from '../content.js'
 import { Pagination } from './Pagination.js'
 import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
-import { useFeature } from './theme-context.js'
 
 async function loadPageData(page: number, pageSize: number): Promise<PagedComments> {
   const res = await fetch(`/api/admin/comments?page=${page}&pageSize=${pageSize}`, {
@@ -172,10 +171,10 @@ export function AdminPanel() {
       return 'comments'
     }
   })
-  // 功能门控:按 LIVE_FEATURES 白名单放行(测试模式恒开)
-  const showTabs = useFeature('admin-tabs')
-  const showOc = useFeature('usage-opencode')
-  const showZhipu = useFeature('usage-zhipu')
+  // 单环境:admin 分栏与各数据源全部放行
+  const showTabs = true
+  const showOc = true
+  const showZhipu = true
 
   const [archived, setArchived] = useState<ArchivedCommentRow[]>([])
   const [archTotal, setArchTotal] = useState(0)
@@ -720,7 +719,7 @@ export function AdminPanel() {
       {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
 
       {(!showTabs || tab === 'projects') && (
-        <AdminProjectsPanel active={!showTabs || tab === 'projects'} onNotify={(m) => setMsg(m)} />
+        <AdminProjectsPanel active={!showTabs || tab === 'projects'} onNotify={(m) => setMsg(m)} showTabs={showTabs} tab={tab} />
       )}
 
       {(!showTabs || tab === 'profile') && (

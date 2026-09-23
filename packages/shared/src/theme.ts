@@ -99,7 +99,7 @@ export const THEMES: Theme[] = [
     id: 'github-light',
     label: 'GITHUB',
     tagline: 'GitHub Light · 开发者熟面孔',
-    heroLine: '// main is green — 主干是绿的',
+    heroLine: '// Just do it — 说干就干',
     key: '1',
     texture: 'none',
     mode: 'light',
@@ -312,10 +312,6 @@ export const LAYOUTS: Layout[] = [
 
 export const DEFAULT_THEME = 'github-light'
 export const DEFAULT_LAYOUT: LayoutId = 'sidebar'
-
-/** 正式环境放行的集合(测试模式放行全部) */
-export const LIVE_THEME_IDS = ['github-light', 'nord', 'synthwave', 'dracula', 'rose-pine', 'minimal']
-export const LIVE_LAYOUT_IDS: LayoutId[] = ['sidebar']
 
 export const THEME_IDS = THEMES.map((t) => t.id)
 export const LAYOUT_IDS = LAYOUTS.map((l) => l.id)

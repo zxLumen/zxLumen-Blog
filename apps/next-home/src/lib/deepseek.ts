@@ -1,8 +1,7 @@
 import crypto from 'node:crypto'
 import zlib from 'node:zlib'
 import type { UsageRow } from '@zx/shared'
-import { getActiveDb } from './env'
-import { getDb, getTestDb } from './db'
+import { getDb } from './db'
 
 const K_TOKEN = 'deepseek_user_token'
 const K_SYNC = 'deepseek_sync_key'
@@ -15,16 +14,16 @@ const TZ = 28800 // 北京时间 UTC+8
 
 /* ---------- meta 存取 ---------- */
 
-export const getToken = async () => (await getActiveDb()).getMeta(K_TOKEN) || ''
-export const setToken = async (t: string) => (await getActiveDb()).setMeta(K_TOKEN, t)
-export const getSyncAt = async () => (await getActiveDb()).getMeta(K_SYNC_AT)
-export const setSyncAt = async (v: string) => (await getActiveDb()).setMeta(K_SYNC_AT, v)
-export const getLastError = async () => (await getActiveDb()).getMeta(K_ERR)
-export const setLastError = async (e: string) => (await getActiveDb()).setMeta(K_ERR, e)
-export const getLastData = async () => (await getActiveDb()).getMeta(K_AVAIL)
+export const getToken = async () => getDb().getMeta(K_TOKEN) || ''
+export const setToken = async (t: string) => getDb().setMeta(K_TOKEN, t)
+export const getSyncAt = async () => getDb().getMeta(K_SYNC_AT)
+export const setSyncAt = async (v: string) => getDb().setMeta(K_SYNC_AT, v)
+export const getLastError = async () => getDb().getMeta(K_ERR)
+export const setLastError = async (e: string) => getDb().setMeta(K_ERR, e)
+export const getLastData = async () => getDb().getMeta(K_AVAIL)
 
 export async function getSyncKey(): Promise<string> {
-  const db = await getActiveDb()
+  const db = getDb()
   let k = db.getMeta(K_SYNC)
   if (!k) {
     k = crypto.randomBytes(16).toString('hex')
@@ -35,27 +34,25 @@ export async function getSyncKey(): Promise<string> {
 
 export async function rotateSyncKey(): Promise<string> {
   const k = crypto.randomBytes(16).toString('hex')
-  ;(await getActiveDb()).setMeta(K_SYNC, k)
+  ;getDb().setMeta(K_SYNC, k)
   return k
 }
 
 /**
- * 依据同步密钥判定写入哪个库(测试 / 线上)。
+ * 校验跨站同步密钥(来自 platform.deepseek.com)。
  *
- * 令牌同步是**跨站请求**(来自 platform.deepseek.com),浏览器不会携带 SameSite=Lax
- * 的 `zx_admin`/`zx_env` cookie,服务端无法靠 cookie 判断当前模式。因此改用「密钥来自
- * 哪个库」来决定:密钥匹配测试库 → 写测试库;否则匹配线上库 → 写线上库。均不匹配返回 null。
+ * 令牌同步是**跨站请求**,浏览器不会携带 SameSite=Lax 的 `zx_admin` cookie,
+ * 服务端无法靠 cookie 判断身份,因此用「密钥是否匹配库中已存的同步密钥」来校验。
+ * 匹配返回 true,否则 false。
  */
-export function resolveSyncTarget(key: string): 'test' | 'live' | null {
-  if (!key) return null
-  if (getTestDb().getMeta(K_SYNC) === key) return 'test'
-  if (getDb().getMeta(K_SYNC) === key) return 'live'
-  return null
+export function verifySyncKey(key: string): boolean {
+  if (!key) return false
+  return getDb().getMeta(K_SYNC) === key
 }
 
-/** 把令牌写入指定库(绕过 cookie 的模式判定,用于跨站同步) */
-export function setTokenIn(target: 'test' | 'live', token: string): void {
-  const db = target === 'test' ? getTestDb() : getDb()
+/** 把令牌写入库(跨站同步专用) */
+export function setSyncedToken(token: string): void {
+  const db = getDb()
   db.setMeta(K_TOKEN, token)
   db.setMeta(K_SYNC_AT, new Date().toISOString())
   db.setMeta(K_ERR, '')
@@ -497,7 +494,7 @@ export async function fetchUsage(range: UsageRange, filter?: UsageFilter): Promi
     }
     await setLastError('')
     if (hour.rows.length)
-      (await getActiveDb()).setMeta(K_AVAIL, JSON.stringify({ at: Date.now(), count: hour.rows.length }))
+      getDb().setMeta(K_AVAIL, JSON.stringify({ at: Date.now(), count: hour.rows.length }))
     await saveLastRows(range, data)
     return data
   }
@@ -533,7 +530,7 @@ export async function fetchUsage(range: UsageRange, filter?: UsageFilter): Promi
 
   const data: PlatformUsage = { rows, models, apiKeys, currency, start, end }
   await setLastError('')
-  if (rows.length) (await getActiveDb()).setMeta(K_AVAIL, JSON.stringify({ at: Date.now(), count: rows.length }))
+  if (rows.length) getDb().setMeta(K_AVAIL, JSON.stringify({ at: Date.now(), count: rows.length }))
   await saveLastRows(range, data)
   return data
 }
@@ -546,7 +543,7 @@ const MAX_ROWS = 5000
 /** 存储指定 range 最近一次拉取成功的 rows(持久化,用于令牌失效/网络失败时回退) */
 export async function saveLastRows(range: UsageRange, d: PlatformUsage) {
   const rows = d.rows.length > MAX_ROWS ? d.rows.slice(0, MAX_ROWS) : d.rows
-  ;(await getActiveDb()).setMeta(
+  ;getDb().setMeta(
     kRows(range),
     JSON.stringify({
       at: Date.now(),
@@ -571,7 +568,7 @@ export async function getLastRows(
   granularity?: 'hour' | 'day'
   rows: UsageRow[]
 } | null> {
-  const raw = (await getActiveDb()).getMeta(kRows(range))
+  const raw = getDb().getMeta(kRows(range))
   if (!raw) return null
   try {
     const d = JSON.parse(raw) as {

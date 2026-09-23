@@ -5,7 +5,6 @@ import type { CommentRow, PagedComments } from '../schema.js'
 import { fmtDateTime } from '../format.js'
 import { Section } from './Section.js'
 import { Pagination } from './Pagination.js'
-import { useFeature } from './theme-context.js'
 import { nickKey } from './identity.js'
 
 export interface NewComment {
@@ -67,8 +66,8 @@ export function GuestbookSection({
 }: GuestbookProps) {
   const apiBase = apiBaseProp.replace(/\/$/, '')
   const nickStorageKey = nickKey(viewerMock)
-  // 访客删除自己的留言(功能门控 self-delete)
-  const canSelfDelete = useFeature('self-delete')
+  // 访客删除自己的留言(单环境:放行)
+  const canSelfDelete = true
 
   const [items, setItems] = useState<CommentRow[]>(initialPage?.rows ?? [])
   const [total, setTotal] = useState(initialPage?.total ?? 0)

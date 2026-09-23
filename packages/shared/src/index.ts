@@ -12,13 +12,11 @@ export {
   DEFAULT_LAYOUT,
   LAYOUT_STORAGE_KEY,
   isValidLayout,
-  LIVE_THEME_IDS,
-  LIVE_LAYOUT_IDS,
 } from './theme.js'
 export type { Theme, Texture, Mode, Layout, LayoutId } from './theme.js'
 
-// 功能特性门控(正式放行集 + 测试全放行)
-export { FEATURE_IDS, LIVE_FEATURES, isFeatureAllowed } from './features.js'
+// 功能特性 id(单环境,全部放行)
+export { FEATURE_IDS } from './features.js'
 export type { FeatureId } from './features.js'
 
 // 内容资料

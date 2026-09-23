@@ -9,8 +9,6 @@ import { DEFAULT_SEL, defaultRangeSel, writeUsageSelCookie } from '../usage-sel.
 import type { DataSource, Range, RangeSel, UsageSel } from '../usage-sel.js'
 import type { FeatureId } from '../features.js'
 import { Section } from './Section.js'
-import { useFeature } from './theme-context.js'
-
 const modelColor = (model: string) => PRICING.find((p) => p.model === model)?.color ?? 'var(--accent)'
 const modelLabel = (model: string) => PRICING.find((p) => p.model === model)?.label ?? model
 const rowCost = (r: UsageRow) => (typeof r.cost === 'number' ? r.cost : estimateCost(r).total)
@@ -74,8 +72,6 @@ export function UsageSection({
   /** SSR 计算的数据源可用性;未提供则客户端探测 */
   availableSources?: Partial<Record<DataSource, boolean>>
 }) {
-  const showOc = useFeature('usage-opencode')
-  const showZhipu = useFeature('usage-zhipu')
   const [dataSrc, setDataSrc] = useState<DataSource>(initialSel?.dataSrc ?? DEFAULT_SEL.dataSrc)
   // 各源可用性(已配置 + 近30天有数据);null=未知(按 feature 放行)
   const [avail, setAvail] = useState<Record<DataSource, boolean> | null>(
@@ -96,16 +92,14 @@ export function UsageSection({
       alive = false
     }
   }, [availableSources])
-  // 仅显示放行且可用的数据源
+  // 仅显示可用的数据源(单环境:全部放行)
   const sources = useMemo(
     () =>
       SOURCES.filter((s) => {
-        if (s.feature === 'usage-opencode' && !showOc) return false
-        if (s.feature === 'usage-zhipu' && !showZhipu) return false
         if (avail && !avail[s.key]) return false
         return true
       }),
-    [showOc, showZhipu, avail],
+    [avail],
   )
   // 当前源若被隐藏,回退到默认(DeepSeek)
   useEffect(() => {

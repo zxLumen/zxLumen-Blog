@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import type { UsageRow, UsageSel } from "@zx/shared";
 import { USAGE_SEL_COOKIE, parseUsageSel } from "@zx/shared";
 import { HomePage } from "@zx/shared/ui";
-import { getActiveDb, isTestMode } from "@/lib/env";
+import { getDb } from "@/lib/db";
 import { isAdmin } from "@/lib/auth";
 import { effectiveCid, isMockActive, MOCK_COOKIE } from "@/lib/clientid";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
@@ -15,8 +15,8 @@ export const dynamic = "force-dynamic";
 const viewerNickKey = (mock: string) => `zx_nick${mock ? `.${mock}` : ""}`;
 
 export default async function Home() {
-  // 模拟访客身份(仅测试模式生效);决定昵称/主题按身份分键
-  const viewerMock = (await isTestMode()) ? ((await cookies()).get(MOCK_COOKIE)?.value ?? "") : "";
+  // 模拟访客身份(仅站长可设);决定昵称/主题按身份分键
+  const viewerMock = (await cookies()).get(MOCK_COOKIE)?.value ?? "";
 
   // 模拟访客时,首页按普通访客视角渲染(不显示站长特权)
   const admin = (await isAdmin()) && !(await isMockActive());
@@ -33,7 +33,7 @@ export default async function Home() {
   }
 
   const viewerCid = await effectiveCid();
-  const db = await getActiveDb();
+  const db = getDb();
 
   // 用量筛选存档(cookie 下发):SSR 首帧即按上次选择渲染,刷新无闪跳
   const initialSel: UsageSel = parseUsageSel((await cookies()).get(USAGE_SEL_COOKIE)?.value ?? "");
@@ -41,7 +41,7 @@ export default async function Home() {
   // 各数据源可用性(已配置 + 近30天有数据):SSR 决定显示哪些源,避免隐藏源闪现
   const availableSources = await getSourceAvailability();
 
-  // 首页统计聚合(访客/留言/事件);是否展示由客户端 useFeature('visitor-stats') 决定
+  // 首页统计聚合(访客/留言/事件)
   const stats = db.stats();
 
   const commentsPage = db.listThreadPage({

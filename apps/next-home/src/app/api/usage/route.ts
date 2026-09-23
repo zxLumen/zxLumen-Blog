@@ -1,6 +1,6 @@
 import type { UsageRow } from '@zx/shared'
 import { REPORT_TOKEN, readJson } from '@/lib/db'
-import { getActiveDb } from '@/lib/env'
+import { getDb } from '@/lib/db'
 import { fetchUsage, getLastError, getLastRows, type UsageRange } from '@/lib/deepseek'
 import {
   fetchUsageOpenCode,
@@ -15,7 +15,6 @@ import {
   getLastRows as zhipuLastRows,
   getLastError as zhipuLastError,
 } from '@/lib/zhipu'
-import { featureOn } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +52,7 @@ async function localUsage(range: UsageRange, start?: string, end?: string): Prom
     const diff = (new Date(end).getTime() - new Date(start).getTime()) / 86400000
     if (Number.isFinite(diff) && diff >= 0 && diff <= 366) days = Math.floor(diff) + 1
   }
-  const all = (await getActiveDb()).listUsage(days)
+  const all = (await getDb()).listUsage(days)
   const map = new Map<string, UsageRow>()
   for (const r of all) {
     const key = `${r.ts.slice(0, 10)}|${r.model}`
@@ -228,16 +227,9 @@ export async function GET(req: Request) {
 
   const sourceParam = url.searchParams.get('source') || 'deepseek'
   if (sourceParam === 'opencode') {
-    // OpenCode 数据源:功能门控,未放行时不返回
-    if (!(await featureOn('usage-opencode'))) {
-      return Response.json({ error: 'forbidden' }, { status: 403 })
-    }
     return opencodeUsage(range, start, end)
   }
   if (sourceParam === 'zhipu') {
-    if (!(await featureOn('usage-zhipu'))) {
-      return Response.json({ error: 'forbidden' }, { status: 403 })
-    }
     return zhipuUsage(range, start, end)
   }
 
@@ -322,7 +314,7 @@ export async function POST(req: Request) {
   }
   const data = await readJson<UsageBody>(req)
   if (!data?.model) return Response.json({ error: 'model required' }, { status: 400 })
-  const row = (await getActiveDb()).addUsage({
+  const row = (await getDb()).addUsage({
     ts: data.ts,
     model: data.model,
     inputTokens: data.inputTokens ?? data.input_tokens ?? 0,

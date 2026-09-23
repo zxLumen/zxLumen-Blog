@@ -1,5 +1,5 @@
 import { isAdmin } from '@/lib/auth'
-import { getActiveDb } from '@/lib/env'
+import { getDb } from '@/lib/db'
 import { rateLimit, readJson, clientIp } from '@/lib/db'
 import { getAdminNick } from '@/lib/settings'
 import { cidCookie, isMockActive, resolveCid } from '@/lib/clientid'
@@ -19,7 +19,7 @@ interface Body {
 }
 
 export async function GET(req: Request) {
-  const db = await getActiveDb()
+  const db = await getDb()
   // 模拟访客时按普通访客视角(不享受站长特权)
   const admin = (await isAdmin()) && !(await isMockActive())
   const { cid, isNew } = await resolveCid()
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     return Response.json({ error: '该昵称为站长保留,请换一个昵称' }, { status: 403 })
   }
 
-  const db = await getActiveDb()
+  const db = await getDb()
   if (parent_id !== null) {
     const parent = db.getComment(parent_id)
     if (!parent) return Response.json({ error: '回复目标不存在' }, { status: 400 })

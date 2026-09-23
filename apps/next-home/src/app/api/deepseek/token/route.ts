@@ -1,4 +1,4 @@
-import { resolveSyncTarget, setTokenIn } from '@/lib/deepseek'
+import { setSyncedToken, verifySyncKey } from '@/lib/deepseek'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,8 +19,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: Request) {
-  const target = resolveSyncTarget(req.headers.get('x-sync-key') ?? '')
-  if (!target) {
+  if (!verifySyncKey(req.headers.get('x-sync-key') ?? '')) {
     return Response.json({ error: 'unauthorized' }, { status: 401, headers: cors() })
   }
   const text = await req.text()
@@ -36,6 +35,6 @@ export async function POST(req: Request) {
   if (!token) {
     return Response.json({ error: 'token required' }, { status: 400, headers: cors() })
   }
-  setTokenIn(target, token)
+  setSyncedToken(token)
   return Response.json({ ok: true }, { headers: cors() })
 }

@@ -1,10 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import { cookies } from 'next/headers'
-import { isTestMode } from './env'
 
 /** 访客匿名 ID cookie:httpOnly,仅服务端可见,用于识别"本人"的私密/可删留言 */
 export const CID_COOKIE = 'zx_cid'
-/** 模拟访客 ID cookie:仅测试模式 + 站长生效,用于以他人身份浏览 */
+/** 模拟访客 ID cookie:仅站长生效,用于以他人身份浏览 */
 export const MOCK_COOKIE = 'zx_mock'
 
 export function cidCookie(cid: string): string {
@@ -12,18 +11,17 @@ export function cidCookie(cid: string): string {
   return `${CID_COOKIE}=${cid}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${secure}`
 }
 
-/** 测试模式(需站长)下设置的模拟访客 ID,否则空 */
+/** 站长设置的模拟访客 ID,否则空 */
 async function mockCid(): Promise<string> {
-  if (!(await isTestMode())) return ''
   return (await cookies()).get(MOCK_COOKIE)?.value ?? ''
 }
 
-/** 是否正处于"模拟访客"状态(仅测试模式 + 站长) */
+/** 是否正处于"模拟访客"状态(仅站长) */
 export async function isMockActive(): Promise<boolean> {
   return (await mockCid()) !== ''
 }
 
-/** 当前"查看者"的匿名 ID(测试模式下可被 mock 覆盖);无则返回 '' */
+/** 当前"查看者"的匿名 ID(可被 mock 覆盖);无则返回 '' */
 export async function effectiveCid(): Promise<string> {
   const mock = await mockCid()
   if (mock) return mock

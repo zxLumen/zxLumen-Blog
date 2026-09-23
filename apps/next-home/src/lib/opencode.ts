@@ -1,6 +1,6 @@
 import type { UsageRow } from '@zx/shared'
 import { estimateGoCost, isGoModelKnown } from '@zx/shared'
-import { getActiveDb } from './env'
+import { getDb } from './db'
 import { windowOf, type UsageRange } from './deepseek'
 
 /**
@@ -26,16 +26,16 @@ const CACHE_TTL = 5 * 60 * 1000
 /* ---------- 配置(meta / env) ---------- */
 
 export const getConsoleUrl = async () =>
-  process.env.OPENCODE_CONSOLE_URL || (await getActiveDb()).getMeta(K_URL) || 'https://opencode.ai/console'
+  process.env.OPENCODE_CONSOLE_URL || (await getDb()).getMeta(K_URL) || 'https://opencode.ai/console'
 export const getServiceKey = async () =>
-  process.env.OPENCODE_SERVICE_KEY || (await getActiveDb()).getMeta(K_KEY) || ''
-export const setConsoleUrl = async (u: string) => (await getActiveDb()).setMeta(K_URL, u.trim())
-export const setServiceKey = async (k: string) => (await getActiveDb()).setMeta(K_KEY, k.trim())
+  process.env.OPENCODE_SERVICE_KEY || (await getDb()).getMeta(K_KEY) || ''
+export const setConsoleUrl = async (u: string) => (await getDb()).setMeta(K_URL, u.trim())
+export const setServiceKey = async (k: string) => (await getDb()).setMeta(K_KEY, k.trim())
 
-export const getLastError = async () => (await getActiveDb()).getMeta(K_ERR) ?? ''
-export const setLastError = async (e: string) => (await getActiveDb()).setMeta(K_ERR, e)
-export const getLastData = async () => (await getActiveDb()).getMeta(K_DATA) ?? ''
-export const clearLastData = async () => (await getActiveDb()).setMeta(K_DATA, '')
+export const getLastError = async () => (await getDb()).getMeta(K_ERR) ?? ''
+export const setLastError = async (e: string) => (await getDb()).setMeta(K_ERR, e)
+export const getLastData = async () => (await getDb()).getMeta(K_DATA) ?? ''
+export const clearLastData = async () => (await getDb()).setMeta(K_DATA, '')
 
 /** 官方 30d 窗口起点(UTC 零点 - 29 天)对应的北京日标签;早于它的区间官方覆盖不到 */
 const apiCoverageStart = () =>
@@ -226,7 +226,7 @@ async function fetchRows30(): Promise<UsageRow[]> {
   )
 
   await setLastError('')
-  ;(await getActiveDb()).setMeta(
+  ;(await getDb()).setMeta(
     K_DATA,
     JSON.stringify({ at: Date.now(), since: apiCoverageStart(), rows }),
   )

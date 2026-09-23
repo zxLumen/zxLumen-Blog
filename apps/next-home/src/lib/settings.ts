@@ -2,7 +2,6 @@ import crypto from 'node:crypto'
 import { CONTACTS, PROFILE } from '@zx/shared'
 import type { Contacts } from '@zx/shared'
 import { ADMIN_PASSWORD, getDb } from './db'
-import { getActiveDb } from './env'
 
 export const ADMIN_NICK_KEY = 'admin_nick'
 const ADMIN_PASS_KEY = 'admin_pass'
@@ -15,7 +14,7 @@ const K_QR_VER = 'wechat_qr_ver'
 
 /** 微信二维码(存当前库 meta,base64) */
 export async function getWechatQr(): Promise<{ base64: string; type: string; ver: string } | null> {
-  const db = await getActiveDb()
+  const db = await getDb()
   const base64 = db.getMeta(K_QR_DATA)
   if (!base64) return null
   return {
@@ -26,7 +25,7 @@ export async function getWechatQr(): Promise<{ base64: string; type: string; ver
 }
 
 export async function setWechatQr(base64: string, type: string) {
-  const db = await getActiveDb()
+  const db = await getDb()
   db.setMeta(K_QR_DATA, base64)
   db.setMeta(K_QR_TYPE, type)
   db.setMeta(K_QR_VER, Date.now().toString(36))
@@ -36,7 +35,7 @@ const reverse = (s: string) => [...s].reverse().join('')
 
 /** 联系方式(存当前库 meta,默认取 shared 的 CONTACTS);phone 为明文 */
 export async function getContactSettings() {
-  const db = await getActiveDb()
+  const db = await getDb()
   return {
     email: db.getMeta(K_EMAIL) ?? CONTACTS.email,
     wechat: db.getMeta(K_WECHAT) ?? CONTACTS.wechat ?? '',
@@ -45,7 +44,7 @@ export async function getContactSettings() {
 }
 
 export async function setContactSettings(c: { email?: string; wechat?: string; phone?: string }) {
-  const db = await getActiveDb()
+  const db = await getDb()
   if (c.email !== undefined) db.setMeta(K_EMAIL, c.email)
   if (c.wechat !== undefined) db.setMeta(K_WECHAT, c.wechat)
   if (c.phone !== undefined) db.setMeta(K_PHONE, c.phone)
@@ -65,19 +64,17 @@ export async function getClientContacts(): Promise<Contacts> {
 
 /** 站长昵称(存当前库 meta,默认取 PROFILE.name) */
 export async function getAdminNick(): Promise<string> {
-  return (await getActiveDb()).getMeta(ADMIN_NICK_KEY) || PROFILE.name
+  return (await getDb()).getMeta(ADMIN_NICK_KEY) || PROFILE.name
 }
 
 export async function setAdminNick(nick: string) {
-  ;(await getActiveDb()).setMeta(ADMIN_NICK_KEY, nick)
+  ;(await getDb()).setMeta(ADMIN_NICK_KEY, nick)
 }
 
 /**
  * 设置密码:scrypt 加盐哈希后存库。
  *
- * 注意:admin 密码是**全局身份**,只存线上库(`getDb()`),**不随 TEST/LIVE 隔离**。
- * 原因:登录时尚未有会话 → `isTestMode()` 为 false,只能查线上库;若改密码时按 TEST
- * 写进测试库,就会出现"改完密码却登不上"。
+ * 注意:admin 密码是**全局身份**,固定存 `getDb()`(与站点数据同一库)。
  */
 export function setAdminPassword(pw: string) {
   const salt = crypto.randomBytes(16).toString('hex')

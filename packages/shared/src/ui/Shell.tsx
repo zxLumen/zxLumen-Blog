@@ -6,7 +6,6 @@ import { Footer } from './Footer.js'
 import { HelpHint } from './HelpHint.js'
 import type { Contacts } from '../content.js'
 import type { LayoutId } from '../theme.js'
-import type { FeatureId } from '../features.js'
 import type { LinkComponent, NavItem } from './types.js'
 
 interface ShellProps {
@@ -15,11 +14,9 @@ interface ShellProps {
   pathname?: string
   link?: LinkComponent
   contacts?: Contacts
-  /** 允许的主题 / 布局(按模式:正式为精简集,测试为全集) */
+  /** 允许的主题 / 布局(单环境为全量) */
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
-  /** 允许的功能(按模式:正式为白名单,测试为全集) */
-  allowedFeatures?: FeatureId[]
   /** 模拟访客身份:主题等偏好按身份分键(等价于一台独立设备) */
   mockId?: string
   extra?: React.ReactNode
@@ -35,7 +32,6 @@ export function Shell({
   contacts,
   allowedThemeIds,
   allowedLayoutIds,
-  allowedFeatures,
   mockId,
   extra,
   children,
@@ -44,7 +40,6 @@ export function Shell({
     <PreferencesProvider
       allowedThemeIds={allowedThemeIds}
       allowedLayoutIds={allowedLayoutIds}
-      allowedFeatures={allowedFeatures}
       mockId={mockId}
     >
       <div className="zx-app">

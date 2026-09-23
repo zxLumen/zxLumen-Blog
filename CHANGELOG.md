@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **收敛为单环境、单数据库**:移除整站 TEST/LIVE 双模式 —— 删除 `EnvSwitch`、`GET/POST /api/env`、`zx_env` cookie、`isTestMode()`/`testModeAvailable()`、`ALLOW_TEST_MODE`、`DB_TEST_PATH` 与 `seed:test`;`getActiveDb()` 整体删除,所有数据读写统一走 `getDb()`(唯一库 `DB_PATH`)。本地原测试库数据已迁移覆盖为唯一库(旧库备份)。见 `AGENTS.md`
+- **放开全部主题/布局/功能**:删除白名单门控 `LIVE_THEME_IDS`/`LIVE_LAYOUT_IDS`/`LIVE_FEATURES`/`isFeatureAllowed`/`featureOn`/`useFeature` 及 `allowedFeatures` 传递链路;18 套主题、10 套布局、全部功能一律放行
+- **保留 MOCK 访客调试**:`MOCK` 切换器与 `POST /api/admin/mock` 去掉「仅测试模式」门控,改为**仅站长**可用(A/B/C 三身份),埋点与身份分键逻辑不变
+
 ### 新增
 
 - **统计**(功能门控 `visitor-stats`,已放行):**访客统计**做成首页右上角**悬浮组件**(PV/UV/今日/在线/近30天趋势,公开);**项目点击**常驻显示在每个项目卡上;**留言/简历/项目点击**汇总移到 admin 新增的「统计」Tab。采集用客户端 beacon(`POST /api/track`,始终匿名采集;排除站长/MOCK/爬虫);数据存 `events` 表。见 `docs/STATS.md`

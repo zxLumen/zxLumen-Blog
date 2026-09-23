@@ -118,7 +118,7 @@ docker compose logs -f app        # 看到 Ready 即可
 - [ ] `/admin` 用 `ADMIN_PASSWORD` 能登录
 - [ ] 留言板发一条公开 + 一条私密,均成功
 - [ ] 用量上报:`curl -X POST https://你的域名/api/usage -H "X-Report-Token: <REPORT_TOKEN>" -H "Content-Type: application/json" -d '{"model":"deepseek-chat","input_tokens":1000,"output_tokens":500}'` 返回 `ok:true`
-- [ ] 顶栏「测试模式」可切换且线上访客不受影响
+- [ ] 顶栏 `MOCK` 可切换访客 A/B/C(仅站长),线上访客不受影响
 - [ ] 备份脚本可跑:`cd docker && ./backup.sh`
 
 ## 备份 / 监控 / 更新

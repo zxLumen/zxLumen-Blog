@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AdminPanel } from "@zx/shared/ui";
+import "@mantine/core/styles.layer.css";
 
 export const metadata: Metadata = {
   title: "admin · liuzixiang",

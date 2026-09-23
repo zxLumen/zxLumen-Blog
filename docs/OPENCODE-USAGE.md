@@ -3,7 +3,6 @@
 「Token 用量」面板的 **OpenCode 数据源**读取 **OpenCode 官方 Console** 的组织用量
 (organization scope = 你账号下的完整数据),按每个请求的精确时间戳在本地聚合:
 **今天 / 昨天按小时(北京时间)分时显示**,其余区间按天。
-已进 `LIVE_FEATURES`(测试/正常模式均可见);如需回退,从 `LIVE_FEATURES` 移除 `usage-opencode` 即可。
 
 ## 数据从哪来
 
@@ -39,7 +38,7 @@
 
 ## 接口
 
-`GET /api/usage?source=opencode&range=<range>`(功能门控 `usage-opencode`,已进 `LIVE_FEATURES`)
+`GET /api/usage?source=opencode&range=<range>`
 
 - 响应与 deepseek 同形状,新增 `granularity`:今天/昨天为 `"hour"`(北京整点桶),其余 `"day"`;
   `platformLimit` 标记超出官方覆盖;`currency` 恒为 `"USD"`(`cost_micro_cents / 1e8`);
@@ -58,5 +57,4 @@
 ## 安全
 
 - `oc_sk_` key 属账号级敏感凭证:仅存服务器数据库(`meta`),**绝不下发前端**、不写日志;
-- 原始记录(含请求明细)不下发,面板只展示聚合数字;官方侧 key 若泄露可在 Console 撤销重建;
-- 该功能供站长自用,TEST 验证通过后再决定是否晋升 LIVE。
+- 原始记录(含请求明细)不下发,面板只展示聚合数字;官方侧 key 若泄露可在 Console 撤销重建。
