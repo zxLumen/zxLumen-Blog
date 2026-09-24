@@ -3,11 +3,16 @@ import { REPORT_TOKEN, readJson } from '@/lib/db'
 import { getDb } from '@/lib/db'
 import { fetchUsage, getLastError, getLastRows, type UsageRange } from '@/lib/deepseek'
 import {
-  fetchUsageOpenCode,
+  fetchUsageOpenCodeWs,
   filterUsageOpenCode,
-  fetchGoQuota,
+  mergeUsageOpenCode,
+  fetchGoQuotaWs,
+  getWorkspaces,
   getLastData,
   getLastError as ocLastError,
+  type GoQuota,
+  type OcWorkspace,
+  type PlatformUsageOpenCode,
 } from '@/lib/opencode'
 import {
   fetchUsageZhipu,
@@ -79,8 +84,8 @@ async function localUsage(range: UsageRange, start?: string, end?: string): Prom
 
 const isIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
 
-/** OpenCode 数据源:官方 Console 导出,今天/昨天按小时,其余按天 */
-async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
+/** OpenCode 数据源:官方 Console 导出,多 workspace 合并;今天/昨天按小时,其余按天 */
+async function opencodeUsage(range: UsageRange, start?: string, end?: string, wsParam?: string) {
   const filter =
     range === 'custom'
       ? {
@@ -88,6 +93,14 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
           end: end && isIsoDate(end) ? end : undefined,
         }
       : undefined
+
+  const all = await getWorkspaces()
+  const wanted = (wsParam ?? '').trim()
+  const selected =
+    !wanted || wanted === 'all'
+      ? all
+      : all.filter((w) => wanted.split(',').map((s) => s.trim()).includes(w.id))
+
   const send = (
     d: {
       rows: UsageRow[]
@@ -101,8 +114,7 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
     },
     source: string,
     at: number,
-    lastError?: string,
-    goQuota?: unknown,
+    opts?: { lastError?: string; goQuotas?: { name: string; quota: GoQuota | null }[] },
   ) =>
     Response.json(
       {
@@ -116,46 +128,99 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
         start: d.start,
         end: d.end,
         at,
-        ...(goQuota ? { goQuota } : {}),
-        ...(lastError ? { lastError } : {}),
+        workspaces: selected.map((w) => ({ id: w.id, name: w.name })),
+        ...(opts?.goQuotas ? { goQuotas: opts.goQuotas } : {}),
+        ...(opts?.lastError ? { lastError: opts.lastError } : {}),
       },
       { headers: noStore },
     )
-  try {
-    const [d, goQuota] = await Promise.all([fetchUsageOpenCode(range, filter), fetchGoQuota()])
-    return send(d, 'opencode', Date.now(), undefined, goQuota)
-  } catch (e) {
-    const code = (e as { code?: string }).code
-    const error = e instanceof Error ? e.message : String(e)
-    // 失败时回退上次成功快照(官方近 30 天小时级数据,可重新聚合到任意区间);
-    // 未配置 key 不属于「失败」,如实返回 unconfigured
-    const raw = code === 'UNCONFIGURED' ? '' : await getLastData()
-    const goQuota = await fetchGoQuota()
-    if (raw) {
-      try {
-        const snap = JSON.parse(raw) as { at?: number; rows?: UsageRow[] }
-        if (Array.isArray(snap.rows) && snap.rows.length) {
-          const d = filterUsageOpenCode(snap.rows, range, filter)
-          return send(d, 'stale', snap.at ?? 0, error, goQuota)
-        }
-      } catch {
-        /* ignore */
-      }
-    }
+
+  if (selected.length === 0) {
     return Response.json(
       {
-        source: code === 'UNCONFIGURED' ? 'unconfigured' : code === 'INVALID_KEY' ? 'invalid' : 'error',
-        error,
+        source: 'unconfigured',
+        error: all.length === 0 ? '未配置 workspace' : '所选 workspace 不存在',
         lastError: await ocLastError(),
         rows: [],
         models: [],
         apiKeys: [],
+        workspaces: all.map((w) => ({ id: w.id, name: w.name })),
         granularity: range === 'today' || range === 'yesterday' ? 'hour' : 'day',
-        ...(goQuota ? { goQuota } : {}),
       },
       { headers: noStore },
     )
   }
+
+  const [parts, quotas] = await Promise.all([
+    Promise.all(
+      selected.map(async (ws) => {
+        try {
+          return { ws, data: await fetchUsageOpenCodeWs(ws, range, filter), ok: true as const }
+        } catch (e) {
+          return { ws, err: e as unknown, ok: false as const }
+        }
+      }),
+    ),
+    Promise.all(selected.map(async (ws) => ({ name: ws.name, quota: await fetchGoQuotaWs(ws) }))),
+  ])
+
+  const goQuotas = quotas.filter((q) => q.quota)
+  const live = parts.filter((p): p is Extract<typeof p, { ok: true }> => p.ok)
+
+  if (live.length > 0) {
+    const merged = mergeUsageOpenCode(live.map((p) => ({ ws: p.ws, data: p.data })))
+    const errs = parts
+      .filter((p): p is Extract<typeof p, { ok: false }> => !p.ok)
+      .map((p) => `${p.ws.name}: ${p.err instanceof Error ? p.err.message : String(p.err)}`)
+    return send(
+      merged,
+      live.length === selected.length ? 'opencode' : 'stale',
+      Date.now(),
+      { lastError: errs.length ? errs.join('; ') : undefined, goQuotas: goQuotas.length ? goQuotas : undefined },
+    )
+  }
+
+  // 全部失败:回退各 ws 快照
+  const snaps: Array<{ ws: OcWorkspace; data: PlatformUsageOpenCode }> = []
+  for (const ws of selected) {
+    const raw = await getLastData(ws.id)
+    if (!raw) continue
+    try {
+      const snap = JSON.parse(raw) as { rows?: UsageRow[] }
+      if (Array.isArray(snap.rows) && snap.rows.length) {
+        snaps.push({ ws, data: filterUsageOpenCode(snap.rows, range, filter) })
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (snaps.length > 0) {
+    const merged = mergeUsageOpenCode(snaps)
+    const first = parts.find((p) => !p.ok) as Extract<(typeof parts)[number], { ok: false }> | undefined
+    const error = first ? (first.err instanceof Error ? first.err.message : String(first.err)) : '拉取失败'
+    return send(merged, 'stale', Date.now(), {
+      lastError: error,
+      goQuotas: goQuotas.length ? goQuotas : undefined,
+    })
+  }
+
+  const first = parts.find((p) => !p.ok) as Extract<(typeof parts)[number], { ok: false }> | undefined
+  const code = first ? (first.err as { code?: string })?.code : undefined
+  const error = first ? (first.err instanceof Error ? first.err.message : String(first.err)) : '拉取失败'
+  return Response.json(
+    {
+      source: code === 'UNCONFIGURED' ? 'unconfigured' : code === 'INVALID_KEY' ? 'invalid' : 'error',
+      error,
+      lastError: await ocLastError(),
+      rows: [],
+      models: [],
+      apiKeys: [],
+      workspaces: selected.map((w) => ({ id: w.id, name: w.name })),
+      granularity: range === 'today' || range === 'yesterday' ? 'hour' : 'day',
+      ...(goQuotas.length ? { goQuotas } : {}),
+    },
+    { headers: noStore },
+  )
 }
 
 /** 智谱数据源:monitor API 按模型 token 总量 + 配额;失败回退上次快照 */
@@ -227,7 +292,7 @@ export async function GET(req: Request) {
 
   const sourceParam = url.searchParams.get('source') || 'deepseek'
   if (sourceParam === 'opencode') {
-    return opencodeUsage(range, start, end)
+    return opencodeUsage(range, start, end, url.searchParams.get('ws') || undefined)
   }
   if (sourceParam === 'zhipu') {
     return zhipuUsage(range, start, end)

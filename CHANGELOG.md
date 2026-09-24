@@ -6,6 +6,7 @@
 
 ### 新增
 
+- **OpenCode 用量支持多 workspace**:admin「Token用量」可添加多个 workspace(各填名称 + 该 workspace 的 `oc_sk_` service key,名称留空自动用 key 尾号占位),前端面板新增 workspace 多选行(「全部」= 总用量);多个 workspace 数据按区间合并(provider 加 `ws名 · ` 前缀区分),每个被选 workspace 各显示一组 Go 配额(5h/周/月)。配置存 `meta.opencode_workspaces`(JSON),每个 workspace 的 30 天快照独立存 `opencode_last_data.<id>`;不再读取环境变量 `OPENCODE_SERVICE_KEY` / `OPENCODE_CONSOLE_URL`
 - **运行时站点内容 + 热更新**:个人资料(姓名/简介/技能/时间线/项目/联系方式/SEO meta)从
   `content.local.ts` 导出为 `docker/site-content/content.json`,服务端运行时读取、
   mtime 变化即生效(改完刷新即见,**无需重启/重建**)。UI 组件全部改为 props 注入

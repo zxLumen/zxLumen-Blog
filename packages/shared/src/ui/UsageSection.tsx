@@ -125,8 +125,13 @@ export function UsageSection({
   const [pickedKeys, setPickedKeys] = useState<Record<DataSource, string[]>>(initialSel?.pickedKeys ?? DEFAULT_SEL.pickedKeys)
   const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [] })
   const [picked, setPicked] = useState<Record<DataSource, string[]>>(initialSel?.picked ?? DEFAULT_SEL.picked)
+  // OpenCode workspace 列表(来自接口)+ 选择(多选,空=全部/总用量)
+  const [wsList, setWsList] = useState<{ id: string; name: string }[]>([])
+  const [pickedWs, setPickedWs] = useState<Record<DataSource, string[]>>(initialSel?.pickedWs ?? DEFAULT_SEL.pickedWs)
+  const [goQuotas, setGoQuotas] = useState<{ name: string; quota: GoQuota | null }[]>([])
   const curPicked = picked[dataSrc] ?? []
   const curPickedKeys = pickedKeys[dataSrc] ?? []
+  const curPickedWs = pickedWs[dataSrc] ?? []
   const curRangeSel = per[dataSrc] ?? defaultRangeSel()
   const range = curRangeSel.range
   const customStart = curRangeSel.customStart
@@ -137,8 +142,8 @@ export function UsageSection({
 
   // 任一筛选变化即写入存档 cookie(服务端随后用它渲染首帧,客户端再写入保持同步)
   useEffect(() => {
-    writeUsageSelCookie({ dataSrc, per, picked, pickedKeys })
-  }, [dataSrc, per, picked, pickedKeys])
+    writeUsageSelCookie({ dataSrc, per, picked, pickedKeys, pickedWs })
+  }, [dataSrc, per, picked, pickedKeys, pickedWs])
 
   useEffect(() => {
     if (rows?.length) {
@@ -158,9 +163,13 @@ export function UsageSection({
       if (!customApplied) return
       url += `&start=${customApplied.start}&end=${customApplied.end}`
     }
+    if (src === 'opencode') {
+      const sel = pickedWs.opencode ?? []
+      if (sel.length > 0) url += `&ws=${sel.join(',')}`
+    }
     fetch(url, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; goQuota?: GoQuota | null; zhipuQuota?: ZhipuQuota | null }) => {
+      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; goQuota?: GoQuota | null; goQuotas?: { name: string; quota: GoQuota | null }[]; zhipuQuota?: ZhipuQuota | null; workspaces?: { id: string; name: string }[] }) => {
         if (!alive) return
         const s = (d.source as typeof source) || 'none'
         setSource(s)
@@ -170,6 +179,8 @@ export function UsageSection({
         setAt(d.at)
         setLastError(d.lastError)
         setGoQuota(d.goQuota ?? null)
+        setGoQuotas(d.goQuotas ?? [])
+        if (d.workspaces) setWsList(d.workspaces)
         setZhipuQuota(d.zhipuQuota ?? null)
         setWin({ start: d.start, end: d.end })
         setLive(d.rows ?? [])
@@ -356,6 +367,17 @@ export function UsageSection({
     setPickedKeys((prev) => ({ ...prev, [dataSrc]: [] }))
   }
 
+  function toggleWs(id: string) {
+    setPickedWs((prev) => {
+      const list = prev[dataSrc] ?? []
+      return { ...prev, [dataSrc]: list.includes(id) ? list.filter((x) => x !== id) : [...list, id] }
+    })
+  }
+
+  function clearPickedWs() {
+    setPickedWs((prev) => ({ ...prev, [dataSrc]: [] }))
+  }
+
   function onRange(r: Range) {
     if (r === 'custom' && !customStart && !customEnd) {
       patchRangeSel({
@@ -381,7 +403,7 @@ export function UsageSection({
     const srcName = dataSrc === 'opencode' ? 'OpenCode 官方 Console' : dataSrc === 'zhipu' ? '智谱 monitor API' : 'DeepSeek 平台'
     if (dataSrc === 'opencode' && !fetchedLive) {
       if (source === 'unconfigured')
-        return `// OpenCode:未配置服务账号 Key(admin 设 OPENCODE_SERVICE_KEY 或在「Token用量」里粘贴 oc_sk_…)${lastError ? ` · ${lastError}` : ''}`
+        return `// OpenCode:未配置 workspace(在 admin「Token用量」里添加 workspace + oc_sk_ Key)${lastError ? ` · ${lastError}` : ''}`
       if (source === 'invalid' || source === 'error')
         return `// OpenCode:${lastError ? `拉取失败:${lastError}` : '拉取失败'}`
       return `// OpenCode:读取官方 Console · ${lastError ? `错误:${lastError}` : '加载中…'}`
@@ -431,7 +453,61 @@ export function UsageSection({
         </div>
       )}
 
-      {dataSrc === 'opencode' && goQuota && (
+      {dataSrc === 'opencode' && wsList.length > 0 && (
+        <div className="zx-seg" role="group" aria-label="workspace 筛选">
+          <button
+            type="button"
+            className={`zx-chip${curPickedWs.length === 0 ? ' is-active' : ''}`}
+            onClick={clearPickedWs}
+          >
+            全部 workspace
+          </button>
+          {wsList.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              className={`zx-chip${curPickedWs.includes(w.id) ? ' is-active' : ''}`}
+              onClick={() => toggleWs(w.id)}
+            >
+              {w.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {dataSrc === 'opencode' && goQuotas.length > 0 && (
+        <div className="zx-quota">
+          {goQuotas.flatMap(({ name, quota }) =>
+            quota
+              ? ([
+                  ['5 小时', quota.rolling],
+                  ['本周', quota.weekly],
+                  ['本月', quota.monthly],
+                ] as const).map(([label, w]) => {
+                  const pct = Math.max(0, Math.min(100, Math.round(w?.percent ?? 0)))
+                  const reset = w?.resetsAt ? new Date(w.resetsAt) : null
+                  const resetTxt = reset
+                    ? reset.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : ''
+                  return (
+                    <div className="zx-quota-item" key={`${name}-${label}`}>
+                      <div className="zx-quota-head">
+                        <span className="zx-quota-label">{name} · Go {label}</span>
+                        <span className="zx-quota-pct">{pct}%</span>
+                      </div>
+                      <div className="zx-quota-bar">
+                        <span style={{ width: `${pct}%` }} />
+                      </div>
+                      {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
+                    </div>
+                  )
+                })
+              : [],
+          )}
+        </div>
+      )}
+
+      {dataSrc === 'opencode' && goQuotas.length === 0 && goQuota && (
         <div className="zx-quota">
           {(
             [

@@ -1,5 +1,5 @@
 import { getToken, fetchUsage } from './deepseek'
-import { getServiceKey, fetchUsageOpenCode } from './opencode'
+import { getWorkspaces, fetchUsageOpenCodeWs } from './opencode'
 import { getApiKey, fetchUsageZhipu } from './zhipu'
 import { getDb } from './db'
 
@@ -25,12 +25,18 @@ async function hasDeepseekData(): Promise<boolean> {
 }
 
 async function hasOpenCodeData(): Promise<boolean> {
-  if (!(await getServiceKey())) return false
-  try {
-    return (await fetchUsageOpenCode('30d')).rows.length > 0
-  } catch {
-    return false
-  }
+  const ws = await getWorkspaces()
+  if (ws.length === 0) return false
+  const results = await Promise.all(
+    ws.map(async (w) => {
+      try {
+        return (await fetchUsageOpenCodeWs(w, '30d')).rows.length > 0
+      } catch {
+        return false
+      }
+    }),
+  )
+  return results.some(Boolean)
 }
 
 async function hasZhipuData(): Promise<boolean> {

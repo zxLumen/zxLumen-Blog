@@ -188,15 +188,22 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
   const [dsToken, setDsToken] = useState('')
   const [dsBusy, setDsBusy] = useState(false)
 
+  interface OcWsItem {
+    id: string
+    name: string
+    key: string
+    hasKey?: boolean
+  }
   interface OcStatus {
     configured?: boolean
     consoleUrl?: string
+    workspaces?: Array<{ id: string; name: string; hasKey?: boolean }>
     lastError?: string | null
     lastData?: { at?: number; count?: number; since?: string } | null
   }
   const [oc, setOc] = useState<OcStatus | null>(null)
   const [ocUrl, setOcUrl] = useState('')
-  const [ocKey, setOcKey] = useState('')
+  const [ocWs, setOcWs] = useState<OcWsItem[]>([])
   const [ocBusy, setOcBusy] = useState(false)
   interface ZhipuStatus {
     configured?: boolean
@@ -378,34 +385,36 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       const o = (await res.json()) as OcStatus
       setOc(o)
       if (o.consoleUrl && o.consoleUrl !== 'https://opencode.ai/console') setOcUrl(o.consoleUrl)
+      setOcWs((o.workspaces ?? []).map((w) => ({ id: w.id, name: w.name, key: '', hasKey: w.hasKey })))
     }
   }
 
-  async function ocAction(action: 'save' | 'refresh' | 'clear', key?: string, url?: string) {
+  async function ocAction(action: 'save' | 'refresh' | 'clear') {
     if (action === 'refresh' && !oc?.configured) {
-      setMsg({ kind: 'err', text: '未配置服务账号 Key:请先粘贴 oc_sk_… Key 保存后再验证' })
+      setMsg({ kind: 'err', text: '未配置 workspace:请先添加至少一个 workspace(名称 + oc_sk_ Key)并保存' })
       return
     }
     setOcBusy(true)
     setMsg(null)
     try {
+      // 保存时:已有项若未重新输入 key(hasKey 且 key 空)则用占位回填,
+      // 由后端 normalizeWs 保留……不可行(拿不到原 key),故要求重新输入或保留 key 的情形前端标 sentinel
       const res = await fetch('/api/admin/opencode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ action, key, consoleUrl: url }),
+        body: JSON.stringify({ action, workspaces: ocWs, consoleUrl: ocUrl || undefined }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
       if (!res.ok) throw new Error(d.error || '操作失败')
       await loadOpenCode()
-      setOcKey('')
       setMsg({
         kind: 'ok',
         text:
           action === 'refresh'
             ? `已从官方 Console 拉取 ${d.rows ?? 0} 行(校验通过)`
             : action === 'save'
-              ? 'Key 已保存'
+              ? 'workspace 已保存'
               : '已清除',
       })
     } catch (err) {
@@ -962,42 +971,76 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
           OpenCode 用量 <span>官方 Console 导出 · 今天/昨天分时</span>
         </h3>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
-          状态:{oc?.configured ? '已配置' : '未配置'}
-          {oc?.consoleUrl ? ` · Console:${oc.consoleUrl}` : ''}
-          {oc?.lastData?.since ? ` · 覆盖 ${oc.lastData.since} 起` : ''}
+          状态:{oc?.configured ? `已配置 ${ocWs.length} 个 workspace` : '未配置'}
           {oc?.lastData?.at
             ? ` · 上次成功 ${oc.lastData.count ?? 0} 个分时桶 @ ${new Date(oc.lastData.at).toLocaleString()}`
             : ''}
         </p>
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.6rem' }}>
           <input
             className="zx-input"
-            type="password"
-            style={{ maxWidth: 300, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
-            placeholder="Console 服务账号 Key(oc_sk_…)"
-            value={ocKey}
-            onChange={(e) => setOcKey(e.target.value)}
-            autoComplete="off"
-          />
-          <input
-            className="zx-input"
-            style={{ maxWidth: 220, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+            style={{ maxWidth: 240, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
             placeholder="Console URL(默认生产)"
             value={ocUrl}
             onChange={(e) => setOcUrl(e.target.value)}
           />
           <button
-            className="zx-btn zx-btn-sm zx-btn-primary"
-            disabled={ocBusy || !ocKey || (!!ocUrl && !/^https:\/\//.test(ocUrl))}
-            onClick={() => void ocAction('save', ocKey, ocUrl || undefined)}
-          >
-            {ocBusy ? '保存中…' : '保存 Key'}
-          </button>
-          <button
             className="zx-btn zx-btn-sm"
             disabled={ocBusy}
-            onClick={() => void ocAction('refresh')}
+            onClick={() => setOcWs((list) => [...list, { id: '', name: '', key: '' }])}
           >
+            + 添加 workspace
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {ocWs.length === 0 && (
+            <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem' }}>
+              还没有 workspace,点「+ 添加 workspace」,填名称 + 该 workspace 的 oc_sk_ Key。
+            </p>
+          )}
+          {ocWs.map((w, i) => (
+            <div key={w.id || `new-${i}`} style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                className="zx-input"
+                style={{ maxWidth: 160, fontSize: '0.72rem' }}
+                placeholder="名称(留空用 Key 尾号)"
+                value={w.name}
+                onChange={(e) => setOcWs((list) => list.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+              />
+              <input
+                className="zx-input"
+                type="password"
+                style={{ maxWidth: 300, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+                placeholder={w.hasKey ? 'Key 已保存(留空则不改)' : 'oc_sk_…'}
+                value={w.key}
+                onChange={(e) => setOcWs((list) => list.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))}
+                autoComplete="off"
+              />
+              <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>
+                {w.hasKey ? '● 已配' : '○ 未配'}
+              </span>
+              <button
+                className="zx-btn zx-btn-sm zx-btn-ghost"
+                disabled={ocBusy}
+                onClick={() => setOcWs((list) => list.filter((_, j) => j !== i))}
+              >
+                删除
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.7rem' }}>
+          <button
+            className="zx-btn zx-btn-sm zx-btn-primary"
+            disabled={ocBusy || ocWs.length === 0 || (!!ocUrl && !/^https:\/\//.test(ocUrl))}
+            onClick={() => void ocAction('save')}
+          >
+            {ocBusy ? '保存中…' : '保存'}
+          </button>
+          <button className="zx-btn zx-btn-sm" disabled={ocBusy} onClick={() => void ocAction('refresh')}>
             {ocBusy ? '验证中…' : '验证 / 刷新'}
           </button>
           <button
@@ -1009,11 +1052,10 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
           </button>
         </div>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
-          到 <span className="zx-accent">opencode.ai/console(或 dev.opencode.ai/console)</span> → API keys
-          创建 <span className="zx-accent">Service account</span> key(需用量读取权限),粘贴上方保存。
-          官方仅提供最近 30 天(UTC 零点对齐);「今天/昨天」按小时趋势展示，其余区间按天。
-          也可用环境变量 <span className="zx-accent">OPENCODE_SERVICE_KEY</span> /{' '}
-          <span className="zx-accent">OPENCODE_CONSOLE_URL</span>(优先级更高)。Key 仅存服务器,不下发前端。
+          每个 workspace 一个 service-account Key(<span className="zx-accent">oc_sk_…</span>):
+          到 <span className="zx-accent">opencode.ai/console</span> → 切到对应 workspace → API keys 创建(需用量读取权限)。
+          名称留空自动用 Key 尾号占位。官方仅提供最近 30 天(UTC 零点对齐);「今天/昨天」按小时展示,其余按天。
+          Key 仅存服务器,不下发前端。
         </p>
         {oc?.lastError && <div className="zx-msg err">{oc.lastError}</div>}
       </div>
