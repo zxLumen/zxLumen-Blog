@@ -28,6 +28,8 @@
 
 ### 修复
 
+- **OpenCode workspace 切换不刷新数据**:用量面板的拉取 effect 依赖缺 workspace 选择,点 workspace chip 后不发新请求。改为依赖稳定的选择 key(选中 id 拼接字符串),切换即重新拉取
+- **OpenCode 多 workspace 配额布局**:每个 workspace 占一行(行内 5 小时/周/月 三项,固定 3 列,卡片尺寸与单 workspace 时一致);去掉冗余的单 workspace 兼容分支
 - **admin OpenCode 面板刷新后显示「已配置 0 个 workspace」**:初始 `load()` 只更新了状态(`oc`)却漏了 workspace 列表(`ocWs`),导致配置已存库但表单/列表为空(实为前端未回填)。抽出 `applyOc()` 统一「状态 + 列表」同时更新,两处加载路径共用
 - **admin 输入框/勾选框夜间变黑**:`MantineBridge` 由 `defaultColorScheme="auto"`(跟随系统深色)改为 `forceColorScheme=当前 zx 主题 mode`,admin 控件明暗与站点主题一致,不再因系统夜间模式错配
 

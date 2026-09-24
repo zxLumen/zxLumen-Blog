@@ -1168,6 +1168,11 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   margin-bottom: 1.6rem;
 }
 
+/* 每个 workspace 占一行(每行 3 项:5h / 周 / 月) */
+.zx-quota.is-fixed3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .zx-quota-item {
   border: 1px solid var(--line);
   border-radius: var(--radius);

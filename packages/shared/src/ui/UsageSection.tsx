@@ -132,6 +132,8 @@ export function UsageSection({
   const curPicked = picked[dataSrc] ?? []
   const curPickedKeys = pickedKeys[dataSrc] ?? []
   const curPickedWs = pickedWs[dataSrc] ?? []
+  // 稳定的 workspace 选择 key(字符串):用于 fetch 依赖,选择变化才重新拉取
+  const wsKey = (pickedWs.opencode ?? []).join(',')
   const curRangeSel = per[dataSrc] ?? defaultRangeSel()
   const range = curRangeSel.range
   const customStart = curRangeSel.customStart
@@ -167,9 +169,10 @@ export function UsageSection({
       const sel = pickedWs.opencode ?? []
       if (sel.length > 0) url += `&ws=${sel.join(',')}`
     }
+    void wsKey
     fetch(url, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; goQuota?: GoQuota | null; goQuotas?: { name: string; quota: GoQuota | null }[]; zhipuQuota?: ZhipuQuota | null; workspaces?: { id: string; name: string }[] }) => {
+      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; goQuotas?: { name: string; quota: GoQuota | null }[]; zhipuQuota?: ZhipuQuota | null; workspaces?: { id: string; name: string }[] }) => {
         if (!alive) return
         const s = (d.source as typeof source) || 'none'
         setSource(s)
@@ -178,7 +181,6 @@ export function UsageSection({
         setCurrency(d.currency === 'USD' ? 'USD' : 'CNY')
         setAt(d.at)
         setLastError(d.lastError)
-        setGoQuota(d.goQuota ?? null)
         setGoQuotas(d.goQuotas ?? [])
         if (d.workspaces) setWsList(d.workspaces)
         setZhipuQuota(d.zhipuQuota ?? null)
@@ -207,7 +209,7 @@ export function UsageSection({
     return () => {
       alive = false
     }
-  }, [range, customApplied, dataSrc])
+  }, [range, customApplied, dataSrc, wsKey])
 
   const serverRows = dataSrc === 'deepseek' && rows && rows.length > 0 ? rows : null
   const fetchedLive = fetchedFor?.range === range && fetchedFor?.src === dataSrc && live !== null
