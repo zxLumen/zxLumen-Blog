@@ -6,6 +6,8 @@ Sentry.init({
   dsn,
   // 未配置 DSN 时完全关闭,不影响其它功能
   enabled: !!dsn,
+  // release 在构建期注入(与上传 source map 的 release 一致)
+  release: process.env.NEXT_PUBLIC_SENTRY_RELEASE,
   environment: process.env.NODE_ENV,
   // 不采集个人/敏感数据(v11 用 dataCollection 取代 sendDefaultPii)
   dataCollection: {

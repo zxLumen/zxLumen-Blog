@@ -17,6 +17,8 @@ export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   silent: true,
+  // source map 上传的 release 名(与运行时一致,由 CI 注入 git sha)
+  release: { name: process.env.SENTRY_RELEASE },
   // 客户端事件经自身域名中转,避免被广告拦截器拦
   tunnelRoute: "/monitoring",
   // 仅当 CI 提供 SENTRY_AUTH_TOKEN 时才上传 source map
