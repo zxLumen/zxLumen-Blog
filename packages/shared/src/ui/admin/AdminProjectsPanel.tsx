@@ -36,7 +36,13 @@ const STATUS_COLOR: Record<string, string> = {
   archived: '#868e96',
 }
 
+const KIND_OPTIONS = [
+  { value: 'personal', label: '个人项目(新)' },
+  { value: 'work', label: '历史工作成果' },
+]
+
 type Status = StoredProject['status']
+type Kind = NonNullable<StoredProject['kind']>
 
 function newId(): string {
   return `proj-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`
@@ -122,7 +128,7 @@ export function AdminProjectsPanel({
   const add = () =>
     mutate((list) => [
       ...list,
-      { id: newId(), name: '新项目', desc: '', tech: [], status: 'online', period: '', demoUrl: '', repoUrl: '', featured: false },
+      { id: newId(), name: '新项目', desc: '', tech: [], status: 'online', kind: 'personal', period: '', demoUrl: '', repoUrl: '', featured: false },
     ])
 
   const trash = (id: string) => mutate((list) => list.map((it) => (it.id === id ? { ...it, deleted: true } : it)))
@@ -219,6 +225,18 @@ export function AdminProjectsPanel({
             placeholder="如 2022–2024"
             onChange={(e) => patch(p.id, { period: e.target.value })}
           />
+          <div>
+            <Text component="label" fz="xs" c="dimmed" style={{ display: 'block', marginBottom: 6 }}>
+              分类
+            </Text>
+            <Select
+              size="xs"
+              data={KIND_OPTIONS}
+              value={p.kind ?? (p.demoUrl === '/' ? 'personal' : 'work')}
+              allowDeselect={false}
+              onChange={(v) => patch(p.id, { kind: (v ?? 'work') as Kind })}
+            />
+          </div>
           <div>
             <Text component="label" fz="xs" c="dimmed" style={{ display: 'block', marginBottom: 6 }}>
               状态

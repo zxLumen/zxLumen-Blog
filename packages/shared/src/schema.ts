@@ -224,6 +224,8 @@ export interface StoredProject {
   desc: string
   tech: string[]
   status: 'online' | 'demo' | 'building' | 'archived'
+  /** 分类:personal=个人新项目(含本站),work=历史工作成果 */
+  kind?: 'personal' | 'work'
   period?: string
   demoUrl?: string
   repoUrl?: string

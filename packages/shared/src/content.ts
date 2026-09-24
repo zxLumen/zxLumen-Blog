@@ -29,6 +29,8 @@ export interface Project {
   desc: string
   tech: string[]
   status: 'online' | 'demo' | 'building' | 'archived'
+  /** 分类:personal=个人新项目(含本站),work=历史工作成果。缺省按本站 demoUrl 推断 */
+  kind?: 'personal' | 'work'
   period?: string
   demoUrl?: string
   repoUrl?: string

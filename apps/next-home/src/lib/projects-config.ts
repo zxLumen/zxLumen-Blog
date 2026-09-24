@@ -5,6 +5,12 @@ import { getDb } from './db'
 const META_KEY = 'projects_config'
 
 const STATUSES: Project['status'][] = ['online', 'demo', 'building', 'archived']
+const KINDS: NonNullable<Project['kind']>[] = ['personal', 'work']
+
+/** 缺省推断:本站(demoUrl='/')视为个人项目,其余视为历史工作成果 */
+function inferKind(demoUrl?: string): NonNullable<Project['kind']> {
+  return demoUrl === '/' ? 'personal' : 'work'
+}
 
 /** 静态 PROJECTS → StoredProject(作为未配置时的初始列表;内容来自运行时 content.json) */
 async function fromStatic(): Promise<StoredProject[]> {
@@ -15,6 +21,7 @@ async function fromStatic(): Promise<StoredProject[]> {
     desc: p.desc,
     tech: p.tech ?? [],
     status: p.status,
+    kind: p.kind ?? inferKind(p.demoUrl),
     period: p.period,
     demoUrl: p.demoUrl,
     repoUrl: p.repoUrl,
@@ -36,14 +43,19 @@ function normalizeOne(raw: unknown): StoredProject | null {
     : typeof r.tech === 'string'
       ? r.tech.split(',').map((t) => t.trim()).filter(Boolean)
       : []
+  const demoUrl = typeof r.demoUrl === 'string' ? r.demoUrl : ''
+  const kind = KINDS.includes(r.kind as NonNullable<Project['kind']>)
+    ? (r.kind as NonNullable<Project['kind']>)
+    : inferKind(demoUrl)
   return {
     id,
     name: typeof r.name === 'string' && r.name ? r.name : id,
     desc: typeof r.desc === 'string' ? r.desc : '',
     tech,
     status,
+    kind,
     period: typeof r.period === 'string' ? r.period : '',
-    demoUrl: typeof r.demoUrl === 'string' ? r.demoUrl : '',
+    demoUrl,
     repoUrl: typeof r.repoUrl === 'string' ? r.repoUrl : '',
     featured: r.featured === true,
     deleted: r.deleted === true,
@@ -92,6 +104,7 @@ export async function getVisibleProjects(): Promise<Project[]> {
       desc: p.desc,
       tech: p.tech,
       status: p.status,
+      kind: p.kind,
       period: p.period || undefined,
       demoUrl: p.demoUrl || undefined,
       repoUrl: p.repoUrl || undefined,

@@ -116,13 +116,29 @@ export function ProjectsSection({
   clicks?: Record<string, number>
   pv?: number
 }) {
+  // 分类:显式 kind 优先,缺省按本站(demoUrl='/')推断
+  const kindOf = (p: Project): 'personal' | 'work' => p.kind ?? (p.demoUrl === '/' ? 'personal' : 'work')
+  const personal = projects.filter((p) => kindOf(p) === 'personal')
+  const work = projects.filter((p) => kindOf(p) === 'work')
   return (
     <Section id="projects" tag="// PROJECTS" num="01" title="项目">
-      <div className="zx-grid">
-        {projects.map((p, i) => (
-          <ProjectCard key={p.id} project={p} idx={i + 1} clicks={clicks?.[p.id]} pv={pv} />
-        ))}
-      </div>
+      {personal.length > 0 && (
+        <div className="zx-grid">
+          {personal.map((p, i) => (
+            <ProjectCard key={p.id} project={p} idx={i + 1} clicks={clicks?.[p.id]} pv={pv} />
+          ))}
+        </div>
+      )}
+      {work.length > 0 && (
+        <>
+          {personal.length > 0 && <div className="zx-projects-sep" aria-hidden="true" />}
+          <div className="zx-grid">
+            {work.map((p, i) => (
+              <ProjectCard key={p.id} project={p} idx={personal.length + i + 1} clicks={clicks?.[p.id]} pv={pv} />
+            ))}
+          </div>
+        </>
+      )}
     </Section>
   )
 }

@@ -1000,6 +1000,13 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   gap: 1.1rem;
 }
 
+/* 项目分组之间的淡分隔线(个人新项目 / 历史工作成果) */
+.zx-projects-sep {
+  height: 1px;
+  margin: 1.4rem 0;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+
 .zx-card {
   position: relative;
   background: var(--elev);
