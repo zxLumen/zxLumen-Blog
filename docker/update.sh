@@ -1,20 +1,9 @@
 #!/usr/bin/env bash
-# 应用更新:拉代码 → 重建并重启容器 → 清理旧镜像
-# 在服务器上于仓库根(或 docker 目录)执行:./docker/update.sh
+# 手动部署/回退入口(替代旧的“git pull + 镜像内构建”流程):
+# 新流程由 CI 构建镜像并推 GHCR,服务器只负责 pull。本脚本在服务器上
+# 于 ~/zxLumen-Blog/docker 内执行:
+#   ./update.sh             # 拉 latest
+#   IMAGE_TAG=<sha> ./update.sh   # 回退 / 指定某次提交对应的镜像
 set -euo pipefail
-
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$REPO_DIR"
-
-echo "==> git pull"
-git pull --ff-only
-
-echo "==> 重建并启动"
-cd docker
-docker compose up -d --build
-
-echo "==> 清理悬空镜像"
-docker image prune -f
-
-echo "==> 状态"
-docker compose ps
+cd "$(dirname "$0")"
+./deploy.sh "${1:-${IMAGE_TAG:-latest}}"
