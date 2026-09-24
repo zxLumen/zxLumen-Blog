@@ -54,23 +54,29 @@ jobs:
             ${{ steps.img.outputs.image }}:${{ github.sha }}
             ${{ steps.img.outputs.image }}:latest
 
-      # 仓库公开 → 镜像公开 → 服务器可匿名 pull,无需在服务器存任何凭据。
-      # 包归 zxLumen(User)名下,改可见性需其 PAT(write:packages);GITHUB_TOKEN 作后备。
-      - name: Make GHCR package public
+      # 从 Actions 发布到公开仓库的包会继承仓库可见性 → 默认即 public。
+      # 这里读回实际可见性并断言;若为 private(如从私有仓库/手动推包),
+      # 用 zxLumen PAT(write:packages)兜底置公开,GITHUB_TOKEN 再作后备。
+      - name: Ensure GHCR package is public
         env:
           GH_PACKAGES_PAT: ${{ secrets.GH_PACKAGES_PAT }}
         run: |
           NAME="zx-home"
-          for TOKEN in "$GH_PACKAGES_PAT" "${{ secrets.GITHUB_TOKEN }}"; do
+          VIS=""
+          for TOKEN in "${{ secrets.GITHUB_TOKEN }}" "$GH_PACKAGES_PAT"; do
             [ -n "$TOKEN" ] || continue
-            if gh api -H "Authorization: token ${TOKEN}" -X PATCH "/user/packages/container/${NAME}" \
-                -f visibility=public >/dev/null 2>&1; then
-              VIS=$(gh api -H "Authorization: token ${TOKEN}" "/user/packages/container/${NAME}" --jq .visibility 2>/dev/null || echo "")
-              echo "GHCR 包 ${NAME} visibility = ${VIS}"
-              [ "${VIS}" = "public" ] && exit 0
+            VIS=$(gh api -H "Authorization: token ${TOKEN}" "/user/packages/container/${NAME}" --jq .visibility 2>/dev/null || echo "")
+            if [ "${VIS}" = "public" ]; then
+              echo "GHCR 包 ${NAME} 已是 public(可见性继承自公开仓库)"
+              exit 0
             fi
+            gh api -H "Authorization: token ${TOKEN}" -X PATCH "/user/packages/container/${NAME}" \
+                -F visibility=public >/dev/null 2>&1 || true
+            VIS=$(gh api -H "Authorization: token ${TOKEN}" "/user/packages/container/${NAME}" --jq .visibility 2>/dev/null || echo "")
+            echo "尝试以 token(*-masked) 设为 public 后 → ${VIS}"
+            [ "${VIS}" = "public" ] && exit 0
           done
-          echo "::error::无法把 GHCR 包设为 public(检查 GH_PACKAGES_PAT 是否 zxLumen 账号且含 write:packages)"
+          echo "::error::GHCR 包 ${NAME} 仍为 ${VIS}(应 public,服务器才能匿名 pull)"
           exit 1
 
       - name: SSH deploy to server
