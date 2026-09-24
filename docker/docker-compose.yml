@@ -90,7 +90,6 @@ services:
       - --housekeeping_interval=30s
       - --max_housekeeping_interval=60s
       - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp,percpu,disk,diskIO
-      - --url_base_prefix=/
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
