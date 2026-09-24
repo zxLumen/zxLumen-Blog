@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **「用量」统一更名为「Token用量」**:Hero 首屏按钮「用量面板」→「Token用量」,并调整顺序为「查看项目 → / Token用量 / 关于·简历」;顶栏/侧栏导航「用量」→「Token用量」;区块标题、admin Tab、相关提示文案同步去空格统一
+
 ### 修复
 
 - **admin 输入框/勾选框夜间变黑**:`MantineBridge` 由 `defaultColorScheme="auto"`(跟随系统深色)改为 `forceColorScheme=当前 zx 主题 mode`,admin 控件明暗与站点主题一致,不再因系统夜间模式错配

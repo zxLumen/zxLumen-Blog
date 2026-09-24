@@ -381,14 +381,14 @@ export function UsageSection({
     const srcName = dataSrc === 'opencode' ? 'OpenCode 官方 Console' : dataSrc === 'zhipu' ? '智谱 monitor API' : 'DeepSeek 平台'
     if (dataSrc === 'opencode' && !fetchedLive) {
       if (source === 'unconfigured')
-        return `// OpenCode:未配置服务账号 Key(admin 设 OPENCODE_SERVICE_KEY 或在「Token 用量」里粘贴 oc_sk_…)${lastError ? ` · ${lastError}` : ''}`
+        return `// OpenCode:未配置服务账号 Key(admin 设 OPENCODE_SERVICE_KEY 或在「Token用量」里粘贴 oc_sk_…)${lastError ? ` · ${lastError}` : ''}`
       if (source === 'invalid' || source === 'error')
         return `// OpenCode:${lastError ? `拉取失败:${lastError}` : '拉取失败'}`
       return `// OpenCode:读取官方 Console · ${lastError ? `错误:${lastError}` : '加载中…'}`
     }
     if (dataSrc === 'zhipu' && !fetchedLive) {
       if (source === 'unconfigured')
-        return `// 智谱:未配置 API Key(admin 设 ZHIPU_API_KEY 或在「Token 用量」里粘贴)${lastError ? ` · ${lastError}` : ''}`
+        return `// 智谱:未配置 API Key(admin 设 ZHIPU_API_KEY 或在「Token用量」里粘贴)${lastError ? ` · ${lastError}` : ''}`
       if (source === 'invalid' || source === 'error')
         return `// 智谱:${lastError ? `拉取失败:${lastError}` : '拉取失败'}`
       return `// 智谱:读取 monitor API · ${lastError ? `错误:${lastError}` : '加载中…'}`
@@ -412,7 +412,7 @@ export function UsageSection({
   })()
 
   return (
-    <Section id="usage" tag="// TOKEN USAGE" num="02" title="Token 用量">
+    <Section id="usage" tag="// TOKEN USAGE" num="02" title="Token用量">
       {sources.length > 1 && (
         <div className="zx-seg" role="group" aria-label="数据源">
           {sources.map((s) => (

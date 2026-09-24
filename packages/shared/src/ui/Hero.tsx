@@ -22,10 +22,10 @@ const SECRET_WINDOW = 1200
 export function Hero({
   primaryHref = '/#projects',
   primaryLabel = '查看项目 →',
-  secondaryHref = '/#about',
-  secondaryLabel = '关于 / 简历',
-  tertiaryHref = '/#usage',
-  tertiaryLabel = '用量面板',
+  secondaryHref = '/#usage',
+  secondaryLabel = 'Token用量',
+  tertiaryHref = '/#about',
+  tertiaryLabel = '关于 / 简历',
 }: HeroProps) {
   const { themeMeta: meta } = usePrefs()
   const clicks = useRef<number[]>([])

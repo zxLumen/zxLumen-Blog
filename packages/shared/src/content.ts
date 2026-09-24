@@ -76,7 +76,7 @@ export const CONTACTS: Contacts = local.CONTACTS
 export const NAV = [
   { label: '主页', href: '/' },
   { label: '项目', href: '/#projects' },
-  { label: '用量', href: '/#usage' },
+  { label: 'Token用量', href: '/#usage' },
   { label: '关于', href: '/#about' },
   { label: '留言板', href: '/#guestbook' },
 ]

@@ -5,13 +5,13 @@
  */
 
 export const FEATURE_IDS = [
-  // admin 顶部 Tab 分栏:留言 / 个人信息 / Token 用量
+  // admin 顶部 Tab 分栏:留言 / 个人信息 / Token用量
   'admin-tabs',
   // 访客删除自己发过的留言(按匿名 ID 校验)
   'self-delete',
-  // 用量面板 OpenCode 数据源(读官方 Console,含 hourly 分时)
+  // Token用量 OpenCode 数据源(读官方 Console,含 hourly 分时)
   'usage-opencode',
-  // 用量面板智谱数据源(读 monitor API:按模型 token 总量 + 配额)
+  // Token用量智谱数据源(读 monitor API:按模型 token 总量 + 配额)
   'usage-zhipu',
   // 首页统计区块(访客 PV/UV/趋势、留言、项目点击/简历下载)
   'visitor-stats',

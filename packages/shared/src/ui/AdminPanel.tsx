@@ -753,7 +753,7 @@ export function AdminPanel() {
                           ? '项目'
                           : t === 'themes'
                             ? '外观'
-                            : 'Token 用量'}
+                            : 'Token用量'}
               </button>
             ))}
           </div>
