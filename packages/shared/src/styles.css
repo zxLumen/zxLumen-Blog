@@ -1031,7 +1031,15 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 .zx-card.is-featured {
   border-color: var(--line-strong);
-  background-image: linear-gradient(160deg, var(--glow) 0%, transparent 40%);
+}
+
+/* featured:顶部一条 accent→accent-2 渐变强调条 */
+.zx-card.is-featured::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
 
 /* 已归档(archived)卡片:降透明 + 降饱和,视觉上归档 */
