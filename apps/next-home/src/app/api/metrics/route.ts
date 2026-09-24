@@ -3,15 +3,35 @@ import { renderMetrics } from '@/lib/metrics'
 
 export const dynamic = 'force-dynamic'
 
+/** 从请求头/查询参数提取 token:支持 X-Metrics-Token、Bearer、Basic、?token= */
+function extractToken(req: Request, url: URL): string {
+  const header = req.headers.get('x-metrics-token')
+  if (header) return header
+  const auth = req.headers.get('authorization') || ''
+  const bearer = /^Bearer\s+(.+)$/i.exec(auth)
+  if (bearer) return bearer[1].trim()
+  const basic = /^Basic\s+(.+)$/i.exec(auth)
+  if (basic) {
+    try {
+      const decoded = atob(basic[1])
+      const i = decoded.indexOf(':')
+      return i >= 0 ? decoded.slice(i + 1) : decoded
+    } catch {
+      /* ignore */
+    }
+  }
+  return url.searchParams.get('token') || ''
+}
+
 /**
  * Prometheus 指标端点(仅内部抓取)。
- * 需 `X-Metrics-Token` 头(或 `?token=`)匹配 METRICS_TOKEN;Caddy 亦对公网屏蔽该路径。
+ * 需 `X-Metrics-Token` 头 / `Authorization: Bearer|Basic` / `?token=` 匹配 METRICS_TOKEN;
+ * Caddy 亦对公网屏蔽该路径。
  */
 export async function GET(req: Request) {
   const url = new URL(req.url)
-  const token = req.headers.get('x-metrics-token') || url.searchParams.get('token') || ''
   const expected = process.env.METRICS_TOKEN || ''
-  if (!expected || token !== expected) {
+  if (!expected || extractToken(req, url) !== expected) {
     return new Response('forbidden\n', { status: 403, headers: { 'Cache-Control': 'no-store' } })
   }
 

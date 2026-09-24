@@ -14,20 +14,20 @@ logging {
 
 prometheus.remote_write "cloud" {
   endpoint {
-    url = env("GRAFANA_METRICS_URL")
+    url = sys.env("GRAFANA_METRICS_URL")
     basic_auth {
-      username = env("GRAFANA_METRICS_USER")
-      password = env("GRAFANA_METRICS_TOKEN")
+      username = sys.env("GRAFANA_METRICS_USER")
+      password = sys.env("GRAFANA_METRICS_TOKEN")
     }
   }
 }
 
 loki.write "cloud" {
   endpoint {
-    url = env("GRAFANA_LOGS_URL")
+    url = sys.env("GRAFANA_LOGS_URL")
     basic_auth {
-      username = env("GRAFANA_LOGS_USER")
-      password = env("GRAFANA_LOGS_TOKEN")
+      username = sys.env("GRAFANA_LOGS_USER")
+      password = sys.env("GRAFANA_LOGS_TOKEN")
     }
   }
 }
@@ -72,8 +72,9 @@ prometheus.scrape "app" {
   forward_to      = [prometheus.remote_write.cloud.receiver]
   scrape_interval = "30s"
   metrics_path    = "/api/metrics"
-  headers = {
-    "X-Metrics-Token" = env("METRICS_TOKEN"),
+  basic_auth {
+    username = "metrics"
+    password = sys.env("METRICS_TOKEN")
   }
 }
 
