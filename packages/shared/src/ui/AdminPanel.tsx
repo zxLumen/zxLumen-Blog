@@ -337,6 +337,12 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     }
   }, [])
 
+  const applyOc = useCallback((o: OcStatus) => {
+    setOc(o)
+    if (o.consoleUrl && o.consoleUrl !== 'https://opencode.ai/console') setOcUrl(o.consoleUrl)
+    setOcWs((o.workspaces ?? []).map((w) => ({ id: w.id, name: w.name, key: '', hasKey: w.hasKey })))
+  }, [])
+
   const loadSettings = useCallback(async () => {
     const sres = await fetch('/api/admin/settings', { credentials: 'same-origin' })
     if (sres.ok) {
@@ -358,11 +364,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     if (dres.ok) setDs((await dres.json()) as DsStatus)
     if (showOc) {
       const ores = await fetch('/api/admin/opencode', { credentials: 'same-origin' })
-      if (ores.ok) {
-        const o = (await ores.json()) as OcStatus
-        setOc(o)
-        if (o.consoleUrl && o.consoleUrl !== 'https://opencode.ai/console') setOcUrl(o.consoleUrl)
-      }
+      if (ores.ok) applyOc((await ores.json()) as OcStatus)
     }
     if (showZhipu) {
       const zres = await fetch('/api/admin/zhipu', { credentials: 'same-origin' })
@@ -372,7 +374,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
         if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
       }
     }
-  }, [showOc, showZhipu])
+  }, [showOc, showZhipu, applyOc])
 
   async function loadDeepseek() {
     const res = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
@@ -381,12 +383,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
 
   async function loadOpenCode() {
     const res = await fetch('/api/admin/opencode', { credentials: 'same-origin' })
-    if (res.ok) {
-      const o = (await res.json()) as OcStatus
-      setOc(o)
-      if (o.consoleUrl && o.consoleUrl !== 'https://opencode.ai/console') setOcUrl(o.consoleUrl)
-      setOcWs((o.workspaces ?? []).map((w) => ({ id: w.id, name: w.name, key: '', hasKey: w.hasKey })))
-    }
+    if (res.ok) applyOc((await res.json()) as OcStatus)
   }
 
   async function ocAction(action: 'save' | 'refresh' | 'clear') {
