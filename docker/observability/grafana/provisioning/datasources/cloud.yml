@@ -1,0 +1,27 @@
+apiVersion: 1
+
+# 数据源指向 Grafana Cloud 的「查询」接口(只读);token 从环境变量注入。
+datasources:
+  - name: prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/prom
+    basicAuth: true
+    basicAuthUser: "3609734"
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s
+    secureJsonData:
+      basicAuthPassword: ${GRAFANA_READ_TOKEN}
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: https://logs-prod-020.grafana.net
+    basicAuth: true
+    basicAuthUser: "1800535"
+    secureJsonData:
+      basicAuthPassword: ${GRAFANA_READ_TOKEN}

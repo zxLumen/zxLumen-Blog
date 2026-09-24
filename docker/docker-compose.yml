@@ -43,6 +43,8 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
+    # 用 env_file 传 GRAFANA_BASIC_HASH(bcrypt 含 `$`,不能被 compose 插值)
+    env_file: .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -127,11 +129,35 @@ services:
     networks:
       - web
 
+  # 本地 Grafana(Web 查看,数据源指向 Grafana Cloud 的查询接口;不存数据)
+  grafana:
+    image: grafana/grafana-oss:11.2.2
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_ROOT_URL: https://grafana.${DOMAIN}
+      GRAFANA_READ_TOKEN: ${GRAFANA_READ_TOKEN}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    expose:
+      - "3000"
+    networks:
+      - web
+
 volumes:
   zx-data:
   caddy-data:
   caddy-config:
   alloy-data:
+  grafana-data:
 
 networks:
   web:

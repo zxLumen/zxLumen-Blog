@@ -55,6 +55,14 @@ bark.{$DOMAIN} {
 	reverse_proxy bark-server:8080
 }
 
+# 本地 Grafana(仅本机采集 → 云端数据源;Web 在服务器):basic_auth 保护
+grafana.{$DOMAIN} {
+	basic_auth {
+		admin {$GRAFANA_BASIC_HASH}
+	}
+	reverse_proxy grafana:3000
+}
+
 # 未来项目 demo:每个子域名一条,反代到对应容器
 # 记得把 demo 服务加入 compose 的 web 网络
 #

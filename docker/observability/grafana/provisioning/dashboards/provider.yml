@@ -1,0 +1,14 @@
+apiVersion: 1
+
+# 从挂载目录加载面板 JSON(随容器启动自动导入/更新)
+providers:
+  - name: zx
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

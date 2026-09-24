@@ -73,8 +73,22 @@ curl -s -o /dev/null -w '%{http_code}\n' https://<域名>/api/metrics   # 期望
 ```
 Grafana Cloud → Explore / Metrics / Logs 应能看到数据。
 
-## 三、应用端点
-- `GET /api/health`:进程 + 数据库可读 → 200/503(公开,给合成探测)。
+## 本地 Grafana(`grafana.<域名>`)
+在服务器上跑一个 Grafana(monitoring profile),**数据源指向 Grafana Cloud 的查询接口**(只读,不落地数据),自动导入 Node Exporter Full / cAdvisor 面板。日常看指标/日志就用自有域名,存储与告警仍在 Grafana Cloud。
+
+前提与步骤:
+1. **DNS**:加一条 A 记录 `grafana` → 服务器 IP(Caddy 自动签证书)。
+2. **只读 token**:Grafana Cloud → Access Policies → `metrics:read` + `logs:read`;填入 `.env` 的 `GRAFANA_READ_TOKEN`。
+3. **入口口令**:`.env` 里
+   - `GRAFANA_ADMIN_PASSWORD`(Grafana 内 admin 登录)
+   - `GRAFANA_BASIC_HASH`(Caddy basic_auth 的 bcrypt;用 `docker exec docker-caddy-1 caddy hash-password --plaintext '你的密码'` 生成)。
+     ⚠️ bcrypt 含 `$`,在 `.env` 中**必须用单引号**包裹(`GRAFANA_BASIC_HASH='$2a$14$…'`),否则 Compose 会把它当变量插值而损坏。
+4. 启动:`docker compose --profile monitoring up -d`。
+5. 访问 `https://grafana.<域名>`(先过 basic_auth,再用 admin 登录)。
+
+面板/数据源升级或排错:数据源见 `docker/observability/grafana/provisioning/datasources/cloud.yml`;面板 JSON 在 `docker/observability/grafana/dashboards/`(随容器热加载)。
+
+## 三、应用端点- `GET /api/health`:进程 + 数据库可读 → 200/503(公开,给合成探测)。
 - `GET /api/metrics`:Prometheus 文本;**需 `X-Metrics-Token`**(或 `?token=`),否则 403;
   Caddy 另对公网 `/api/metrics*` 返回 404(纵深防御)。
   暴露:进程(rss/heap/uptime)、`zx_app_errors_total{route}`(来自 `onRequestError`)、业务 gauges(`zx_visits_*` / `zx_comments_*` / `zx_project_clicks` / `zx_resume_downloads`)。
