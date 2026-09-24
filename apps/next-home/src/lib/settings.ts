@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { CONTACTS, PROFILE } from '@zx/shared'
+import { getRuntimeContent } from '@zx/shared/server'
 import type { Contacts } from '@zx/shared'
 import { ADMIN_PASSWORD, getDb } from './db'
 
@@ -33,9 +33,10 @@ export async function setWechatQr(base64: string, type: string) {
 
 const reverse = (s: string) => [...s].reverse().join('')
 
-/** 联系方式(存当前库 meta,默认取 shared 的 CONTACTS);phone 为明文 */
+/** 联系方式(存当前库 meta,默认取运行时 content 的 CONTACTS);phone 为明文 */
 export async function getContactSettings() {
   const db = await getDb()
+  const { CONTACTS } = await getRuntimeContent()
   return {
     email: db.getMeta(K_EMAIL) ?? CONTACTS.email,
     wechat: db.getMeta(K_WECHAT) ?? CONTACTS.wechat ?? '',
@@ -54,6 +55,7 @@ export async function setContactSettings(c: { email?: string; wechat?: string; p
 export async function getClientContacts(): Promise<Contacts> {
   const { email, wechat, phone } = await getContactSettings()
   const qr = await getWechatQr()
+  const { CONTACTS } = await getRuntimeContent()
   return {
     email,
     wechat: wechat || undefined,
@@ -62,8 +64,9 @@ export async function getClientContacts(): Promise<Contacts> {
   }
 }
 
-/** 站长昵称(存当前库 meta,默认取 PROFILE.name) */
+/** 站长昵称(存当前库 meta,默认取运行时 content 的 PROFILE.name) */
 export async function getAdminNick(): Promise<string> {
+  const { PROFILE } = await getRuntimeContent()
   return (await getDb()).getMeta(ADMIN_NICK_KEY) || PROFILE.name
 }
 

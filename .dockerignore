@@ -12,3 +12,10 @@
 **/.env.local
 docker/.env
 .DS_Store
+
+# 个人 / 运行时内容:绝不进镜像(由运行时挂载 / 静态服务代替)
+packages/shared/src/content.local.ts
+**/content.json
+**/site-content
+apps/next-home/public/resume.pdf
+apps/next-home/public/wechat.png

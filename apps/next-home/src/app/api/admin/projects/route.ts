@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 //   DELETE → 恢复为静态默认(删除配置)
 export async function GET() {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  return Response.json({ projects: getStoredProjects() })
+  return Response.json({ projects: await getStoredProjects() })
 }
 
 export async function POST(req: Request) {
@@ -29,6 +29,6 @@ export async function POST(req: Request) {
 
 export async function DELETE() {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const projects = resetStoredProjects()
+  const projects = await resetStoredProjects()
   return Response.json({ ok: true, projects })
 }

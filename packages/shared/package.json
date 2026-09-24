@@ -27,7 +27,8 @@
   ],
   "scripts": {
     "ensure-content": "node scripts/ensure-content.mjs",
-    "build": "node scripts/ensure-content.mjs && tsc -p tsconfig.json",
+    "export:content": "node scripts/export-content.mjs",
+    "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json --watch"
   },
   "peerDependencies": {

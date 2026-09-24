@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Shell } from '@zx/shared/ui'
-import type { Contacts, LayoutId, LinkComponent, NavItem } from '@zx/shared/ui'
+import type { Contacts, LayoutId, LinkComponent, NavItem, Profile } from '@zx/shared/ui'
 
 /**
  * App 侧外壳:把 Next 的 Link、当前路径、联系方式与"可用主题/布局"注入共享 Shell。
@@ -11,6 +11,7 @@ import type { Contacts, LayoutId, LinkComponent, NavItem } from '@zx/shared/ui'
 export function AppShell({
   nav,
   contacts,
+  profile,
   allowedThemeIds,
   allowedLayoutIds,
   defaultTheme,
@@ -21,6 +22,7 @@ export function AppShell({
 }: {
   nav: NavItem[]
   contacts?: Contacts
+  profile?: Profile
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
   /** admin 配置的默认主题 / 布局 */
@@ -38,6 +40,7 @@ export function AppShell({
       pathname={pathname}
       link={Link as unknown as LinkComponent}
       contacts={contacts}
+      profile={profile}
       allowedThemeIds={allowedThemeIds}
       allowedLayoutIds={allowedLayoutIds}
       defaultTheme={defaultTheme}

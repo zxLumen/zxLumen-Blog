@@ -8,6 +8,7 @@ import { effectiveCid, isMockActive, MOCK_COOKIE } from "@/lib/clientid";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
 import { fetchUsage } from "@/lib/deepseek";
 import { getSourceAvailability } from "@/lib/usage-sources";
+import { getRuntimeContent } from "@zx/shared/server";
 import { getVisibleProjects } from "@/lib/projects-config";
 export const dynamic = "force-dynamic";
 
@@ -66,8 +67,9 @@ export default async function Home() {
     usageWindow = undefined;
   }
 
-  // 项目(admin 后台增删/排序/软删;未配置时用静态 PROJECTS)
-  const projects = getVisibleProjects();
+  // 项目(admin 后台增删/排序/软删;未配置时用运行时 content.json 的 PROJECTS)
+  const projects = await getVisibleProjects();
+  const content = await getRuntimeContent();
 
   return (
     <HomePage
@@ -82,6 +84,10 @@ export default async function Home() {
       initialAuthor={initialAuthor}
       viewerMock={viewerMock || undefined}
       contacts={await getClientContacts()}
+      profile={content.PROFILE}
+      links={content.LINKS}
+      tech={content.TECH}
+      timeline={content.TIMELINE}
     />
   );
 }

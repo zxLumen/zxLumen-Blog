@@ -1,16 +1,22 @@
 services:
   app:
+    # 本地/CI 构建产物推 GHCR(ghcr.io/zxlumen/zx-home:<tag>),服务器只 pull 不构建。
+    # 本地开发仍可用 `docker compose build` 覆盖构建(zx-home:latest)。
+    image: ghcr.io/zxlumen/zx-home:${IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: zx-home:latest
     restart: unless-stopped
     env_file: .env
     environment:
       DB_PATH: /data/zx.db
       NODE_ENV: production
+      # 运行时站点内容(hot reload:mtime 变更即生效,无需重启/重建)
+      CONTENT_FILE: /srv/site/content.json
     volumes:
       - zx-data:/data
+      # 站点内容 + 简历 PDF / 二维码(不入镜像,由 Caddy 静态服务)
+      - ./site-content:/srv/site:ro
     expose:
       - "3000"
     networks:
@@ -43,6 +49,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+      # 静态资源(简历 PDF / 微信二维码)挂在 Caddy,不走应用
+      - ./site-content:/srv/site:ro
     networks:
       - web
 

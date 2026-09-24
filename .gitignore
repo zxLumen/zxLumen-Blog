@@ -41,5 +41,10 @@ apps/next-home/public/resume.pdf
 # 个人资料(真实内容不入库;仓库仅保留 content.local.example.ts)
 packages/shared/src/content.local.ts
 
+# 运行时站点内容(export:content 生成 + 简历/二维码副本,不入库,部署时手动上传)
+docker/site-content/
+
 # 微信二维码(个人联系方式,不入库,部署时手动上传)
 apps/next-home/public/wechat.png
+
+docs/proxy.yaml

@@ -13,8 +13,11 @@
 ## 常用命令
 
 ```bash
-# 改 shared 后必须重新编译(会生成缺失的 content.local.ts 占位)
+# 改 shared 后必须重新编译
 cd packages/shared && npm run build
+
+# 改了真实资料(content.local.ts)后导出运行时 JSON(热更新,无需重启)
+cd packages/shared && npm run export:content   # 生成 docker/site-content/content.json
 
 # 本地开发
 cd apps/next-home && npm run dev      # http://localhost:3000
@@ -23,7 +26,7 @@ cd apps/next-home && npm run dev      # http://localhost:3000
 cd apps/next-home && npm run lint && npm run build
 ```
 
-> 需要 Node 20+(推荐 22 LTS)。
+> 需要 Node 20+(推荐 22 LTS;`export:content` 依赖 Node 22+ 原生 TS)。
 
 ## 命令调用规范(避免卡死 / 中断)
 
@@ -95,23 +98,32 @@ cd apps/next-home && npm run lint && npm run build
 ## 隐私:以下文件不入库(部署需单独提供)
 
 - `packages/shared/src/content.local.ts`(真实资料;有 `content.local.example.ts` 占位)
-- `apps/next-home/public/resume.pdf`、`public/wechat.png`
+- `docker/site-content/`(运行时内容 `content.json` + 简历 + 二维码;由
+  `npm run export:content` 生成 / `scp` 上传)
+- `apps/next-home/public/resume.pdf`、`public/wechat.png`(本地预览用副本,也不入库)
 - `apps/next-home/resume/resume.md|html|pdf`(仅 `resume.py`/`resume.css` 入库)
+
+## 部署:CI 构建 → GHCR → 服务器拉取(单环境)
+
+**服务器不构建镜像**:`git push main` → GitHub Actions 构建镜像推
+`ghcr.io/zxlumen/zx-home:<sha>+latest`(公开 → 服务器匿名 pull)→ SSH 跑
+`docker/deploy.sh`。个人内容**不进镜像**(`.dockerignore` 排除),由文件挂载提供。
+详见 `docs/DEPLOY.md` / `docs/CONTENT.md`。
 
 ## 部署时必须同步的「不入库」内容(**每次上线都要做**)
 
-这些文件被 `.gitignore` 忽略,`git pull` **不会更新**;若只在本地改过,线上仍是旧值:
+这些文件被 `.gitignore` 忽略,`git push / CI` **不会带它们上服务器**;只改本地不传,线上仍是旧值:
 
-1. **`packages/shared/src/content.local.ts`** —— 你的真实资料(姓名 / shell / 邮箱 /
-   bio / 合作链接 / 技术栈 / 时间线 / 项目卡 / 联系方式)。**改了它就必须上传到线上**
-   (`scp` 到 `~/zxLumen-Blog/packages/shared/src/content.local.ts`),然后**重新 build
-   + 重建容器**(它编译进 shared dist)。否则线上仍显示旧资料(如左上角 brand)。
-2. **`apps/next-home/public/resume.pdf` / `public/wechat.png`** —— 简历 / 微信二维码。
+1. **`docker/site-content/content.json`** —— 运行时站点内容:改完
+   `packages/shared/src/content.local.ts` 后先 `npm run export:content`,再
+   `scp docker/site-content/content.json 服务器:~/zxLumen-Blog/docker/site-content/content.json`。
+   **热更新**:mtime 变化即生效,**无需重建 / 重启容器**(新旧流程的唯一差别:不再需要编译进镜像)。
+2. **`docker/site-content/resume.pdf` / `wechat.png`** —— 简历 / 二维码(由 Caddy 静态服务,替换即生效)。
 3. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
    改了邮箱/联系方式要**同时更新线上库**(线上 `/admin → 个人信息`,或直接改 `meta`)。
 
-> 一句话:**源码改了 `content.local.ts` / 简历 / 二维码 / 联系方式 → 上线时必须把它们
-> 传到线上并重建**。仅 `git push` + 容器重建是不够的。
+> 一句话:**源码改了 `content.local.ts` / 简历 / 二维码 / 联系方式 → 上线时把
+> `docker/site-content/*` 传服务器即可,镜像不用动**。
 
 ## 上线授权(**重要**)
 

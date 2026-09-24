@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **运行时站点内容 + 热更新**:个人资料(姓名/简介/技能/时间线/项目/联系方式/SEO meta)从
+  `content.local.ts` 导出为 `docker/site-content/content.json`,服务端运行时读取、
+  mtime 变化即生效(改完刷新即见,**无需重启/重建**)。UI 组件全部改为 props 注入
+  (`Hero/Topbar/AboutSection/Footer/Shell/HomePage/AdminPanel`),`layout` 的 `generateMetadata`
+  等同步接入;文件缺失时回退占位默认值。见 `docs/CONTENT.md`
+- **部署改为 CI → GHCR → 服务器拉取**:`git push main` 触发 GitHub Actions 构建镜像推
+  `ghcr.io/zxlumen/zx-home:<sha>+latest`(公开,服务器匿名 pull)并 SSH 跑 `deploy.sh`;
+  **服务器不再构建镜像**,消除构建缓存导致的磁盘膨胀。个人内容与简历/二维码
+  (`.dockerignore` 排除)由 `/srv/site` 挂载 + Caddy 静态服务。见 `docs/DEPLOY.md`
+- **`export:content` 脚本**:`cd packages/shared && npm run export:content` 生成
+  `docker/site-content/content.json`(Node 22 原生 TS 读取 `content.local.ts`)
+
 ### 变更
 
 - **「用量」统一更名为「Token用量」**:Hero 首屏按钮「用量面板」→「Token用量」,并调整顺序为「查看项目 → / Token用量 / 关于·简历」;顶栏/侧栏导航「用量」→「Token用量」;区块标题、admin Tab、相关提示文案同步去空格统一

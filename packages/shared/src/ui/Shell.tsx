@@ -4,7 +4,7 @@ import { PreferencesProvider } from './theme-context.js'
 import { Topbar } from './Topbar.js'
 import { Footer } from './Footer.js'
 import { HelpHint } from './HelpHint.js'
-import type { Contacts } from '../content.js'
+import type { Contacts, Profile } from '../content.js'
 import type { LayoutId } from '../theme.js'
 import type { LinkComponent, NavItem } from './types.js'
 
@@ -14,6 +14,8 @@ interface ShellProps {
   pathname?: string
   link?: LinkComponent
   contacts?: Contacts
+  /** 个人资料(服务端注入;缺省用占位默认) */
+  profile?: Profile
   /** 允许的主题 / 布局(admin 配置的放行集合) */
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
@@ -33,6 +35,7 @@ export function Shell({
   pathname,
   link,
   contacts,
+  profile,
   allowedThemeIds,
   allowedLayoutIds,
   defaultTheme,
@@ -50,9 +53,9 @@ export function Shell({
       mockId={mockId}
     >
       <div className="zx-app">
-        <Topbar nav={nav} activeHref={activeHref} pathname={pathname} link={link} extra={extra} />
+        <Topbar nav={nav} activeHref={activeHref} pathname={pathname} link={link} shell={profile?.shell} extra={extra} />
         <main className="zx-main">{children}</main>
-        <Footer contacts={contacts} />
+        <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />
         <HelpHint />
       </div>
     </PreferencesProvider>

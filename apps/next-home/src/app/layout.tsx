@@ -4,9 +4,9 @@ import "@zx/shared/styles.css";
 import {
   NAV,
   NAV_INIT_SCRIPT,
-  SITE_META,
   themeInitScript,
 } from "@zx/shared";
+import { getRuntimeContent } from "@zx/shared/server";
 import { isAdmin } from "@/lib/auth";
 import { getClientContacts } from "@/lib/settings";
 import { getAppearance } from "@/lib/theme-config";
@@ -14,15 +14,19 @@ import { MockUserSwitch } from "@/components/MockUserSwitch";
 import { AppShell } from "@/components/AppShell";
 import { MOCK_COOKIE } from "@/lib/clientid";
 
-export const metadata: Metadata = {
-  title: SITE_META.title,
-  description: SITE_META.description,
-  keywords: SITE_META.keywords,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { SITE_META } = await getRuntimeContent();
+  return {
+    title: SITE_META.title,
+    description: SITE_META.description,
+    keywords: SITE_META.keywords,
+  };
+}
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const admin = await isAdmin();
   const contacts = await getClientContacts();
+  const { PROFILE } = await getRuntimeContent();
 
   const nav = admin ? [...NAV, { label: "admin", href: "/admin" }] : NAV;
 
@@ -45,6 +49,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <AppShell
           nav={nav}
           contacts={contacts}
+          profile={PROFILE}
           allowedThemeIds={appearance.themes}
           allowedLayoutIds={appearance.layouts}
           defaultTheme={appearance.defaultTheme}

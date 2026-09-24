@@ -1,22 +1,38 @@
 'use client'
 
-import { LINKS, PROFILE, TECH, TIMELINE, type Contacts } from '../content.js'
+import { LINKS, PROFILE, TECH, TIMELINE, type Contacts, type LinkItem, type Profile, type TechItem, type TimelineEntry } from '../content.js'
 import { Section } from './Section.js'
 import { ContactActions } from './ContactActions.js'
 import { trackEvent } from './track.js'
 
-export function AboutSection({ contacts }: { contacts?: Contacts }) {
-  const github = LINKS.find((l) => l.label === 'github')?.url
+export function AboutSection({
+  contacts,
+  profile,
+  links,
+  tech,
+  timeline,
+}: {
+  contacts?: Contacts
+  profile?: Profile
+  links?: LinkItem[]
+  tech?: TechItem[]
+  timeline?: TimelineEntry[]
+}) {
+  const p = profile ?? PROFILE
+  const linksList = links ?? LINKS
+  const techList = tech ?? TECH
+  const tl = timeline ?? TIMELINE
+  const github = linksList.find((l) => l.label === 'github')?.url
   return (
     <Section id="about" tag="// ABOUT" num="03" title="关于 / 简历">
       <div className="zx-about-grid">
         <div className="zx-bio">
-          <div className="zx-kicker">{PROFILE.statusLine}</div>
-          {PROFILE.bioLines.map((l) => (
+          <div className="zx-kicker">{p.statusLine}</div>
+          {p.bioLines.map((l) => (
             <p key={l}>{l}</p>
           ))}
           <p className="zx-mono zx-dim" style={{ fontSize: '0.8rem' }}>
-            {PROFILE.location} · {PROFILE.email}
+            {p.location} · {p.email}
           </p>
           <div className="zx-cta">
             <ContactActions contacts={contacts} />
@@ -37,7 +53,7 @@ export function AboutSection({ contacts }: { contacts?: Contacts }) {
             STACK
           </h3>
           <div className="zx-tags" style={{ marginTop: '0.7rem' }}>
-            {PROFILE && TECH.map((t) => (
+            {techList.map((t) => (
               <span className="zx-badge" key={t.name}>
                 {t.name}
               </span>
@@ -50,7 +66,7 @@ export function AboutSection({ contacts }: { contacts?: Contacts }) {
             TIMELINE
           </h3>
           <div className="zx-timeline">
-            {TIMELINE.map((t) => (
+            {tl.map((t) => (
               <div className="zx-tl-item" key={t.period + t.title}>
                 <div className="zx-tl-period">{t.period}</div>
                 <div className="zx-tl-title">{t.title}</div>

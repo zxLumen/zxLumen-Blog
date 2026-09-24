@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ArchivedCommentRow, CommentRow, EventType, PagedComments, StatsResult, VisitorDetail } from '../schema.js'
 import { fmtDateTime, fmtInt } from '../format.js'
-import { PROJECTS, SECTION_LABELS } from '../content.js'
+import { PROJECTS, SECTION_LABELS, type Project } from '../content.js'
 import { Pagination } from './Pagination.js'
 import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
 import { AdminThemePanel } from './admin/AdminThemePanel.js'
@@ -26,8 +26,8 @@ const EVENT_LABEL: Record<EventType, string> = {
   section_view: '区块浏览',
 }
 
-function targetLabel(t: string) {
-  return PROJECTS.find((p) => p.id === t)?.name ?? t
+function targetLabel(t: string, projects: Project[]) {
+  return projects.find((p) => p.id === t)?.name ?? t
 }
 
 /** 访客明细行:点击展开该访客的操作记录 */
@@ -35,14 +35,16 @@ function VisitorDetailRow({
   v,
   open,
   onToggle,
+  projects,
 }: {
   v: VisitorDetail
   open: boolean
   onToggle: () => void
+  projects: Project[]
 }) {
   const proj = Object.entries(v.projectClicks)
     .sort((a, b) => b[1] - a[1])
-    .map(([t, n]) => `${targetLabel(t)}×${n}`)
+    .map(([t, n]) => `${targetLabel(t, projects)}×${n}`)
     .join(' ')
   const m = (sec: number) => {
     if (sec >= 60) return `${Math.floor(sec / 60)}分${sec % 60 ? ` ${sec % 60}s` : ''}`
@@ -66,7 +68,7 @@ function VisitorDetailRow({
       const id = target.split('#')[1] ?? target
       return SECTION_LABELS[id] ?? target
     }
-    return targetLabel(target)
+    return targetLabel(target, projects)
   }
   const ops = v.recent
   return (
@@ -112,7 +114,7 @@ function VisitorDetailRow({
                 项目点击:{' '}
                 {Object.entries(v.projectClicks)
                   .sort((a, b) => b[1] - a[1])
-                  .map(([t, n]) => `${targetLabel(t)} ×${n}`)
+                  .map(([t, n]) => `${targetLabel(t, projects)} ×${n}`)
                   .join('、')}
               </div>
             )}
@@ -155,7 +157,8 @@ function VisitorDetailRow({
   )
 }
 
-export function AdminPanel() {
+export function AdminPanel({ projects }: { projects?: Project[] }) {
+  const projList = projects ?? PROJECTS
   const [ready, setReady] = useState(false)
   const [authed, setAuthed] = useState(false)
   const [password, setPassword] = useState('')
@@ -1248,7 +1251,7 @@ export function AdminPanel() {
                     .sort((a, b) => b[1] - a[1])
                     .map(([id, count]) => (
                       <tr key={id}>
-                        <td>{PROJECTS.find((p) => p.id === id)?.name ?? id}</td>
+                        <td>{projList.find((p) => p.id === id)?.name ?? id}</td>
                         <td className="num">{fmtInt(count)}</td>
                       </tr>
                     ))}
@@ -1282,6 +1285,7 @@ export function AdminPanel() {
                       v={v}
                       open={statVisitor === v.cid}
                       onToggle={() => setStatVisitor(statVisitor === v.cid ? null : v.cid)}
+                      projects={projList}
                     />
                   ))}
                 </tbody>

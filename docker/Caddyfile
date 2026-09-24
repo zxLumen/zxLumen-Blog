@@ -10,7 +10,21 @@
 		-Server
 	}
 
-	reverse_proxy app:3000
+	# 简历 PDF / 微信二维码:由 Caddy 从挂载目录直接静态服务(不入应用镜像)
+	# 新文件放 docker/site-content/ 并 scp 上传即可,无需重建/重启
+	handle /resume.pdf {
+		root * /srv/site
+		file_server
+	}
+	handle /wechat.png {
+		root * /srv/site
+		file_server
+	}
+
+	# 其余都交给 Next 应用
+	handle {
+		reverse_proxy app:3000
+	}
 }
 
 # www → 主域 301 跳转(需 www 的 A 记录指向本机,Caddy 自动签证书)

@@ -1,0 +1,85 @@
+name: build & deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - 'AGENTS.md'
+      - 'CHANGELOG.md'
+      - 'TODO.md'
+      - '.gitignore'
+      - 'docs/proxy.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 仓库公开 → 镜像公开 → 服务器可匿名 pull,无需在服务器存任何凭据
+      - name: Compute image owner (lowercase)
+        id: img
+        run: |
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/zx-home" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ steps.img.outputs.image }}:${{ github.sha }}
+            ${{ steps.img.outputs.image }}:latest
+
+      # 仓库公开 → 镜像公开 → 服务器可匿名 pull,无需在服务器存任何凭据。
+      # 包归 zxLumen(User)名下,改可见性需其 PAT(write:packages);GITHUB_TOKEN 作后备。
+      - name: Make GHCR package public
+        env:
+          GH_PACKAGES_PAT: ${{ secrets.GH_PACKAGES_PAT }}
+        run: |
+          NAME="zx-home"
+          for TOKEN in "$GH_PACKAGES_PAT" "${{ secrets.GITHUB_TOKEN }}"; do
+            [ -n "$TOKEN" ] || continue
+            if gh api -H "Authorization: token ${TOKEN}" -X PATCH "/user/packages/container/${NAME}" \
+                -f visibility=public >/dev/null 2>&1; then
+              VIS=$(gh api -H "Authorization: token ${TOKEN}" "/user/packages/container/${NAME}" --jq .visibility 2>/dev/null || echo "")
+              echo "GHCR 包 ${NAME} visibility = ${VIS}"
+              [ "${VIS}" = "public" ] && exit 0
+            fi
+          done
+          echo "::error::无法把 GHCR 包设为 public(检查 GH_PACKAGES_PAT 是否 zxLumen 账号且含 write:packages)"
+          exit 1
+
+      - name: SSH deploy to server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_DEPLOY_KEY }}
+          port: ${{ secrets.SERVER_PORT || '22' }}
+          # 只发部署 tag;服务器 authorized_keys 的 command= 白名单会把它作为
+          # IMAGE_TAG 传给 deploy.sh(即使密钥泄露也跑不了别的命令)
+          script: ${{ github.sha }}

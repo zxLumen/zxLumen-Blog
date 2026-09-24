@@ -12,6 +12,8 @@ interface TopbarProps {
   pathname?: string
   /** 注入式链接组件(如 Next 的 Link),缺省用原生 <a> */
   link?: LinkComponent
+  /** 顶栏 logo 文本(服务端注入;缺省用占位 PROFILE.shell) */
+  shell?: string
   extra?: React.ReactNode
 }
 
@@ -27,6 +29,7 @@ export function Topbar({
   activeHref = '/',
   pathname: pathnameProp,
   link,
+  shell,
   extra,
 }: TopbarProps) {
   const [winPath, setWinPath] = useState(activeHref)
@@ -154,7 +157,7 @@ export function Topbar({
     <header className="zx-topbar">
       <div className="zx-topbar-in">
         <Comp className="zx-logo" href="/" onClick={(e) => onNavClick(e, '/')} {...linkExtra}>
-          <span className="z">❯</span> {PROFILE.shell}
+          <span className="z">❯</span> {shell ?? PROFILE.shell}
         </Comp>
         <nav className="zx-nav">
           {nav.map((item) => (

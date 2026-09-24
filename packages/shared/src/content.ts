@@ -1,5 +1,8 @@
 // 类型、导航等公共部分(可入库)。
-// 个人资料(姓名/邮箱/经历等)在 ./content.local.ts(不入库),缺失时用 example 兜底。
+// 个人资料(姓名/邮箱/经历等)不入库:真实数据在 ./content.local.ts,由
+// scripts/export-content.mjs 导出为 docker/site-content/content.json(JSON 文件),
+// 服务端经 getRuntimeContent() 运行时读取并热更新。
+// 编译期/运行时兜底用 ./content.default.ts 的占位默认值。
 
 export interface LinkItem {
   label: string
@@ -62,16 +65,29 @@ export interface Contacts {
   phoneReversed?: string
 }
 
-// 个人资料(来自不入库的 content.local.ts)
-import * as local from './content.local.js'
+/** 一份完整站点内容(运行时 content.json 的结构 / 兜底默认值的结构) */
+export interface RuntimeContent {
+  PROFILE: Profile
+  LINKS: LinkItem[]
+  TECH: TechItem[]
+  TIMELINE: TimelineEntry[]
+  PROJECTS: Project[]
+  SITE_META: SiteMeta
+  CONTACTS: Contacts
+}
 
-export const PROFILE: Profile = local.PROFILE
-export const LINKS: LinkItem[] = local.LINKS
-export const TECH: TechItem[] = local.TECH
-export const TIMELINE: TimelineEntry[] = local.TIMELINE
-export const PROJECTS: Project[] = local.PROJECTS
-export const SITE_META: SiteMeta = local.SITE_META
-export const CONTACTS: Contacts = local.CONTACTS
+// 占位默认值(来自 content.local.example.ts,可入库)。
+// 站点真实内容由服务端注入:见 server/content-runtime.ts 的 getRuntimeContent()。
+import { DEFAULT_CONTENT } from './content.default.js'
+export { DEFAULT_CONTENT } from './content.default.js'
+
+export const PROFILE: Profile = DEFAULT_CONTENT.PROFILE
+export const LINKS: LinkItem[] = DEFAULT_CONTENT.LINKS
+export const TECH: TechItem[] = DEFAULT_CONTENT.TECH
+export const TIMELINE: TimelineEntry[] = DEFAULT_CONTENT.TIMELINE
+export const PROJECTS: Project[] = DEFAULT_CONTENT.PROJECTS
+export const SITE_META: SiteMeta = DEFAULT_CONTENT.SITE_META
+export const CONTACTS: Contacts = DEFAULT_CONTENT.CONTACTS
 
 export const NAV = [
   { label: '主页', href: '/' },

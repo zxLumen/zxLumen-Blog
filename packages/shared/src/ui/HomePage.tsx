@@ -1,7 +1,6 @@
 'use client'
 
-import type { Contacts } from '../content.js'
-import type { Project } from '../content.js'
+import type { Contacts, LinkItem, Profile, Project, TechItem, TimelineEntry } from '../content.js'
 import type { CommentRow, PagedComments, StatsResult, UsageRow } from '../schema.js'
 import type { DataSource, UsageSel } from '../usage-sel.js'
 import { Hero } from './Hero.js'
@@ -30,6 +29,11 @@ interface HomePageProps {
   /** 首页统计聚合(SSR 计算) */
   stats?: StatsResult
   contacts?: Contacts
+  /** 个人资料 / 站点导航链接 / 技能 / 时间线(服务端注入运行时内容) */
+  profile?: Profile
+  links?: LinkItem[]
+  tech?: TechItem[]
+  timeline?: TimelineEntry[]
   /** 项目(已合并 admin 覆盖;缺省用静态 PROJECTS) */
   projects?: Project[]
   onSubmitComment?: (input: NewComment) => Promise<CommentRow> | CommentRow
@@ -48,6 +52,10 @@ export function HomePage({
   viewerMock,
   stats,
   contacts,
+  profile,
+  links,
+  tech,
+  timeline,
   projects,
   onSubmitComment,
 }: HomePageProps) {
@@ -55,10 +63,10 @@ export function HomePage({
     <>
       <TrackBeacon path="/" />
       <StatsWidget stats={stats} />
-      <Hero />
+      <Hero profile={profile} />
       <ProjectsSection projects={projects} clicks={stats?.events.clicksByTarget} pv={stats?.visits.pv} />
       <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} availableSources={availableSources} />
-      <AboutSection contacts={contacts} />
+      <AboutSection contacts={contacts} profile={profile} links={links} tech={tech} timeline={timeline} />
       <GuestbookSection
         page={commentsPage}
         submit={onSubmitComment}
