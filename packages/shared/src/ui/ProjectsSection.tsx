@@ -26,7 +26,10 @@ function ProjectCard({
   const self = project.demoUrl === '/'
   const total = (clicks ?? 0) + (self ? pv ?? 0 : 0)
   return (
-    <article className={`zx-card${project.featured ? ' is-featured' : ''}`} data-idx={String(idx).padStart(2, '0')}>
+    <article
+      className={`zx-card${project.featured ? ' is-featured' : ''}${project.status === 'archived' ? ' is-archived' : ''}`}
+      data-idx={String(idx).padStart(2, '0')}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
         <h3 style={{ margin: 0 }}>{project.name}</h3>
         {total > 0 && (
