@@ -2,13 +2,9 @@
 
 import { Badge, Button, Checkbox, Group, Paper, Stack, Text, Title } from '@mantine/core'
 import { useCallback, useEffect, useState } from 'react'
-import type { AppearanceConfig } from '@zx/shared'
+import type { AppearanceConfig } from '../../theme.js'
 import { MantineBridge } from './mantine-bridge.js'
-
-interface NotifyMsg {
-  kind: 'ok' | 'err'
-  text: string
-}
+import type { NotifyMsg } from './admin-types.js'
 
 interface ThemeOption {
   id: string

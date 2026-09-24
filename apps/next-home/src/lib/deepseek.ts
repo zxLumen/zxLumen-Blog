@@ -2,6 +2,21 @@ import crypto from 'node:crypto'
 import zlib from 'node:zlib'
 import type { UsageRow } from '@zx/shared'
 import { getDb } from './db'
+import {
+  TZ,
+  bjHourLabel,
+  monthsIn,
+  windowOf,
+  type Month,
+  type UsageFilter,
+  type UsageRange,
+} from './usage/range'
+import { num, parseCsv } from './usage/csv'
+import { makeTtlCache } from './usage/cache'
+import { aggregateRows, isNonZeroRow } from './usage/aggregate'
+import { usageError } from './usage/errors'
+import { readSnapshot, writeSnapshot } from './usage/snapshot'
+import type { PlatformUsageBase } from './usage/types'
 
 const K_TOKEN = 'deepseek_user_token'
 const K_SYNC = 'deepseek_sync_key'
@@ -10,7 +25,6 @@ const K_ERR = 'deepseek_last_error'
 const K_AVAIL = 'deepseek_last_data'
 
 const BASE = 'https://platform.deepseek.com/api/v0/usage'
-const TZ = 28800 // 北京时间 UTC+8
 
 /* ---------- meta 存取 ---------- */
 
@@ -81,8 +95,6 @@ function authHeaders(token: string): Record<string, string> {
   }
 }
 
-const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
-
 async function fetchJson(path: string, token: string, qs: string): Promise<unknown> {
   const res = await fetch(`${BASE}/${path}?${qs}`, {
     headers: authHeaders(token),
@@ -98,9 +110,7 @@ async function fetchJson(path: string, token: string, qs: string): Promise<unkno
   }
   const code = data?.data?.biz_code ?? data?.code
   if (res.status === 401 || res.status === 403 || code === 40002 || code === 40003) {
-    const e = new Error('INVALID_TOKEN')
-    ;(e as { code?: string }).code = 'INVALID_TOKEN'
-    throw e
+    throw usageError('INVALID_TOKEN', 'INVALID_TOKEN')
   }
   if (!res.ok) throw new Error(`平台 HTTP ${res.status}`)
   if (code !== undefined && code !== 0) {
@@ -109,8 +119,6 @@ async function fetchJson(path: string, token: string, qs: string): Promise<unkno
   }
   return data?.data?.biz_data ?? data
 }
-
-type Month = { year: number; month: number }
 
 /* ---------- ZIP / CSV(平台 export 接口返回) ---------- */
 
@@ -153,40 +161,6 @@ function unzipEntries(buf: Buffer): Array<{ name: string; data: Buffer }> {
   return out
 }
 
-/** 简易 CSV 解析(处理引号/转义/CRLF/UTF-8 BOM) */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let cur: string[] = []
-  let field = ''
-  let inQ = false
-  const src = text.replace(/^\ufeff/, '')
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i]
-    if (inQ) {
-      if (ch === '"') {
-        if (src[i + 1] === '"') {
-          field += '"'
-          i++
-        } else inQ = false
-      } else field += ch
-    } else if (ch === '"') inQ = true
-    else if (ch === ',') {
-      cur.push(field)
-      field = ''
-    } else if (ch === '\n') {
-      cur.push(field)
-      rows.push(cur)
-      cur = []
-      field = ''
-    } else if (ch !== '\r') field += ch
-  }
-  if (field !== '' || cur.length) {
-    cur.push(field)
-    rows.push(cur)
-  }
-  return rows.filter((r) => r.length && r.some((c) => c.trim() !== ''))
-}
-
 /** 拉取单月导出 ZIP,从 amount CSV 还原 (天 × 模型 × API Key) 的 tokens/请求/费用(费用=price×amount) */
 async function fetchExport(m: Month, token: string): Promise<{ rows: UsageRow[]; apiKeys: string[] }> {
   const res = await fetch(`${BASE}/export?month=${m.month}&year=${m.year}`, {
@@ -195,9 +169,7 @@ async function fetchExport(m: Month, token: string): Promise<{ rows: UsageRow[];
     signal: AbortSignal.timeout(8000),
   })
   if (res.status === 401 || res.status === 403) {
-    const e = new Error('INVALID_TOKEN')
-    ;(e as { code?: string }).code = 'INVALID_TOKEN'
-    throw e
+    throw usageError('INVALID_TOKEN', 'INVALID_TOKEN')
   }
   if (!res.ok) throw new Error(`平台导出 HTTP ${res.status}`)
   const buf = Buffer.from(await res.arrayBuffer())
@@ -256,38 +228,12 @@ async function fetchExport(m: Month, token: string): Promise<{ rows: UsageRow[];
 }
 
 const key = (m: Month) => `m:${m.year}-${String(m.month).padStart(2, '0')}`
-const utcDay = (y: number, m: number, d: number) => {
-  const dd = String(d).padStart(2, '0')
-  const mm = String(m).padStart(2, '0')
-  return `${y}-${mm}-${dd}`
-}
-/** 某月的天数(按 UTC 日历,仅用于边界计算) */
-const daysIn = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTCDate()
 
-/** 北京日历日 YYYY-MM-DD(相对今天偏移 offsetDays);用于区间边界(平台账单按北京时间对齐) */
-function bjDay(offsetDays = 0): string {
-  const ms = Math.floor((Date.now() + TZ * 1000) / 86400000) * 86400000 + offsetDays * 86400000
-  return new Date(ms).toISOString().slice(0, 10)
-}
+export type { UsageRange, UsageFilter }
 
-export type UsageRange = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastmonth' | 'custom'
-
-export interface UsageFilter {
-  start?: string
-  end?: string
-}
-
-export interface PlatformUsage {
-  rows: UsageRow[]
-  /** 全量模型清单(含零用量),用于前端置灰显示 */
-  models: string[]
+export interface PlatformUsage extends PlatformUsageBase {
   /** 出现过的 API Key 名称清单(按 key 维度聚合) */
   apiKeys: string[]
-  currency: string
-  start: string
-  end: string
-  /** 今天/昨天为 hour(分时),其余为 day */
-  granularity?: 'hour' | 'day'
 }
 
 /** 解析按月 amount 接口的模型清单(含零用量模型,来自 total) */
@@ -295,9 +241,6 @@ function periodModels(biz: unknown): string[] {
   const b = biz as { total?: Array<{ model?: string }> } | null
   return (b?.total ?? []).map((t) => t.model ?? '').filter(Boolean)
 }
-
-/** 北京整点标签,如 2026-09-22T10:00:00Z(约定:日期=北京日,小时=北京时,与 opencode 一致) */
-const bjHourLabel = (sec: number) => `${new Date(sec * 1000 + TZ * 1000).toISOString().slice(0, 13)}:00:00Z`
 
 interface HourBucketTs {
   time?: number
@@ -319,20 +262,19 @@ interface HourBiz {
 /** 取 cost 接口的分时 series:优先 data[0].series,回退顶层 series(防平台结构变化) */
 const costSeries = (biz: HourBiz): HourSeries[] => biz.data?.[0]?.series ?? biz.series ?? []
 
+type HourData = { rows: UsageRow[]; models: string[]; apiKeys: string[] }
+const hourCache = makeTtlCache<HourData>('__dsHourCache')
+
 /**
  * 当天分时数据:by_api_key/amount(+cost) 按北京时间窗口拉取,bucket=3600(小时),
  * 与平台 usage 页「今天/昨天分时柱状图」同一数据源。每桶含 (小时 × 模型 × API Key)。
  */
-async function fetchDayHourly(day: string): Promise<{ rows: UsageRow[]; models: string[]; apiKeys: string[] }> {
+async function fetchDayHourly(day: string): Promise<HourData> {
   const token = await getToken()
   if (!token) throw new Error('未配置 DeepSeek 令牌')
 
-  const g = globalThis as unknown as {
-    __dsHourCache?: Map<string, { at: number; data: { rows: UsageRow[]; models: string[]; apiKeys: string[] } }>
-  }
-  g.__dsHourCache ??= new Map()
-  const hit = g.__dsHourCache.get(day)
-  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.data
+  const hit = hourCache.get(day)
+  if (hit) return hit
 
   const startSec = Math.floor(Date.parse(`${day}T00:00:00+08:00`) / 1000)
   const endSec = startSec + 86400
@@ -394,24 +336,21 @@ async function fetchDayHourly(day: string): Promise<{ rows: UsageRow[]; models: 
     models: (amt.models ?? []).filter(Boolean),
     apiKeys: [...apiKeys].filter(Boolean),
   }
-  g.__dsHourCache.set(day, { at: Date.now(), data })
+  hourCache.set(day, data)
   return data
 }
 
-const CACHE_TTL = 5 * 60 * 1000
+type PeriodData = { rows: UsageRow[]; models: string[]; apiKeys: string[]; currency: string }
+const periodCache = makeTtlCache<PeriodData>('__dsCache')
 
 /** 拉取指定年/月的一整月数据:amount JSON 取全量模型清单(含零用量),export ZIP 取按 (天×模型×Key) 的用量/费用 */
-async function fetchPeriod(m: Month): Promise<{ rows: UsageRow[]; models: string[]; apiKeys: string[]; currency: string }> {
+async function fetchPeriod(m: Month): Promise<PeriodData> {
   const token = await getToken()
   if (!token) throw new Error('未配置 DeepSeek 令牌')
 
-  const g = globalThis as unknown as {
-    __dsCache?: Map<string, { at: number; data: { rows: UsageRow[]; models: string[]; apiKeys: string[]; currency: string } }>
-  }
-  g.__dsCache ??= new Map()
   const ck = key(m)
-  const hit = g.__dsCache.get(ck)
-  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.data
+  const hit = periodCache.get(ck)
+  if (hit) return hit
 
   const [amountBiz, exp] = await Promise.all([
     fetchJson('amount', token, `month=${m.month}&year=${m.year}`),
@@ -419,60 +358,11 @@ async function fetchPeriod(m: Month): Promise<{ rows: UsageRow[]; models: string
   ])
   const models = periodModels(amountBiz)
   const data = { rows: exp.rows, models, apiKeys: exp.apiKeys, currency: 'CNY' }
-  g.__dsCache.set(ck, { at: Date.now(), data })
+  periodCache.set(ck, data)
   return data
 }
 
-/** 计算指定 range 的闭区间日期窗口(北京日,YYYY-MM-DD) */
-export function windowOf(range: UsageRange, filter?: UsageFilter): { start: string; end: string } {
-  const today = bjDay(0)
-  const lastMonthBounds = (): { start: string; end: string } => {
-    const y = Number(today.slice(0, 4))
-    const m = Number(today.slice(5, 7))
-    const prev = m === 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 }
-    return { start: utcDay(prev.y, prev.m, 1), end: utcDay(prev.y, prev.m, daysIn(prev.y, prev.m)) }
-  }
-  switch (range) {
-    case 'today':
-      return { start: today, end: today }
-    case 'yesterday':
-      return { start: bjDay(-1), end: bjDay(-1) }
-    case '7d':
-      return { start: bjDay(-6), end: today }
-    case '30d':
-      return { start: bjDay(-29), end: today }
-    case 'month':
-      return { start: today.slice(0, 7) + '-01', end: today }
-    case 'lastmonth':
-      return lastMonthBounds()
-    case 'custom': {
-      const start = filter?.start || today
-      const end = filter?.end || today
-      return { start: start <= end ? start : end, end: start <= end ? end : start }
-    }
-  }
-}
-
-/** start 到 end 之间需要拉取的月(升序,上限 12 个月) */
-function monthsIn(start: string, end: string): Month[] {
-  const out: Month[] = []
-  let y = Number(start.slice(0, 4))
-  let m = Number(start.slice(5, 7))
-  const endY = Number(end.slice(0, 4))
-  const endM = Number(end.slice(5, 7))
-  while (y < endY || (y === endY && m <= endM)) {
-    if (out.length >= 12) break
-    out.push({ year: y, month: m })
-    if (m === 12) {
-      y += 1
-      m = 1
-    } else {
-      m += 1
-    }
-  }
-  if (out.length === 0) out.push({ year: endY, month: endM })
-  return out
-}
+export { windowOf }
 
 export async function fetchUsage(range: UsageRange, filter?: UsageFilter): Promise<PlatformUsage> {
   const token = await getToken()
@@ -507,25 +397,12 @@ export async function fetchUsage(range: UsageRange, filter?: UsageFilter): Promi
   const apiKeys = Array.from(new Set(periods.flatMap((p) => p.apiKeys)))
 
   // 合并过滤:区间内 + 剔除全零行(保留全量模型清单与 Key 清单供前端筛选/置灰)
-  const raw = periods.flatMap((p) => p.rows)
-  const merged = new Map<string, UsageRow>()
-  for (const r of raw) {
+  const raw = periods.flatMap((p) => p.rows).filter((r) => {
     const day = r.ts.slice(0, 10)
-    if (day < start || day > end) continue
-    const k = `${day}|${r.model}|${r.apiKey ?? ''}`
-    const ex = merged.get(k)
-    if (ex) {
-      ex.inputTokens += r.inputTokens
-      ex.outputTokens += r.outputTokens
-      ex.cacheHitTokens += r.cacheHitTokens
-      ex.requests = (ex.requests ?? 0) + (r.requests ?? 0)
-      ex.cost = (ex.cost ?? 0) + (r.cost ?? 0)
-    } else {
-      merged.set(k, { ...r })
-    }
-  }
-  const rows = [...merged.values()].filter(
-    (r) => r.inputTokens + r.outputTokens > 0 || (r.cost ?? 0) > 0 || (r.requests ?? 0) > 0,
+    return day >= start && day <= end
+  })
+  const rows = aggregateRows(raw, (r) => `${r.ts.slice(0, 10)}|${r.model}|${r.apiKey ?? ''}`).filter(
+    isNonZeroRow,
   )
 
   const data: PlatformUsage = { rows, models, apiKeys, currency, start, end }
@@ -543,18 +420,15 @@ const MAX_ROWS = 5000
 /** 存储指定 range 最近一次拉取成功的 rows(持久化,用于令牌失效/网络失败时回退) */
 export async function saveLastRows(range: UsageRange, d: PlatformUsage) {
   const rows = d.rows.length > MAX_ROWS ? d.rows.slice(0, MAX_ROWS) : d.rows
-  ;getDb().setMeta(
-    kRows(range),
-    JSON.stringify({
-      at: Date.now(),
-      range,
-      currency: d.currency,
-      models: d.models,
-      apiKeys: d.apiKeys,
-      granularity: d.granularity,
-      rows,
-    }),
-  )
+  writeSnapshot(kRows(range), {
+    at: Date.now(),
+    range,
+    currency: d.currency,
+    models: d.models,
+    apiKeys: d.apiKeys,
+    granularity: d.granularity,
+    rows,
+  })
 }
 
 /** 读取同 range 的上次成功数据;无或数据结构异常返回 null */
@@ -568,28 +442,22 @@ export async function getLastRows(
   granularity?: 'hour' | 'day'
   rows: UsageRow[]
 } | null> {
-  const raw = getDb().getMeta(kRows(range))
-  if (!raw) return null
-  try {
-    const d = JSON.parse(raw) as {
-      at?: number
-      range?: UsageRange
-      currency?: string
-      models?: string[]
-      apiKeys?: string[]
-      granularity?: 'hour' | 'day'
-      rows?: UsageRow[]
-    }
-    if (d.range !== range || !Array.isArray(d.rows) || d.rows.length === 0) return null
-    return {
-      at: d.at ?? 0,
-      currency: d.currency,
-      models: d.models,
-      apiKeys: d.apiKeys,
-      granularity: d.granularity,
-      rows: d.rows,
-    }
-  } catch {
-    return null
+  const d = readSnapshot<{
+    at?: number
+    range?: UsageRange
+    currency?: string
+    models?: string[]
+    apiKeys?: string[]
+    granularity?: 'hour' | 'day'
+    rows?: UsageRow[]
+  }>(kRows(range))
+  if (!d || d.range !== range || !Array.isArray(d.rows) || d.rows.length === 0) return null
+  return {
+    at: d.at ?? 0,
+    currency: d.currency,
+    models: d.models,
+    apiKeys: d.apiKeys,
+    granularity: d.granularity,
+    rows: d.rows,
   }
 }

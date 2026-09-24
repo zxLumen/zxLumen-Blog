@@ -1,6 +1,9 @@
 import type { UsageRow } from '@zx/shared'
 import { getDb } from './db'
-import { windowOf, type UsageRange } from './deepseek'
+import { windowOf, type UsageRange } from './usage/range'
+import { makeTtlCache } from './usage/cache'
+import { usageError } from './usage/errors'
+import type { PlatformUsageBase } from './usage/types'
 
 /**
  * 智谱(BigModel / Z.ai)用量数据源。
@@ -21,7 +24,6 @@ const K_ERR = 'zhipu_last_error'
 const K_DATA = 'zhipu_last_data'
 
 const DEFAULT_BASE = 'https://open.bigmodel.cn'
-const CACHE_TTL = 5 * 60 * 1000
 
 /* ---------- 配置(meta / env) ---------- */
 
@@ -117,13 +119,8 @@ interface ModelUsageData {
   }
 }
 
-export interface PlatformUsageZhipu {
-  rows: UsageRow[]
-  models: string[]
-  currency: string
+export interface PlatformUsageZhipu extends PlatformUsageBase {
   granularity: 'hour' | 'day'
-  start: string
-  end: string
 }
 
 /**
@@ -135,9 +132,7 @@ export interface PlatformUsageZhipu {
 export async function fetchUsageZhipu(range: UsageRange, filter?: { start?: string; end?: string }): Promise<PlatformUsageZhipu> {
   const key = await getApiKey()
   if (!key) {
-    const e = new Error('未配置智谱 API Key')
-    ;(e as { code?: string }).code = 'UNCONFIGURED'
-    throw e
+    throw usageError('UNCONFIGURED', '未配置智谱 API Key')
   }
   const origin = await getBaseUrl()
   const { start, end } = windowOf(range, filter)
@@ -206,10 +201,11 @@ export async function getLastRows(): Promise<{ at: number; rows: UsageRow[]; mod
 }
 
 /** 内存缓存(配额,5 分钟) */
-const g = globalThis as unknown as { __zhipuQuota?: { at: number; quota: ZhipuQuota | null } }
+const quotaCache = makeTtlCache<ZhipuQuota | null>('__zhipuQuota')
 export async function getCachedQuota(): Promise<ZhipuQuota | null> {
-  if (g.__zhipuQuota && Date.now() - g.__zhipuQuota.at < CACHE_TTL) return g.__zhipuQuota.quota
+  const hit = quotaCache.get('quota')
+  if (hit !== undefined) return hit
   const quota = await fetchZhipuQuota()
-  g.__zhipuQuota = { at: Date.now(), quota }
+  quotaCache.set('quota', quota)
   return quota
 }

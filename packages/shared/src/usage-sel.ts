@@ -3,6 +3,7 @@
 export const USAGE_SEL_COOKIE = 'zx_usage'
 
 export type Range = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastmonth' | 'custom'
+export const RANGES = ['today', 'yesterday', '7d', '30d', 'month', 'lastmonth', 'custom'] as const
 export const DATA_SOURCES = ['deepseek', 'opencode', 'zhipu'] as const
 export type DataSource = (typeof DATA_SOURCES)[number]
 
@@ -22,7 +23,7 @@ export type UsageSel = {
   picked: Record<DataSource, string[]>
   /** Key/提供方筛选:每个数据源各自一套 */
   pickedKeys: Record<DataSource, string[]>
-  /** OpenCode workspace 筛选(仅 opencode 用):多选,空=全部(总用量) */
+  /** OpenCode workspace 筛选(仅 opencode 用):单选,空=全部(总用量) */
   pickedWs: Record<DataSource, string[]>
 }
 

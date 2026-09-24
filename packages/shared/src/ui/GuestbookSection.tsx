@@ -6,55 +6,11 @@ import { fmtDateTime } from '../format.js'
 import { Section } from './Section.js'
 import { Pagination } from './Pagination.js'
 import { nickKey } from './identity.js'
+import type { GuestbookProps, NewComment } from './guestbook/types.js'
+import { readCookie, writeCookie } from './guestbook/cookies.js'
+import { defaultSubmit } from './guestbook/api.js'
 
-export interface NewComment {
-  author: string
-  author_link: string
-  body: string
-  visibility: 'public' | 'private'
-  parent_id?: number | null
-}
-
-interface GuestbookProps {
-  /** 初始分页数据(服务端渲染第 1 页) */
-  page?: PagedComments
-  /** 自定义提交(默认 POST /api/comments) */
-  submit?: (input: NewComment) => Promise<CommentRow> | CommentRow
-  /** 已登录 admin:可看私密、可删除、回复为站长 */
-  isAdmin?: boolean
-  /** API 前缀 */
-  apiBase?: string
-  /** 服务端预填昵称(cookie 或站长昵称) */
-  initialAuthor?: string
-  /** 当前模拟访客身份:昵称按身份分键(等价于一台独立设备) */
-  viewerMock?: string
-}
-
-function readCookie(name: string): string {
-  if (typeof document === 'undefined') return ''
-  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'))
-  return m ? decodeURIComponent(m[1]) : ''
-}
-
-function writeCookie(name: string, value: string) {
-  if (typeof document === 'undefined') return
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`
-}
-
-async function defaultSubmit(apiBase: string, input: NewComment): Promise<CommentRow> {
-  const res = await fetch(`${apiBase}/comments`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify(input),
-  })
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string }
-    throw new Error(data.error || `提交失败 (${res.status})`)
-  }
-  const data = (await res.json()) as { comment: CommentRow }
-  return data.comment
-}
+export type { NewComment } from './guestbook/types.js'
 
 export function GuestbookSection({
   page: initialPage,

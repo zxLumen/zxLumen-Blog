@@ -65,10 +65,13 @@ export { SCHEMA_SQL } from './schema.js'
 export type { CommentRow, PagedComments, UsageRow, Visibility, EventType, NewEventInput, DayPoint, StatsResult, VisitorDetail, VisitorEvent } from './schema.js'
 
 // 格式化
-export { fmtInt, fmtCompact, fmtCny, fmtDate, fmtDateTime } from './format.js'
+export { fmtInt, fmtCompact, fmtCny, fmtUsd, fmtDate, fmtDateTime } from './format.js'
+
+// 时间助手(UTC / 北京时间)
+export { nowIso, bjDay, bjTime, bjTimeSec, tsMs } from './time.js'
 
 // 用量区块筛选存档(客户端/服务端共用)
-export { USAGE_SEL_COOKIE, DEFAULT_SEL, defaultRangeSel, parseUsageSel, encodeUsageSel, writeUsageSelCookie, DATA_SOURCES } from './usage-sel.js'
+export { USAGE_SEL_COOKIE, DEFAULT_SEL, defaultRangeSel, parseUsageSel, encodeUsageSel, writeUsageSelCookie, DATA_SOURCES, RANGES } from './usage-sel.js'
 export type { UsageSel, RangeSel, Range as UsageRange, DataSource as UsageSource } from './usage-sel.js'
 
 // OpenCode Go 订阅价目(费用折算)

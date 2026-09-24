@@ -1,4 +1,6 @@
-import type { UsageRow } from '@zx/shared'
+import { RANGES, type UsageRow } from '@zx/shared'
+import { granularityOf } from '@/lib/usage/range'
+import { codeToSource, errorCode } from '@/lib/usage/errors'
 import { REPORT_TOKEN, readJson } from '@/lib/db'
 import { getDb } from '@/lib/db'
 import { fetchUsage, getLastError, getLastRows, type UsageRange } from '@/lib/deepseek'
@@ -36,8 +38,6 @@ interface UsageBody {
   cacheHitTokens?: number
   source?: string
 }
-
-const RANGES: UsageRange[] = ['today', 'yesterday', '7d', '30d', 'month', 'lastmonth', 'custom']
 
 /** 本地回退按「天」聚合所需的窗口长度 */
 const RANGE_DAYS: Record<UsageRange, number> = {
@@ -128,7 +128,7 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
         start: d.start,
         end: d.end,
         at,
-        workspaces: selected.map((w) => ({ id: w.id, name: w.name })),
+        workspaces: all.map((w) => ({ id: w.id, name: w.name })),
         ...(opts?.goQuotas ? { goQuotas: opts.goQuotas } : {}),
         ...(opts?.lastError ? { lastError: opts.lastError } : {}),
       },
@@ -145,7 +145,7 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
         models: [],
         apiKeys: [],
         workspaces: all.map((w) => ({ id: w.id, name: w.name })),
-        granularity: range === 'today' || range === 'yesterday' ? 'hour' : 'day',
+        granularity: granularityOf(range),
       },
       { headers: noStore },
     )
@@ -205,18 +205,18 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
   }
 
   const first = parts.find((p) => !p.ok) as Extract<(typeof parts)[number], { ok: false }> | undefined
-  const code = first ? (first.err as { code?: string })?.code : undefined
+  const code = first ? errorCode(first.err) : undefined
   const error = first ? (first.err instanceof Error ? first.err.message : String(first.err)) : '拉取失败'
   return Response.json(
     {
-      source: code === 'UNCONFIGURED' ? 'unconfigured' : code === 'INVALID_KEY' ? 'invalid' : 'error',
+      source: codeToSource(code),
       error,
       lastError: await ocLastError(),
       rows: [],
       models: [],
       apiKeys: [],
-      workspaces: selected.map((w) => ({ id: w.id, name: w.name })),
-      granularity: range === 'today' || range === 'yesterday' ? 'hour' : 'day',
+      workspaces: all.map((w) => ({ id: w.id, name: w.name })),
+      granularity: granularityOf(range),
       ...(goQuotas.length ? { goQuotas } : {}),
     },
     { headers: noStore },
@@ -250,7 +250,7 @@ async function zhipuUsage(range: UsageRange, start?: string, end?: string) {
       { headers: noStore },
     )
   } catch (e) {
-    const code = (e as { code?: string }).code
+    const code = errorCode(e)
     const error = e instanceof Error ? e.message : String(e)
     const last = code === 'UNCONFIGURED' ? null : await zhipuLastRows()
     if (last) {
@@ -270,7 +270,7 @@ async function zhipuUsage(range: UsageRange, start?: string, end?: string) {
     }
     return Response.json(
       {
-        source: code === 'UNCONFIGURED' ? 'unconfigured' : 'error',
+        source: codeToSource(code),
         error,
         lastError: await zhipuLastError(),
         rows: [],
@@ -286,7 +286,7 @@ async function zhipuUsage(range: UsageRange, start?: string, end?: string) {
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const raw = url.searchParams.get('range') || '30d'
-  const range = (RANGES as string[]).includes(raw) ? (raw as UsageRange) : '30d'
+  const range = (RANGES as readonly string[]).includes(raw) ? (raw as UsageRange) : '30d'
   const start = url.searchParams.get('start') || undefined
   const end = url.searchParams.get('end') || undefined
 
@@ -314,7 +314,7 @@ export async function GET(req: Request) {
         models: data.models,
         apiKeys: data.apiKeys,
         currency: data.currency,
-        granularity: data.granularity ?? (range === 'today' || range === 'yesterday' ? 'hour' : 'day'),
+        granularity: data.granularity ?? granularityOf(range),
         start: data.start,
         end: data.end,
         at: Date.now(),
@@ -322,7 +322,7 @@ export async function GET(req: Request) {
       { headers: noStore },
     )
   } catch (e) {
-    const code = (e as { code?: string }).code
+    const code = errorCode(e)
     const error = e instanceof Error ? e.message : String(e)
     // 1) 回退上次成功拉取的同 range 数据
     const last = await getLastRows(range)
@@ -334,7 +334,7 @@ export async function GET(req: Request) {
           models: last.models ?? Array.from(new Set(last.rows.map((r) => r.model))),
           apiKeys: last.apiKeys ?? [],
           currency: last.currency,
-          granularity: last.granularity ?? (range === 'today' || range === 'yesterday' ? 'hour' : 'day'),
+          granularity: last.granularity ?? granularityOf(range),
           at: last.at,
           lastError: error,
         },
@@ -359,7 +359,7 @@ export async function GET(req: Request) {
     // 3) 无任何真实数据
     return Response.json(
       {
-        source: code === 'INVALID_TOKEN' ? 'invalid' : 'error',
+        source: codeToSource(code),
         error,
         lastError: await getLastError(),
         rows: [],

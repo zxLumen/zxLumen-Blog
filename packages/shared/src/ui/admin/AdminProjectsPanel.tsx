@@ -2,13 +2,9 @@
 
 import { Badge, Button, Checkbox, Group, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core'
 import { useCallback, useEffect, useState } from 'react'
-import type { StoredProject } from '@zx/shared'
+import type { StoredProject } from '../../schema.js'
 import { MantineBridge } from './mantine-bridge.js'
-
-interface NotifyMsg {
-  kind: 'ok' | 'err'
-  text: string
-}
+import type { NotifyMsg } from './admin-types.js'
 
 /** 覆盖面门控:项目管理在 Tab 模式下仅对应 Tab 显 */
 function gate(showTabs: boolean, tab: string): boolean {

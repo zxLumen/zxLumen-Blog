@@ -6,6 +6,7 @@
 
 ### 新增
 
+- **用量饼图交互**:`BY_MODEL` 甜甜圈由 `conic-gradient` 改为 SVG 扇区(每块一个元素);鼠标悬停某块时该块**以圆心为中心放大 1.08**(几何整体缩放),模型名/tokens/占比显示在**甜甜圈下方的固定行**里;悬停图例行同样放大对应扇区(双向联动)。单模型渲染整环,无数据显示占位环
 - **OpenCode 用量支持多 workspace**:admin「Token用量」可添加多个 workspace(各填名称 + 该 workspace 的 `oc_sk_` service key,名称留空自动用 key 尾号占位),前端面板新增 workspace 多选行(「全部」= 总用量);多个 workspace 数据按区间合并(provider 加 `ws名 · ` 前缀区分),每个被选 workspace 各显示一组 Go 配额(5h/周/月)。配置存 `meta.opencode_workspaces`(JSON),每个 workspace 的 30 天快照独立存 `opencode_last_data.<id>`;不再读取环境变量 `OPENCODE_SERVICE_KEY` / `OPENCODE_CONSOLE_URL`
 - **运行时站点内容 + 热更新**:个人资料(姓名/简介/技能/时间线/项目/联系方式/SEO meta)从
   `content.local.ts` 导出为 `docker/site-content/content.json`,服务端运行时读取、
@@ -21,6 +22,11 @@
 
 ### 变更
 
+- **用量面板 OpenCode workspace 改为单选**:点击某 workspace 只选中它,再点一次取消(回到「全部」);「全部 workspace」按钮清除选择;请求仍按所选 workspace 过滤
+- **内部解耦(第一阶段)**:统一用量区间类型——`@zx/shared` 新增导出 `RANGES`,`deepseek` 复用共享 `UsageRange` 并 re-export;`ui/admin` 面板改为相对 import(消除 `ui → root` 依赖边);根 barrel 补 `fmtUsd`;删除死代码(styles.css 沙盒段、AdminPanel 恒真的 `showTabs/showOc/showZhipu` 常量及 `!showTabs` 分支)
+- **内部解耦(第四阶段)**:`AdminPanel` 抽出 `admin/admin-types.ts`(共享状态类型 + `validTab` + `NotifyMsg`,消除两个已抽面板里重复的 `NotifyMsg`)与 `admin/VisitorDetailRow.tsx`(访客明细行);`UsageSection` 抽出 `usage/constants.ts` 与展示组件 `usage/QuotaPanels.tsx`(Go / 智谱配额)、`usage/UsageCharts.tsx`(趋势/占比图 + RECENT 明细表);`GuestbookSection` 抽出 `guestbook/{types,cookies,api}.ts`
+- **内部解耦(第三阶段)**:用量数据源抽出共享层 `lib/usage/{range,types,cache,csv,aggregate,errors,snapshot}.ts`——区间/北京时助手、TTL 缓存、CSV 解析、按 key 合并、错误码统一;`deepseek/opencode/zhipu` 复用共享模块,`opencode/zhipu` 不再从 `deepseek` 反向 import `windowOf/UsageRange`;`api/usage` 用 `granularityOf`/`codeToSource` 收敛重复三元与错误映射
+- **内部解耦(第二阶段)**:`server/db.ts` 按域拆为 `server/db/{types,connection,comments,usage,events,stats,meta}.ts`,`openDb` 组合各 store,`Db` 接口与调用方不变;新增 `@zx/shared` 时间助手 `nowIso/bjDay/bjTime/bjTimeSec/tsMs`(`src/time.ts`)
 - **项目按「个人 / 历史工作成果」分组展示**:项目加 `kind` 字段(`personal` / `work`),首页拆两行 —— 个人新项目(含本站)在上,历史工作成果在下,中间一条淡分隔线;admin「项目」Tab 可逐个设分类,新增项目默认 `personal`。老数据无需迁移:缺省按 `demoUrl==='/'` 推断个人、其余为工作
 - **featured 卡片样式改为顶部强调条**:`.zx-card.is-featured` 由右上角渐变光改为卡片顶边一条 `accent→accent-2` 渐变细线(3px),更克制利落;仍沿用主题变量
 - **已归档项目卡片视觉降级**:`status='archived'` 的项目卡片降透明(opacity 0.7)+ 降饱和,取消 hover 上浮,视觉上「归档」;仅影响已标注 archived 的卡片,其余卡片不变
@@ -28,8 +34,12 @@
 
 ### 修复
 
+- **用量面板饼图/图例颜色不可区分**:未收录进 `PRICING` 的模型(OpenCode Go / 智谱等)全部回落 `accent` 蓝色;改为按模型名哈希取确定性调色板颜色
+- **用量面板柱状图下方空白**:两列网格 `align-items: start` 时,左列柱状图面板被右侧甜甜圈面板撑高的网格行留下空白;改为 `stretch`,并让柱区填满面板高度
+- **`layoutMeta` 可能返回未放行布局**:`theme-context` 取布局元数据时用了全量 `LAYOUTS` 查找、未受 admin 放行集合约束;改为基于已过滤的 `layouts`,与 `themeMeta` 行为一致
 - **OpenCode workspace 切换不刷新数据**:用量面板的拉取 effect 依赖缺 workspace 选择,点 workspace chip 后不发新请求。改为依赖稳定的选择 key(选中 id 拼接字符串),切换即重新拉取
-- **OpenCode 多 workspace 配额布局**:每个 workspace 占一行(行内 5 小时/周/月 三项,固定 3 列,卡片尺寸与单 workspace 时一致);去掉冗余的单 workspace 兼容分支
+- **OpenCode 多 workspace 配额布局**:配额网格固定 3 列(`.zx-quota.is-fixed3`),每个 workspace 占一行(行内 5 小时/周/月 三项均匀分布),任意页面宽度下都不换行/不堆叠;去掉冗余的单 workspace 兼容分支
+- **OpenCode 点选某 workspace 后其它 workspace chip 消失**:接口成功分支只返回**被选中**的 workspace 列表,前端直接覆盖筛选栏列表导致其余 chip 被抹掉;改为始终返回**全量** workspace 列表(用量/配额仍按选择过滤),点击 chip 只切换筛选、再点一次即回到「全部」
 - **admin OpenCode 面板刷新后显示「已配置 0 个 workspace」**:初始 `load()` 只更新了状态(`oc`)却漏了 workspace 列表(`ocWs`),导致配置已存库但表单/列表为空(实为前端未回填)。抽出 `applyOc()` 统一「状态 + 列表」同时更新,两处加载路径共用
 - **admin 输入框/勾选框夜间变黑**:`MantineBridge` 由 `defaultColorScheme="auto"`(跟随系统深色)改为 `forceColorScheme=当前 zx 主题 mode`,admin 控件明暗与站点主题一致,不再因系统夜间模式错配
 

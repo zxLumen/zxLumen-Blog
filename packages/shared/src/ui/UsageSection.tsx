@@ -2,63 +2,26 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { dailyAggregate, genMockUsage, modelAggregate } from '../mock.js'
-import { PRICING, estimateCost, tokensOf } from '../pricing.js'
+import { tokensOf } from '../pricing.js'
 import type { UsageRow } from '../schema.js'
 import { fmtCompact, fmtCny, fmtUsd, fmtDate, fmtInt } from '../format.js'
 import { DEFAULT_SEL, defaultRangeSel, writeUsageSelCookie } from '../usage-sel.js'
 import type { DataSource, Range, RangeSel, UsageSel } from '../usage-sel.js'
-import type { FeatureId } from '../features.js'
 import { Section } from './Section.js'
-const modelColor = (model: string) => PRICING.find((p) => p.model === model)?.color ?? 'var(--accent)'
-const modelLabel = (model: string) => PRICING.find((p) => p.model === model)?.label ?? model
-const rowCost = (r: UsageRow) => (typeof r.cost === 'number' ? r.cost : estimateCost(r).total)
-
-const RANGES: { key: Range; label: string }[] = [
-  { key: 'today', label: '今天' },
-  { key: 'yesterday', label: '昨天' },
-  { key: '7d', label: '近7天' },
-  { key: '30d', label: '近30天' },
-  { key: 'month', label: '本月' },
-  { key: 'lastmonth', label: '上月' },
-  { key: 'custom', label: '自定义' },
-]
-const rangeLabel = (r: Range) => RANGES.find((x) => x.key === r)?.label ?? r
-
-// 所有平台同一套模板:今天/昨天分时(hour),其余区间按天(day)
-const SOURCES: { key: DataSource; label: string; hint: string; feature?: FeatureId }[] = [
-  { key: 'deepseek', label: 'DeepSeek', hint: '官方数据源 · 今天/昨天分时' },
-  { key: 'opencode', label: 'OpenCode', hint: '官方数据源 · 今天/昨天分时', feature: 'usage-opencode' },
-  { key: 'zhipu', label: '智谱', hint: '按模型 token · 区间汇总', feature: 'usage-zhipu' },
-]
-
-const localIso = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-const mergeUnique = (a: string[], b: string[]) => Array.from(new Set([...a, ...b]))
-
-interface GoQuotaWindow {
-  percent: number
-  status?: string
-  resetsAt?: string
-}
-interface GoQuota {
-  rolling?: GoQuotaWindow
-  weekly?: GoQuotaWindow
-  monthly?: GoQuotaWindow
-}
-interface ZhipuQuotaLimit {
-  type?: string
-  unit?: number
-  percentage?: number
-  usage?: number
-  currentValue?: number
-  remaining?: number
-  nextResetTime?: number
-}
-interface ZhipuQuota {
-  limits: ZhipuQuotaLimit[]
-  level?: string
-}
+import {
+  localIso,
+  mergeUnique,
+  modelColor,
+  modelLabel,
+  rangeLabel,
+  rowCost,
+  RANGES,
+  SOURCES,
+  type GoQuota,
+  type ZhipuQuota,
+} from './usage/constants.js'
+import { GoQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
+import { RecentTable, UsageCharts } from './usage/UsageCharts.js'
 
 export function UsageSection({
   rows,
@@ -116,7 +79,6 @@ export function UsageSection({
   const [currency, setCurrency] = useState<'CNY' | 'USD'>('CNY')
   const [at, setAt] = useState<number | undefined>()
   const [lastError, setLastError] = useState<string | undefined>()
-  const [goQuota, setGoQuota] = useState<GoQuota | null>(null)
   const [zhipuQuota, setZhipuQuota] = useState<ZhipuQuota | null>(null)
   const [win, setWin] = useState<{ start?: string; end?: string }>(ssrWin ?? {})
   const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [] })
@@ -125,15 +87,15 @@ export function UsageSection({
   const [pickedKeys, setPickedKeys] = useState<Record<DataSource, string[]>>(initialSel?.pickedKeys ?? DEFAULT_SEL.pickedKeys)
   const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [] })
   const [picked, setPicked] = useState<Record<DataSource, string[]>>(initialSel?.picked ?? DEFAULT_SEL.picked)
-  // OpenCode workspace 列表(来自接口)+ 选择(多选,空=全部/总用量)
+  // OpenCode workspace 列表(来自接口)+ 选择(单选,空=全部/总用量)
   const [wsList, setWsList] = useState<{ id: string; name: string }[]>([])
   const [pickedWs, setPickedWs] = useState<Record<DataSource, string[]>>(initialSel?.pickedWs ?? DEFAULT_SEL.pickedWs)
   const [goQuotas, setGoQuotas] = useState<{ name: string; quota: GoQuota | null }[]>([])
   const curPicked = picked[dataSrc] ?? []
   const curPickedKeys = pickedKeys[dataSrc] ?? []
-  const curPickedWs = pickedWs[dataSrc] ?? []
+  const curPickedWs = (pickedWs[dataSrc] ?? []).slice(0, 1)
   // 稳定的 workspace 选择 key(字符串):用于 fetch 依赖,选择变化才重新拉取
-  const wsKey = (pickedWs.opencode ?? []).join(',')
+  const wsKey = (pickedWs.opencode ?? []).slice(0, 1).join(',')
   const curRangeSel = per[dataSrc] ?? defaultRangeSel()
   const range = curRangeSel.range
   const customStart = curRangeSel.customStart
@@ -166,7 +128,7 @@ export function UsageSection({
       url += `&start=${customApplied.start}&end=${customApplied.end}`
     }
     if (src === 'opencode') {
-      const sel = pickedWs.opencode ?? []
+      const sel = (pickedWs.opencode ?? []).slice(0, 1)
       if (sel.length > 0) url += `&ws=${sel.join(',')}`
     }
     void wsKey
@@ -329,21 +291,6 @@ export function UsageSection({
   const altFor = (dt: string) => altDays.has(dt)
   const byModel = modelAggregate(active)
   const maxDaily = Math.max(1, ...daySeries.map((d) => d[1] + d[2]))
-  const modelTotal = Math.max(1, byModel.reduce((a, m) => a + m.input + m.output, 0))
-
-  let acc = 0
-  const slices = byModel.map((m) => {
-    const pct = ((m.input + m.output) / modelTotal) * 360
-    const start = acc
-    acc += pct
-    return { ...m, start, end: acc }
-  })
-
-  const donutBg = slices.length
-    ? `conic-gradient(${slices
-        .map((s) => `${modelColor(s.model)} ${s.start}deg ${s.end}deg`)
-        .join(', ')})`
-    : undefined
 
   const recent = [...active].sort((a, b) => (a.ts < b.ts ? 1 : -1)).slice(0, 8)
 
@@ -369,10 +316,11 @@ export function UsageSection({
     setPickedKeys((prev) => ({ ...prev, [dataSrc]: [] }))
   }
 
+  // workspace 单选:点已选中的即取消(回到「全部」)
   function toggleWs(id: string) {
     setPickedWs((prev) => {
       const list = prev[dataSrc] ?? []
-      return { ...prev, [dataSrc]: list.includes(id) ? list.filter((x) => x !== id) : [...list, id] }
+      return { ...prev, [dataSrc]: list.includes(id) ? [] : [id] }
     })
   }
 
@@ -477,116 +425,10 @@ export function UsageSection({
         </div>
       )}
 
-      {dataSrc === 'opencode' && goQuotas.length > 0 && (
-        <div className="zx-quota">
-          {goQuotas.flatMap(({ name, quota }) =>
-            quota
-              ? ([
-                  ['5 小时', quota.rolling],
-                  ['本周', quota.weekly],
-                  ['本月', quota.monthly],
-                ] as const).map(([label, w]) => {
-                  const pct = Math.max(0, Math.min(100, Math.round(w?.percent ?? 0)))
-                  const reset = w?.resetsAt ? new Date(w.resetsAt) : null
-                  const resetTxt = reset
-                    ? reset.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                    : ''
-                  return (
-                    <div className="zx-quota-item" key={`${name}-${label}`}>
-                      <div className="zx-quota-head">
-                        <span className="zx-quota-label">{name} · Go {label}</span>
-                        <span className="zx-quota-pct">{pct}%</span>
-                      </div>
-                      <div className="zx-quota-bar">
-                        <span style={{ width: `${pct}%` }} />
-                      </div>
-                      {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
-                    </div>
-                  )
-                })
-              : [],
-          )}
-        </div>
-      )}
-
-      {dataSrc === 'opencode' && goQuotas.length === 0 && goQuota && (
-        <div className="zx-quota">
-          {(
-            [
-              ['5 小时', goQuota.rolling],
-              ['本周', goQuota.weekly],
-              ['本月', goQuota.monthly],
-            ] as const
-          ).map(([label, w]) => {
-            const pct = Math.max(0, Math.min(100, Math.round(w?.percent ?? 0)))
-            const reset = w?.resetsAt ? new Date(w.resetsAt) : null
-            const resetTxt = reset
-              ? reset.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-              : ''
-            return (
-              <div className="zx-quota-item" key={label}>
-                <div className="zx-quota-head">
-                  <span className="zx-quota-label">Go · {label}</span>
-                  <span className="zx-quota-pct">{pct}%</span>
-                </div>
-                <div className="zx-quota-bar">
-                  <span style={{ width: `${pct}%` }} />
-                </div>
-                {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
-              </div>
-            )
-          })}
-        </div>
-      )}
+      {dataSrc === 'opencode' && goQuotas.length > 0 && <GoQuotaPanel quotas={goQuotas} />}
 
       {dataSrc === 'zhipu' && zhipuQuota && zhipuQuota.limits.length > 0 && (
-        <div className="zx-quota">
-          {(() => {
-            // TOKENS_LIMIT:按 nextResetTime 升序 → 5h(unit 3)、周(unit 6);TIME_LIMIT:MCP 月度
-            const tokenLimits = zhipuQuota.limits
-              .filter((l) => l.type === 'TOKENS_LIMIT')
-              .slice()
-              .sort((a, b) => (a.nextResetTime ?? 0) - (b.nextResetTime ?? 0))
-            const mcp = zhipuQuota.limits.find((l) => l.type === 'TIME_LIMIT')
-            const cells: { label: string; pct: number; reset?: number; sub?: string }[] = []
-            if (tokenLimits[0]) {
-              const l = tokenLimits[0]
-              cells.push({ label: '5 小时', pct: Math.round(l.percentage ?? 0), reset: l.nextResetTime })
-            }
-            if (tokenLimits[1]) {
-              const l = tokenLimits[1]
-              cells.push({ label: '本周', pct: Math.round(l.percentage ?? 0), reset: l.nextResetTime })
-            }
-            if (mcp) {
-              cells.push({
-                label: 'MCP 月度',
-                pct: Math.round(mcp.percentage ?? 0),
-                reset: mcp.nextResetTime,
-                sub: typeof mcp.remaining === 'number' && typeof mcp.usage === 'number' ? `${mcp.remaining}/${mcp.usage}` : undefined,
-              })
-            }
-            return cells.map((c) => {
-              const resetTxt = c.reset
-                ? new Date(c.reset).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : ''
-              return (
-                <div className="zx-quota-item" key={c.label}>
-                  <div className="zx-quota-head">
-                    <span className="zx-quota-label">
-                      智谱{zhipuQuota.level ? ` · ${zhipuQuota.level.toUpperCase()}` : ''} · {c.label}
-                    </span>
-                    <span className="zx-quota-pct">{Math.max(0, Math.min(100, c.pct))}%</span>
-                  </div>
-                  <div className="zx-quota-bar">
-                    <span style={{ width: `${Math.max(0, Math.min(100, c.pct))}%` }} />
-                  </div>
-                  {c.sub && <div className="zx-quota-reset zx-muted zx-mono">剩余 {c.sub}</div>}
-                  {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
-                </div>
-              )
-            })
-          })()}
-        </div>
+        <ZhipuQuotaPanel quota={zhipuQuota} />
       )}
 
       <div className="zx-seg" role="group" aria-label="时间范围">
@@ -702,89 +544,27 @@ export function UsageSection({
         </div>
       </div>
 
-      <div className="zx-usage-charts">
-        <div className="zx-panel">
-          <h3>
-            {hourMode ? 'HOURLY_TOKENS' : 'DAILY_TOKENS'}{' '}
-            <span>
-              {hourMode ? '一天内分时 · UTC+8 · input + output' : `${rangeLabel(range)} · input + output`}
-            </span>
-          </h3>
-          <div className="zx-bars">
-            {daySeries.map(([dt, input, output]) => {
-              const v = input + output
-              const label = hourMode ? `${dt.slice(5, 10)} ${dt.slice(11, 13)}:00` : dt.slice(5)
-              return (
-                <div
-                  key={dt}
-                  className={`zx-bar${v === 0 ? ' is-zero' : altFor(dt) ? ' is-alt' : ''}`}
-                  data-label={`${label} · ${fmtCompact(v)}`}
-                  style={{ height: `${Math.max(3, (v / maxDaily) * 100)}%` }}
-                />
-              )
-            })}
-          </div>
-        </div>
+      <UsageCharts
+        hourMode={hourMode}
+        rangeLabel={rangeLabel(range)}
+        daySeries={daySeries}
+        altFor={altFor}
+        maxDaily={maxDaily}
+        byModel={byModel}
+        hasPicked={curPicked.length > 0}
+      />
 
-        <div className="zx-panel">
-          <h3>
-            BY_MODEL <span>{curPicked.length > 0 ? '所选模型' : 'tokens 占比'}</span>
-          </h3>
-          <div style={{ display: 'grid', gap: '1rem', placeItems: 'center' }}>
-            <div className="zx-donut" style={{ background: donutBg }} />
-            <div className="zx-legend" style={{ width: '100%' }}>
-              {byModel.map((m) => (
-                <div className="zx-legend-item" key={m.model}>
-                  <span
-                    className="zx-legend-dot"
-                    style={{ background: modelColor(m.model), color: modelColor(m.model) }}
-                  />
-                  <span style={{ flex: 1 }}>{modelLabel(m.model)}</span>
-                  <span className="zx-mono">{fmtCompact(m.input + m.output)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="zx-panel">
-        <h3>
-          RECENT{' '}
-          <span>
-            {rangeLabel(range)}
-            {rangeWin ? ` · ${rangeWin}` : ''} {hourMode ? '分时明细(天/小时/模型)' : '明细(按天/模型)'}
-          </span>
-        </h3>
-        <table className="zx-table">
-          <thead>
-            <tr>
-              <th>{hourMode ? 'day/hour' : 'day'}</th>
-              <th>model</th>
-              {hasKey && <th>{keyLabel}</th>}
-              <th className="num">input</th>
-              <th className="num">output</th>
-              <th className="num">cache</th>
-              {showReq && <th className="num">req</th>}
-              <th className="num">成本</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recent.map((r, i) => (
-              <tr key={i}>
-                <td className="zx-mono">{rowLabel(r)}</td>
-                <td>{modelLabel(r.model)}</td>
-                {hasKey && <td className="zx-mono">{r.apiKey || '—'}</td>}
-                <td className="num">{fmtInt(r.inputTokens)}</td>
-                <td className="num">{fmtInt(r.outputTokens)}</td>
-                <td className="num">{fmtInt(r.cacheHitTokens)}</td>
-                {showReq && <td className="num">{fmtInt(r.requests ?? 0)}</td>}
-                <td className="num">{fmtCost(rowCost(r))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <RecentTable
+        hourMode={hourMode}
+        rangeLabel={rangeLabel(range)}
+        rangeWin={rangeWin}
+        recent={recent}
+        hasKey={hasKey}
+        keyLabel={keyLabel}
+        showReq={showReq}
+        rowLabel={rowLabel}
+        fmtCost={fmtCost}
+      />
 
       <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', marginTop: '0.8rem' }}>
         {note}

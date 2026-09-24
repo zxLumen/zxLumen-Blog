@@ -177,7 +177,7 @@ export function PreferencesProvider({
       theme,
       layout,
       themeMeta: getTheme(theme),
-      layoutMeta: LAYOUTS.find((l) => l.id === layout) ?? LAYOUTS[0],
+      layoutMeta: layouts.find((l) => l.id === layout) ?? layouts[0],
       themes,
       layouts,
       setTheme,

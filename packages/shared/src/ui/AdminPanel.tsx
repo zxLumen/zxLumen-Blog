@@ -1,12 +1,21 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ArchivedCommentRow, CommentRow, EventType, PagedComments, StatsResult, VisitorDetail } from '../schema.js'
+import type { ArchivedCommentRow, CommentRow, PagedComments, StatsResult } from '../schema.js'
 import { fmtDateTime, fmtInt } from '../format.js'
-import { PROJECTS, SECTION_LABELS, type Project } from '../content.js'
+import { PROJECTS, type Project } from '../content.js'
 import { Pagination } from './Pagination.js'
 import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
 import { AdminThemePanel } from './admin/AdminThemePanel.js'
+import { VisitorDetailRow } from './admin/VisitorDetailRow.js'
+import {
+  validTab,
+  type DsStatus,
+  type OcStatus,
+  type OcWsItem,
+  type TabKey,
+  type ZhipuStatus,
+} from './admin/admin-types.js'
 
 async function loadPageData(page: number, pageSize: number): Promise<PagedComments> {
   const res = await fetch(`/api/admin/comments?page=${page}&pageSize=${pageSize}`, {
@@ -16,145 +25,6 @@ async function loadPageData(page: number, pageSize: number): Promise<PagedCommen
   if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error(`加载失败 (${res.status})`)
   return (await res.json()) as PagedComments
-}
-
-const EVENT_LABEL: Record<EventType, string> = {
-  visit: '访问',
-  project_click: '项目点击',
-  resume_download: '简历下载',
-  leave: '离开',
-  section_view: '区块浏览',
-}
-
-function targetLabel(t: string, projects: Project[]) {
-  return projects.find((p) => p.id === t)?.name ?? t
-}
-
-/** 访客明细行:点击展开该访客的操作记录 */
-function VisitorDetailRow({
-  v,
-  open,
-  onToggle,
-  projects,
-}: {
-  v: VisitorDetail
-  open: boolean
-  onToggle: () => void
-  projects: Project[]
-}) {
-  const proj = Object.entries(v.projectClicks)
-    .sort((a, b) => b[1] - a[1])
-    .map(([t, n]) => `${targetLabel(t, projects)}×${n}`)
-    .join(' ')
-  const m = (sec: number) => {
-    if (sec >= 60) return `${Math.floor(sec / 60)}分${sec % 60 ? ` ${sec % 60}s` : ''}`
-    return `${sec}s`
-  }
-  // 区块浏览聚合:区块名 → { count }
-  const sectionAgg = new Map<string, { count: number }>()
-  for (const e of v.recent) {
-    if (e.type !== 'section_view' || !e.target) continue
-    const id = e.target.split('#')[1] ?? e.target
-    const cur = sectionAgg.get(id) ?? { count: 0 }
-    cur.count += 1
-    sectionAgg.set(id, cur)
-  }
-  const sectionList = [...sectionAgg.entries()].sort((a, b) => b[1].count - a[1].count)
-  // 目标显示:区块浏览 → 中文区块名;离开 → 停留时长;其它 → 项目名/原值
-  const showTarget = (type: string, target: string, dwell?: number) => {
-    if (type === 'leave') return dwell ? `停留 ${m(dwell)}` : ''
-    if (!target) return ''
-    if (type === 'section_view') {
-      const id = target.split('#')[1] ?? target
-      return SECTION_LABELS[id] ?? target
-    }
-    return targetLabel(target, projects)
-  }
-  const ops = v.recent
-  return (
-    <>
-      <tr className={open ? 'is-open' : ''} onClick={onToggle} style={{ cursor: 'pointer' }}>
-        <td>
-          <div>
-            {v.nickname || `访客 ${v.cid.slice(0, 8)}`}
-            {v.nickname ? (
-              <span className="zx-muted" style={{ fontSize: '0.7rem' }}>
-                {' '}
-                · {v.cid.slice(0, 8)}
-              </span>
-            ) : null}
-          </div>
-          <div className="zx-mono zx-muted" style={{ fontSize: '0.65rem' }}>
-            {v.cid}
-          </div>
-        </td>
-        <td className="num">{fmtInt(v.visits)}</td>
-        <td className="num">{fmtInt(v.commentCount)}</td>
-        <td className="num">{fmtInt(v.resumeDownloads)}</td>
-        <td>
-          {proj ? <span className="zx-mono zx-muted zx-proj-chips">{proj}</span> : <span className="zx-muted">—</span>}
-        </td>
-        <td className="zx-mono zx-muted">{v.lastSeen}</td>
-      </tr>
-      {open && (
-        <tr>
-          <td colSpan={6} className="zx-visitor-detail">
-            <div className="zx-visitor-meta zx-mono zx-muted">
-              <span>首访 {v.firstSeen}</span>
-              <span>{v.returning ? '回头客' : '新客'}</span>
-              <span>
-                会话 {v.sessions} 次 · 平均 {v.avgSessionSec ? m(v.avgSessionSec) : '—'}
-              </span>
-              <span>{v.device}</span>
-              <span>来源 {v.referrer || '直接打开'}</span>
-            </div>
-
-            {proj && (
-              <div className="zx-visitor-line">
-                项目点击:{' '}
-                {Object.entries(v.projectClicks)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([t, n]) => `${targetLabel(t, projects)} ×${n}`)
-                  .join('、')}
-              </div>
-            )}
-
-            <div className="zx-visitor-block">
-              <span className="zx-visitor-block-title">看过区块</span>
-              {sectionList.length > 0 ? (
-                <span className="zx-proj-chips">
-                  {sectionList.map(([id, s]) => (
-                    <span key={id} className="zx-sec-chip">
-                      {SECTION_LABELS[id] ?? `#${id}`} ×{s.count}
-                    </span>
-                  ))}
-                </span>
-              ) : (
-                <span className="zx-muted">—</span>
-              )}
-            </div>
-
-            {ops.length > 0 && (
-              <div className="zx-visitor-block">
-                <span className="zx-visitor-block-title">最近操作</span>
-                <div className="zx-visitor-ops zx-mono zx-muted">
-                  {ops.map((e, i) => (
-                    <div key={i} className="zx-visitor-op">
-                      <span className="zx-op-time">{e.ts}</span>
-                      <span className="zx-op-type">{EVENT_LABEL[e.type]}</span>
-                      {showTarget(e.type, e.target, e.dwell) ? (
-                        <span className="zx-op-target">{showTarget(e.type, e.target, e.dwell)}</span>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </td>
-        </tr>
-      )}
-    </>
-  )
 }
 
 export function AdminPanel({ projects }: { projects?: Project[] }) {
@@ -175,49 +45,18 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
   const [qrUrl, setQrUrl] = useState('/wechat.png')
   const [qrBusy, setQrBusy] = useState(false)
 
-  interface DsStatus {
-    configured?: boolean
-    exp?: number | null
-    expired?: boolean | null
-    lastSync?: string | null
-    syncKey?: string
-    lastError?: string | null
-    lastData?: { at?: number; count?: number } | null
-  }
   const [ds, setDs] = useState<DsStatus | null>(null)
   const [dsToken, setDsToken] = useState('')
   const [dsBusy, setDsBusy] = useState(false)
 
-  interface OcWsItem {
-    id: string
-    name: string
-    key: string
-    hasKey?: boolean
-  }
-  interface OcStatus {
-    configured?: boolean
-    consoleUrl?: string
-    workspaces?: Array<{ id: string; name: string; hasKey?: boolean }>
-    lastError?: string | null
-    lastData?: { at?: number; count?: number; since?: string } | null
-  }
   const [oc, setOc] = useState<OcStatus | null>(null)
   const [ocUrl, setOcUrl] = useState('')
   const [ocWs, setOcWs] = useState<OcWsItem[]>([])
   const [ocBusy, setOcBusy] = useState(false)
-  interface ZhipuStatus {
-    configured?: boolean
-    baseUrl?: string
-    lastError?: string | null
-    lastData?: { at?: number; count?: number } | null
-  }
   const [zp, setZp] = useState<ZhipuStatus | null>(null)
   const [zpUrl, setZpUrl] = useState('')
   const [zpKey, setZpKey] = useState('')
   const [zpBusy, setZpBusy] = useState(false)
-  type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats' | 'projects' | 'themes'
-  const validTab = (t: unknown): t is TabKey =>
-    t === 'comments' || t === 'archive' || t === 'profile' || t === 'token' || t === 'stats' || t === 'projects' || t === 'themes'
   // 刷新/新标签页都停留在上次 Tab(localStorage;SSR 首帧不渲染 tabs,无 hydration 冲突)
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === 'undefined') return 'comments'
@@ -228,10 +67,6 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       return 'comments'
     }
   })
-  // 单环境:admin 分栏与各数据源全部放行
-  const showTabs = true
-  const showOc = true
-  const showZhipu = true
 
   const [archived, setArchived] = useState<ArchivedCommentRow[]>([])
   const [archTotal, setArchTotal] = useState(0)
@@ -362,19 +197,15 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     }
     const dres = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
     if (dres.ok) setDs((await dres.json()) as DsStatus)
-    if (showOc) {
-      const ores = await fetch('/api/admin/opencode', { credentials: 'same-origin' })
-      if (ores.ok) applyOc((await ores.json()) as OcStatus)
+    const ores = await fetch('/api/admin/opencode', { credentials: 'same-origin' })
+    if (ores.ok) applyOc((await ores.json()) as OcStatus)
+    const zres = await fetch('/api/admin/zhipu', { credentials: 'same-origin' })
+    if (zres.ok) {
+      const z = (await zres.json()) as ZhipuStatus
+      setZp(z)
+      if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
     }
-    if (showZhipu) {
-      const zres = await fetch('/api/admin/zhipu', { credentials: 'same-origin' })
-      if (zres.ok) {
-        const z = (await zres.json()) as ZhipuStatus
-        setZp(z)
-        if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
-      }
-    }
-  }, [showOc, showZhipu, applyOc])
+  }, [applyOc])
 
   async function loadDeepseek() {
     const res = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
@@ -741,34 +572,30 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     <div className="zx-container" style={{ paddingBlock: '2.5rem' }}>
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
-        {showTabs ? (
-          <div className="zx-tabs is-inline">
-            {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'themes'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={`zx-tab${tab === t ? ' is-active' : ''}`}
-                onClick={() => setTab(t)}
-              >
-                {t === 'comments'
-                  ? '留言'
-                  : t === 'archive'
-                    ? '归档'
-                    : t === 'stats'
-                      ? '统计'
-                      : t === 'profile'
-                        ? '个人信息'
-                        : t === 'projects'
-                          ? '项目'
-                          : t === 'themes'
-                            ? '外观'
-                            : 'Token用量'}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <h1 className="zx-sec-title">留言管理</h1>
-        )}
+        <div className="zx-tabs is-inline">
+          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'themes'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`zx-tab${tab === t ? ' is-active' : ''}`}
+              onClick={() => setTab(t)}
+            >
+              {t === 'comments'
+                ? '留言'
+                : t === 'archive'
+                  ? '归档'
+                  : t === 'stats'
+                    ? '统计'
+                    : t === 'profile'
+                      ? '个人信息'
+                      : t === 'projects'
+                        ? '项目'
+                        : t === 'themes'
+                          ? '外观'
+                          : 'Token用量'}
+            </button>
+          ))}
+        </div>
         <button className="zx-btn zx-btn-sm zx-btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => void logout()}>
           退出登录
         </button>
@@ -776,15 +603,15 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
 
       {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
 
-      {(!showTabs || tab === 'projects') && (
-        <AdminProjectsPanel active={!showTabs || tab === 'projects'} onNotify={(m) => setMsg(m)} showTabs={showTabs} tab={tab} />
+      {tab === 'projects' && (
+        <AdminProjectsPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
       )}
 
-      {(!showTabs || tab === 'themes') && (
-        <AdminThemePanel active={!showTabs || tab === 'themes'} onNotify={(m) => setMsg(m)} showTabs={showTabs} tab={tab} />
+      {tab === 'themes' && (
+        <AdminThemePanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
       )}
 
-      {(!showTabs || tab === 'profile') && (
+      {tab === 'profile' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           站长昵称 <span>留言/回复时自动使用</span>
@@ -810,7 +637,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       </div>
       )}
 
-      {(!showTabs || tab === 'profile') && (
+      {tab === 'profile' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           联系方式 <span>前台「关于」与页脚展示;电话不显示号码</span>
@@ -873,7 +700,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       </div>
       )}
 
-      {(!showTabs || tab === 'token') && (
+      {tab === 'token' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           DeepSeek 用量 <span>平台私有接口 · 需登录会话令牌</span>
@@ -962,7 +789,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       </div>
       )}
 
-      {(!showTabs || tab === 'token') && showOc && (
+      {tab === 'token' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           OpenCode 用量 <span>官方 Console 导出 · 今天/昨天分时</span>
@@ -1058,7 +885,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       </div>
       )}
 
-      {(!showTabs || tab === 'token') && showZhipu && (
+      {tab === 'token' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           智谱用量 <span>monitor API · 按模型 token 区间汇总 + 配额</span>
@@ -1109,7 +936,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       </div>
       )}
 
-      {(!showTabs || tab === 'profile') && (
+      {tab === 'profile' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
           修改密码 <span>存于数据库,优先于环境变量</span>
@@ -1151,7 +978,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       </div>
       )}
 
-      {(!showTabs || tab === 'comments') && (
+      {tab === 'comments' && (
       <>
       <p className="zx-muted zx-mono" style={{ fontSize: '0.75rem' }}>
         // {total} 条留言(含私密与回复){loading ? ' · 加载中…' : ''} · 已登录状态在所有页面生效
@@ -1217,7 +1044,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       </>
       )}
 
-      {showTabs && tab === 'stats' && (
+      {tab === 'stats' && (
       <>
       <p className="zx-muted zx-mono" style={{ fontSize: '0.75rem' }}>
         // 统计{statsLoading ? ' · 加载中…' : ''}
@@ -1336,7 +1163,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       </>
       )}
 
-      {showTabs && tab === 'archive' && (
+      {tab === 'archive' && (
       <>
       <p className="zx-muted zx-mono" style={{ fontSize: '0.75rem' }}>
         // 归档 {archTotal} 条已删除留言(admin 或访客删除均可在此查看){archLoading ? ' · 加载中…' : ''}
