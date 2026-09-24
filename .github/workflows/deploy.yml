@@ -55,28 +55,28 @@ jobs:
             ${{ steps.img.outputs.image }}:latest
 
       # 从 Actions 发布到公开仓库的包会继承仓库可见性 → 默认即 public。
-      # 这里读回实际可见性并断言;若为 private(如从私有仓库/手动推包),
-      # 用 zxLumen PAT(write:packages)兜底置公开,GITHUB_TOKEN 再作后备。
+      # /user/packages 只对包所有者解析,故用 zxLumen PAT 读回断言;
+      # 若为 private 则用同一 PAT 兜底置公开(GH_TOKEN 环境变量方式避免与
+      # runner 自带的 GITHUB_TOKEN 冲突)。
       - name: Ensure GHCR package is public
         env:
           GH_PACKAGES_PAT: ${{ secrets.GH_PACKAGES_PAT }}
         run: |
           NAME="zx-home"
-          VIS=""
-          for TOKEN in "${{ secrets.GITHUB_TOKEN }}" "$GH_PACKAGES_PAT"; do
-            [ -n "$TOKEN" ] || continue
-            VIS=$(gh api -H "Authorization: token ${TOKEN}" "/user/packages/container/${NAME}" --jq .visibility 2>/dev/null || echo "")
-            if [ "${VIS}" = "public" ]; then
-              echo "GHCR 包 ${NAME} 已是 public(可见性继承自公开仓库)"
-              exit 0
-            fi
-            gh api -H "Authorization: token ${TOKEN}" -X PATCH "/user/packages/container/${NAME}" \
-                -F visibility=public >/dev/null 2>&1 || true
-            VIS=$(gh api -H "Authorization: token ${TOKEN}" "/user/packages/container/${NAME}" --jq .visibility 2>/dev/null || echo "")
-            echo "尝试以 token(*-masked) 设为 public 后 → ${VIS}"
-            [ "${VIS}" = "public" ] && exit 0
-          done
-          echo "::error::GHCR 包 ${NAME} 仍为 ${VIS}(应 public,服务器才能匿名 pull)"
+          vis() { GH_TOKEN="$1" gh api "/user/packages/container/${NAME}" --jq .visibility 2>/dev/null || echo ""; }
+          [ -n "$GH_PACKAGES_PAT" ] || { echo "::error::缺少 GH_PACKAGES_PAT(zxLumen 的 write:packages PAT)"; exit 1; }
+          VIS=$(vis "$GH_PACKAGES_PAT")
+          echo "读回(zxLumen PAT): ${VIS}"
+          if [ "${VIS}" = "public" ]; then
+            echo "GHCR 包 ${NAME} 已是 public"
+            exit 0
+          fi
+          GH_TOKEN="$GH_PACKAGES_PAT" gh api -X PATCH "/user/packages/container/${NAME}" \
+              -F visibility=public >/dev/null 2>&1 || true
+          VIS=$(vis "$GH_PACKAGES_PAT")
+          echo "PAT 置公开后: ${VIS}"
+          [ "${VIS}" = "public" ] && exit 0
+          echo "::error::GHCR 包 ${NAME} 未确认 public(当前 ${VIS:-未知})"
           exit 1
 
       - name: SSH deploy to server
