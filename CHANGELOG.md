@@ -6,6 +6,7 @@
 
 ### 新增
 
+- **服务器监控(可观测性)**:本地采集 → Grafana Cloud + Sentry(EU)。`docker compose --profile monitoring`(默认不启)加载 `node-exporter` + **筛选版 cAdvisor** + `grafana/alloy`(抓主机/容器指标、抓应用 `/metrics`、采集 app/caddy 容器日志 → Mimir/Loki);新增应用 `GET /api/health`(供外部合成探测)与 `GET /api/metrics`(Prometheus 文本,`X-Metrics-Token` 保护,Caddy 对公网屏蔽);`onRequestError` 计数并可选上报 Sentry(`dataCollection` 关闭 PII、`tunnelRoute:/monitoring`);文档见 `docs/MONITORING.md`
 - **用量饼图交互**:`BY_MODEL` 甜甜圈由 `conic-gradient` 改为 SVG 扇区(每块一个元素);鼠标悬停某块时该块**以圆心为中心放大 1.08**(几何整体缩放),模型名/tokens/占比显示在**甜甜圈下方的固定行**里;悬停图例行同样放大对应扇区(双向联动)。单模型渲染整环,无数据显示占位环
 - **OpenCode 用量支持多 workspace**:admin「Token用量」可添加多个 workspace(各填名称 + 该 workspace 的 `oc_sk_` service key,名称留空自动用 key 尾号占位),前端面板新增 workspace 多选行(「全部」= 总用量);多个 workspace 数据按区间合并(provider 加 `ws名 · ` 前缀区分),每个被选 workspace 各显示一组 Go 配额(5h/周/月)。配置存 `meta.opencode_workspaces`(JSON),每个 workspace 的 30 天快照独立存 `opencode_last_data.<id>`;不再读取环境变量 `OPENCODE_SERVICE_KEY` / `OPENCODE_CONSOLE_URL`
 - **运行时站点内容 + 热更新**:个人资料(姓名/简介/技能/时间线/项目/联系方式/SEO meta)从

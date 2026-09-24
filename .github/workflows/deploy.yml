@@ -50,6 +50,12 @@ jobs:
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Sentry:DSN / org / project 均为公开值;AUTH_TOKEN 缺省为空 → 跳过 source map 上传
+          build-args: |
+            NEXT_PUBLIC_SENTRY_DSN=https://bdb2a7b80ed3fa2b9193741d7859148c@o4512140987203584.ingest.de.sentry.io/4512140996378714
+            SENTRY_ORG=28a6cde5af7c
+            SENTRY_PROJECT=javascript-nextjs
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
           tags: |
             ${{ steps.img.outputs.image }}:${{ github.sha }}
             ${{ steps.img.outputs.image }}:latest

@@ -54,10 +54,85 @@ services:
     networks:
       - web
 
+  # ==========================================================================
+  # 监控(可选,默认不启动):本地采集 → Grafana Cloud(远端)
+  #   启动:`docker compose --profile monitoring up -d`
+  #   停止:`docker compose --profile monitoring down`
+  # 仅容器内网互通,不发布端口到公网。
+  # ==========================================================================
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    expose:
+      - "9100"
+    networks:
+      - web
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --max_housekeeping_interval=60s
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp,percpu,disk,diskIO,fs
+      - --url_base_prefix=/
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    expose:
+      - "8080"
+    networks:
+      - web
+
+  alloy:
+    image: grafana/alloy:v1.5.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    depends_on:
+      - app
+      - node-exporter
+      - cadvisor
+    env_file: .env
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+    volumes:
+      - ./observability/alloy.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - alloy-data:/var/lib/alloy/data
+    expose:
+      - "12345"
+    networks:
+      - web
+
 volumes:
   zx-data:
   caddy-data:
   caddy-config:
+  alloy-data:
 
 networks:
   web:

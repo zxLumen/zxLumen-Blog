@@ -1,0 +1,110 @@
+// ============================================================================
+// Grafana Alloy:抓取主机(node-exporter)+ 容器(cAdvisor)+ 应用 /api/metrics,
+//   采集 app/caddy 容器日志 → Grafana Cloud(Mimir 指标 / Loki 日志)
+// 通过 `docker compose --profile monitoring up -d` 启动;
+// 环境变量来自 docker/.env(GRAFANA_* / METRICS_TOKEN)。
+// ============================================================================
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+// ---------- 远端写入端 ----------
+
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = env("GRAFANA_METRICS_URL")
+    basic_auth {
+      username = env("GRAFANA_METRICS_USER")
+      password = env("GRAFANA_METRICS_TOKEN")
+    }
+  }
+}
+
+loki.write "cloud" {
+  endpoint {
+    url = env("GRAFANA_LOGS_URL")
+    basic_auth {
+      username = env("GRAFANA_LOGS_USER")
+      password = env("GRAFANA_LOGS_TOKEN")
+    }
+  }
+}
+
+// ---------- 主机指标(node-exporter,独立容器) ----------
+
+prometheus.scrape "node" {
+  targets         = [{ "__address__" = "node-exporter:9100", "job" = "node", "instance" = "zx-vps" }]
+  forward_to      = [prometheus.remote_write.cloud.receiver]
+  scrape_interval = "30s"
+}
+
+// ---------- 容器指标(cAdvisor,已筛选) ----------
+// cAdvisor 侧用 --disable_metrics 精简;此处再按指标名白名单 + 去高基数标签
+
+prometheus.relabel "cadvisor" {
+  forward_to = [prometheus.remote_write.cloud.receiver]
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "container_(cpu_usage_seconds_total|memory_working_set_bytes|memory_usage_bytes|network_receive_bytes_total|network_transmit_bytes_total|start_time_seconds|oom_events_total)"
+    action        = "keep"
+  }
+  // 去掉容器 id / 镜像等长标签(避免每次 redeploy 产生新 series);保留 compose service 标签
+  rule {
+    regex  = "^(id|name|image|container_label_com_docker_compose_project|container_label_com_docker_compose_version|container_label_com_docker_compose_config_hash)$"
+    action = "labeldrop"
+  }
+}
+
+prometheus.scrape "cadvisor" {
+  targets         = [{ "__address__" = "cadvisor:8080", "job" = "cadvisor", "instance" = "zx-vps" }]
+  forward_to      = [prometheus.relabel.cadvisor.receiver]
+  scrape_interval = "60s"
+  metrics_path    = "/metrics"
+}
+
+// ---------- 应用自定义指标(/api/metrics) ----------
+
+prometheus.scrape "app" {
+  targets         = [{ "__address__" = "app:3000", "job" = "zx-app", "instance" = "zx-vps" }]
+  forward_to      = [prometheus.remote_write.cloud.receiver]
+  scrape_interval = "30s"
+  metrics_path    = "/api/metrics"
+  headers = {
+    "X-Metrics-Token" = env("METRICS_TOKEN"),
+  }
+}
+
+// ---------- 容器日志(app / caddy)→ Loki ----------
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(app|caddy)"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/?(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_logs.output
+  forward_to = [loki.write.cloud.receiver]
+  labels     = { job = "docker" }
+}

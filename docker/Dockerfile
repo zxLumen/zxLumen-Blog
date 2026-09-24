@@ -17,6 +17,17 @@ RUN cd packages/shared && npm run build
 COPY apps/next-home/package.json apps/next-home/package-lock.json* ./apps/next-home/
 RUN cd apps/next-home && npm install
 COPY apps/next-home ./apps/next-home
+
+# Sentry:DSN 为公开值,构建期注入以启用前端上报;AUTH_TOKEN 仅用于上传 source map(缺省则跳过)
+ARG NEXT_PUBLIC_SENTRY_DSN=""
+ARG SENTRY_AUTH_TOKEN=""
+ARG SENTRY_ORG=""
+ARG SENTRY_PROJECT=""
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
+    SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN \
+    SENTRY_ORG=$SENTRY_ORG \
+    SENTRY_PROJECT=$SENTRY_PROJECT
+
 RUN cd apps/next-home && npm run build
 
 # ---------- 运行 ----------
