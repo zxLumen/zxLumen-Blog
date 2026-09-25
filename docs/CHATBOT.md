@@ -40,6 +40,8 @@ cd packages/shared && npm run seed:chatbot
 预设:DeepSeek / OpenAI / 智谱 / 百炼 / Moonshot / 硅基流动 / OpenRouter / OpenCode Go / 本地 Ollama / 自定义(OpenAI 兼容)。
 协议两种:`openai`(chat/completions + embeddings)与 `ollama`(/api/chat + /api/embed)。
 - 聊天必须配置 model + key(Ollama 本地免 key)。
+- **模型下拉选择**:面板的「模型」不再是手填,而是按 provider 调 `GET {baseUrl}/models`(Ollama 为 `/api/tags`)拉取可用模型,(`↻` 刷新);拉不到时保留「自定义…」手填兜底。
+  模型列表按**已保存的** baseUrl/key 拉取;换了 provider/key 后需先「保存配置」再点 `↻`。
 - embedding 未配置时检索退化为 FTS5 关键词,不影响问答。
 - embedding 维度按已知模型表自动填(如 bge-m3=1024、text-embedding-3-small=1536),未知模型手填维数。
 

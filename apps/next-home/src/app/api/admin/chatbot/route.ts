@@ -29,7 +29,7 @@ interface SaveBody extends Partial<ChatBotConfig> {
   embedApiKey?: string
 }
 
-/** POST:保存配置;空字符串密钥 = 不改,`__CLEAR__` = 清空 */
+/** POST:保存配置;空字符串/显示掩码 = 不改,`__CLEAR__` = 清空 */
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
   const body = await readJson<SaveBody>(req)
@@ -39,6 +39,8 @@ export async function POST(req: Request) {
   for (const k of keys) {
     const v = (body as Record<string, unknown>)[k]
     if (typeof v !== 'string' || v === '') continue
+    // 显示掩码(如 ••••xxxx / ****)不是真实密钥,忽略,避免把掩码写库
+    if (/^[•*]/.test(v)) continue
     if (v === '__CLEAR__') {
       if (k === 'chatApiKey') clearChatApiKey()
       else clearEmbedApiKey()

@@ -123,6 +123,38 @@ export function AdminChatbotPanel({
   const [dayCounts, setDayCounts] = useState<Array<{ day: string; count: number }>>([])
   const [logsBusy, setLogsBusy] = useState(false)
 
+  const [chatModels, setChatModels] = useState<string[]>([])
+  const [embedModels, setEmbedModels] = useState<string[]>([])
+  const [modelsBusy, setModelsBusy] = useState<'chat' | 'embed' | ''>('')
+  const [modelsErr, setModelsErr] = useState<{ chat: string; embed: string }>({ chat: '', embed: '' })
+  const [chatCustom, setChatCustom] = useState(false)
+  const [embedCustom, setEmbedCustom] = useState(false)
+
+  const loadModels = useCallback(async (kind: 'chat' | 'embed', opts?: { provider?: string; baseUrl?: string }) => {
+    setModelsBusy(kind)
+    setModelsErr((e) => ({ ...e, [kind]: '' }))
+    try {
+      const q = new URLSearchParams({ kind })
+      if (opts?.provider) q.set('provider', opts.provider)
+      if (opts?.baseUrl) q.set('baseUrl', opts.baseUrl)
+      const r = await fetch(`/api/admin/chatbot/models?${q.toString()}`, { credentials: 'same-origin', cache: 'no-store' })
+      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; models?: string[]; error?: string }
+      if (!r.ok || !d.ok) throw new Error(d.error || '模型列表加载失败')
+      const list = d.models ?? []
+      if (kind === 'chat') {
+        setChatModels(list)
+        if (!list.length) setChatCustom(true)
+      } else {
+        setEmbedModels(list)
+        if (!list.length) setEmbedCustom(true)
+      }
+    } catch (e) {
+      setModelsErr((x) => ({ ...x, [kind]: e instanceof Error ? e.message : '模型列表加载失败' }))
+    } finally {
+      setModelsBusy('')
+    }
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -133,12 +165,14 @@ export function AdminChatbotPanel({
       setProviders(d.providers)
       setEmbProviders(d.embeddingProviders)
       setLastError(d.lastError)
+      if (d.chatReady) void loadModels('chat')
+      if (d.embedReady) void loadModels('embed')
     } catch {
       notify('err', '机器人配置加载失败')
     } finally {
       setLoading(false)
     }
-  }, [notify])
+  }, [notify, loadModels])
 
   const loadDistill = useCallback(async () => {
     try {
@@ -188,6 +222,14 @@ export function AdminChatbotPanel({
       if (p) next[k] = p.id === 'custom' ? '' : p.baseUrl
       return next
     })
+    // provider 变了 → 旧模型列表失效;清空,待保存 key 后点 ↻ 重拉
+    if (kind === 'chatProvider') {
+      setChatModels([])
+      setChatCustom(false)
+    } else {
+      setEmbedModels([])
+      setEmbedCustom(false)
+    }
   }
 
   const save = async () => {
@@ -195,6 +237,9 @@ export function AdminChatbotPanel({
     setSaving(true)
     try {
       const body: Record<string, unknown> = { ...cfg }
+      // 掩码(••••/****)只是显示用,绝不能回写;仅当用户实际输入新 key 时才带
+      delete body.chatApiKey
+      delete body.embedApiKey
       if (chatKey.trim()) body.chatApiKey = chatKey.trim()
       if (embedKey.trim()) body.embedApiKey = embedKey.trim()
       const r = await fetch('/api/admin/chatbot', {
@@ -211,6 +256,8 @@ export function AdminChatbotPanel({
       }
       setChatKey('')
       setEmbedKey('')
+      void loadModels('chat')
+      void loadModels('embed')
       notify('ok', '机器人配置已保存')
     } catch (e) {
       notify('err', e instanceof Error ? e.message : '保存失败')
@@ -284,9 +331,39 @@ export function AdminChatbotPanel({
             ))}
           </select>
           <input className="zx-input" style={{ maxWidth: 280, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} placeholder="Base URL" value={cfg.chatBaseUrl} onChange={(e) => set('chatBaseUrl', e.target.value)} />
-          <input className="zx-input" style={{ maxWidth: 220, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} placeholder="模型(如 deepseek-chat)" value={cfg.chatModel} onChange={(e) => set('chatModel', e.target.value)} />
-          <input className="zx-input" style={{ maxWidth: 90 }} type="number" step="0.1" min="0" max="2" placeholder="温度" value={cfg.temperature} onChange={(e) => set('temperature', num(e.target.value, 0.7))} />
-          <input className="zx-input" style={{ maxWidth: 90 }} type="number" placeholder="max_tokens" value={cfg.maxTokens} onChange={(e) => set('maxTokens', num(e.target.value, 1024))} />
+          <select className="zx-input" style={{ maxWidth: 210, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+            value={chatCustom ? '__custom__' : cfg.chatModel}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v === '__custom__') setChatCustom(true)
+              else {
+                setChatCustom(false)
+                set('chatModel', v)
+              }
+            }}>
+            <option value="">(选择模型)</option>
+            {chatModels.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+            {cfg.chatModel && !chatModels.includes(cfg.chatModel) && <option value={cfg.chatModel}>{cfg.chatModel}(当前)</option>}
+            <option value="__custom__">自定义…</option>
+          </select>
+          <button type="button" className="zx-btn zx-btn-sm" disabled={modelsBusy === 'chat'} title="按已保存的 baseUrl/key 拉取模型列表"
+            onClick={() => void loadModels('chat', { provider: cfg.chatProvider, baseUrl: cfg.chatBaseUrl })}>
+            {modelsBusy === 'chat' ? '…' : '↻'}
+          </button>
+          {chatCustom && (
+            <input className="zx-input" style={{ maxWidth: 200, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} placeholder="手动输入模型名" value={cfg.chatModel} onChange={(e) => set('chatModel', e.target.value)} />
+          )}
+          {modelsErr.chat && <span className="zx-msg err" style={{ fontSize: '0.66rem' }}>{modelsErr.chat}</span>}
+          <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="temperature:0–2,越高越随机,越低越稳定">
+            温度
+            <input className="zx-input" style={{ maxWidth: 80 }} type="number" step="0.1" min="0" max="2" value={cfg.temperature} onChange={(e) => set('temperature', num(e.target.value, 0.7))} />
+          </label>
+          <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="单次回复最大长度(tokens)">
+            最大输出
+            <input className="zx-input" style={{ maxWidth: 100 }} type="number" value={cfg.maxTokens} onChange={(e) => set('maxTokens', num(e.target.value, 1024))} />
+          </label>
         </div>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <input className="zx-input" type="password" style={{ maxWidth: 280, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
@@ -311,14 +388,43 @@ export function AdminChatbotPanel({
             ))}
           </select>
           <input className="zx-input" style={{ maxWidth: 260, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} placeholder="Embed Base URL" value={cfg.embedBaseUrl} onChange={(e) => set('embedBaseUrl', e.target.value)} />
-          <input className="zx-input" style={{ maxWidth: 200, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} placeholder="embed 模型" value={cfg.embedModel} onChange={(e) => set('embedModel', e.target.value)} />
-          <input className="zx-input" style={{ maxWidth: 90 }} type="number" placeholder="维数" value={cfg.embedDim} onChange={(e) => set('embedDim', num(e.target.value, 0))} />
+          <select className="zx-input" style={{ maxWidth: 200, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+            value={embedCustom ? '__custom__' : cfg.embedModel}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v === '__custom__') setEmbedCustom(true)
+              else {
+                setEmbedCustom(false)
+                set('embedModel', v)
+              }
+            }}>
+            <option value="">(选择模型)</option>
+            {embedModels.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+            {cfg.embedModel && !embedModels.includes(cfg.embedModel) && <option value={cfg.embedModel}>{cfg.embedModel}(当前)</option>}
+            <option value="__custom__">自定义…</option>
+          </select>
+          <button type="button" className="zx-btn zx-btn-sm" disabled={modelsBusy === 'embed'} title="按已保存的 baseUrl/key 拉取模型列表"
+            onClick={() => void loadModels('embed', { provider: cfg.embedProvider, baseUrl: cfg.embedBaseUrl })}>
+            {modelsBusy === 'embed' ? '…' : '↻'}
+          </button>
+          {embedCustom && (
+            <input className="zx-input" style={{ maxWidth: 200, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} placeholder="手动输入 embed 模型" value={cfg.embedModel} onChange={(e) => set('embedModel', e.target.value)} />
+          )}
+          {modelsErr.embed && <span className="zx-msg err" style={{ fontSize: '0.66rem' }}>{modelsErr.embed}</span>}
+          <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="向量维度(模型决定,如 bge-m3=1024);未知模型请手填">
+            维数
+            <input className="zx-input" style={{ maxWidth: 80 }} type="number" value={cfg.embedDim} onChange={(e) => set('embedDim', num(e.target.value, 0))} />
+          </label>
           <input className="zx-input" style={{ maxWidth: 260, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} type="password"
             placeholder={cfg.embedApiKey ? `已配置 ${cfg.embedApiKey}(留空不改)` : 'Embed API Key(本地 Ollama 可留空)'} value={embedKey} onChange={(e) => setEmbedKey(e.target.value)} autoComplete="off" />
         </div>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>topK</span>
-          <input className="zx-input" style={{ maxWidth: 80 }} type="number" placeholder="topK" value={cfg.topK} onChange={(e) => set('topK', num(e.target.value, 4))} />
+          <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="每次检索注入的知识块数量(1–10)">
+            topK
+            <input className="zx-input" style={{ maxWidth: 80 }} type="number" min={1} max={10} value={cfg.topK} onChange={(e) => set('topK', num(e.target.value, 4))} />
+          </label>
         </div>
       </div>
 
