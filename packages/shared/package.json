@@ -28,6 +28,7 @@
   "scripts": {
     "ensure-content": "node scripts/ensure-content.mjs",
     "export:content": "node scripts/export-content.mjs",
+    "seed:chatbot": "node scripts/seed-chatbot.mjs",
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json --watch"
   },

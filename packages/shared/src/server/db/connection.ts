@@ -1,7 +1,9 @@
 import Database from 'better-sqlite3'
 import { SCHEMA_SQL } from '../../schema.js'
+import { chatStore } from './chat.js'
 import { commentStore } from './comments.js'
 import { eventStore } from './events.js'
+import { kbStore } from './kb.js'
 import { metaStore } from './meta.js'
 import { statsStore } from './stats.js'
 import { usageStore } from './usage.js'
@@ -43,6 +45,8 @@ export function openDb(path: string): Db {
     ...eventStore(db),
     ...statsStore(db),
     ...metaStore(db),
+    ...chatStore(db),
+    ...kbStore(db),
     close() {
       db.close()
     },

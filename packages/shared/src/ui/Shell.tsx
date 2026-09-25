@@ -4,6 +4,7 @@ import { PreferencesProvider } from './theme-context.js'
 import { Topbar } from './Topbar.js'
 import { Footer } from './Footer.js'
 import { HelpHint } from './HelpHint.js'
+import { ChatWidget } from './ChatWidget.js'
 import type { Contacts, Profile } from '../content.js'
 import type { LayoutId } from '../theme.js'
 import type { LinkComponent, NavItem } from './types.js'
@@ -57,6 +58,7 @@ export function Shell({
         <main className="zx-main">{children}</main>
         <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />
         <HelpHint />
+        <ChatWidget />
       </div>
     </PreferencesProvider>
   )

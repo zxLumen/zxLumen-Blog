@@ -5,7 +5,7 @@ export interface NotifyMsg {
   text: string
 }
 
-export type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats' | 'projects' | 'themes'
+export type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats' | 'projects' | 'themes' | 'chatbot'
 
 export const VALID_TABS: readonly TabKey[] = [
   'comments',
@@ -15,6 +15,7 @@ export const VALID_TABS: readonly TabKey[] = [
   'stats',
   'projects',
   'themes',
+  'chatbot',
 ]
 
 export const validTab = (t: unknown): t is TabKey => VALID_TABS.includes(t as TabKey)

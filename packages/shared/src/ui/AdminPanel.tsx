@@ -7,6 +7,7 @@ import { PROJECTS, type Project } from '../content.js'
 import { Pagination } from './Pagination.js'
 import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
 import { AdminThemePanel } from './admin/AdminThemePanel.js'
+import { AdminChatbotPanel } from './admin/AdminChatbotPanel.js'
 import { VisitorDetailRow } from './admin/VisitorDetailRow.js'
 import {
   validTab,
@@ -573,7 +574,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
         <div className="zx-tabs is-inline">
-          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'themes'] as const).map((t) => (
+          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'themes', 'chatbot'] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -592,7 +593,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
                         ? '项目'
                         : t === 'themes'
                           ? '外观'
-                          : 'Token用量'}
+                          : t === 'chatbot'
+                            ? '机器人'
+                            : 'Token用量'}
             </button>
           ))}
         </div>
@@ -609,6 +612,10 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
 
       {tab === 'themes' && (
         <AdminThemePanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
+      )}
+
+      {tab === 'chatbot' && (
+        <AdminChatbotPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
       )}
 
       {tab === 'profile' && (

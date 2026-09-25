@@ -52,6 +52,53 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_day_type ON events(day, type);
 CREATE INDEX IF NOT EXISTS idx_events_cid ON events(cid);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+
+CREATE TABLE IF NOT EXISTS chat_logs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id  TEXT DEFAULT '',                  -- 一次对话(访客侧 UUID)
+  cid         TEXT DEFAULT '',                  -- 访客匿名 ID(MOCK 时用 mock 身份)
+  day         TEXT DEFAULT '',                  -- 北京时 YYYY-MM-DD(按日统计/限流)
+  role        TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content     TEXT NOT NULL,
+  provider    TEXT DEFAULT '',                  -- 实际使用的 provider id
+  model       TEXT DEFAULT '',
+  in_tokens   INTEGER DEFAULT 0,
+  out_tokens  INTEGER DEFAULT 0,
+  latency_ms  INTEGER DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_logs_ts ON chat_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_logs_session ON chat_logs(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_logs_cid ON chat_logs(cid);
+
+CREATE TABLE IF NOT EXISTS kb_docs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  source      TEXT NOT NULL,                    -- 文件路径 / 来源名
+  kind        TEXT NOT NULL DEFAULT 'knowledge' CHECK (kind IN ('persona','knowledge')),
+  title       TEXT DEFAULT '',
+  size        INTEGER DEFAULT 0,
+  sha         TEXT DEFAULT '',                  -- 内容哈希(增量蒸馏判定依据)
+  status      TEXT NOT NULL DEFAULT 'pending',  -- pending | processed | error
+  error       TEXT DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS kb_chunks (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_id      INTEGER NOT NULL,
+  idx         INTEGER NOT NULL DEFAULT 0,        -- 块序号
+  content     TEXT NOT NULL,
+  vector      BLOB,                              -- 稠密向量(float32 LE,可为空=仅关键词)
+  source      TEXT DEFAULT '',
+  token_len   INTEGER DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_chunks_doc ON kb_chunks(doc_id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS kb_chunks_fts USING fts5(content, source);
 `
 
 export interface CommentRow {
@@ -119,6 +166,8 @@ export interface UsageRow {
   source?: string
   /** 以下为平台聚合数据(真实用量)可选字段 */
   apiKey?: string
+  /** OpenCode:service account 名(可当 key 维度筛选) */
+  serviceAccount?: string
   requests?: number
   cost?: number
 }
@@ -218,6 +267,64 @@ export interface StatsResult {
  * 存 DB 时按数组顺序即展示顺序;`deleted=true` 表示已移入垃圾箱(首页不显示)。
  * 含 deleted 字段是为了支持「软删除 + 可恢复/彻底删除」。
  */
+/** 一条问答记录(访客问 / 机器人答) */
+export interface ChatLogRow {
+  id: number
+  session_id: string
+  cid: string
+  role: 'user' | 'assistant'
+  content: string
+  provider: string
+  model: string
+  in_tokens: number
+  out_tokens: number
+  latency_ms: number
+  created_at: string
+}
+
+export interface NewChatLogInput {
+  session_id?: string
+  cid?: string
+  role: 'user' | 'assistant'
+  content: string
+  provider?: string
+  model?: string
+  in_tokens?: number
+  out_tokens?: number
+  latency_ms?: number
+}
+
+export interface ChatDayCount {
+  day: string
+  count: number
+}
+
+/** 知识库文档(一份源文件的元信息 + 分类 + 处理状态) */
+export interface KbDocRow {
+  id: number
+  source: string
+  /** 蒸馏自动分类:a=人格素材(personal 口吻),b=事实知识(可检索) */
+  kind: 'persona' | 'knowledge'
+  title: string
+  size: number
+  sha: string
+  status: 'pending' | 'processed' | 'error'
+  error: string
+  created_at: string
+  updated_at: string
+}
+
+/** 知识块(从文档切出的一段文本 + 可选稠密向量) */
+export interface KbChunkRow {
+  id: number
+  doc_id: number
+  idx: number
+  content: string
+  vector: Uint8Array | null
+  source: string
+  token_len: number
+}
+
 export interface StoredProject {
   id: string
   name: string

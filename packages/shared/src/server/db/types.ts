@@ -1,6 +1,11 @@
 import type Database from 'better-sqlite3'
 import type {
+  ChatDayCount,
+  ChatLogRow,
   CommentRow,
+  KbChunkRow,
+  KbDocRow,
+  NewChatLogInput,
   NewEventInput,
   PagedArchived,
   PagedComments,
@@ -69,6 +74,47 @@ export interface Db {
   getMeta(key: string): string | null
   setMeta(key: string, value: string): void
   delMeta(key: string): void
+
+  // 问答机器人
+  addChatLog(input: NewChatLogInput): ChatLogRow
+  listChatLogs(opts?: { limit?: number; session_id?: string }): ChatLogRow[]
+  /** 某 cid 在指定北京日(YYYY-MM-DD)的提问条数(每日上限用) */
+  countChatByCidDay(cid: string, day: string): number
+  chatDayCounts(days?: number): ChatDayCount[]
+  deleteAllChatLogs(): void
+
+  // 知识库
+  upsertKbDoc(input: {
+    source: string
+    kind: KbDocRow['kind']
+    title?: string
+    size?: number
+    sha?: string
+    status?: KbDocRow['status']
+    error?: string
+  }): number
+  listKbDocs(): KbDocRow[]
+  getKbDoc(source: string): KbDocRow | null
+  clearKbChunks(docId: number): void
+  /** 删除某篇 doc(连同其 chunks 与 FTS 行);用于 corpus 文件被移除/改名后的对账 */
+  deleteKbDoc(id: number): void
+  addKbChunk(input: {
+    doc_id: number
+    idx: number
+    content: string
+    source: string
+    vector?: Uint8Array | null
+    token_len?: number
+  }): void
+  /** 取全部带向量的知识块(供余弦检索;语料量级小,内存计算即可) */
+  listKbChunksWithVector(): KbChunkRow[]
+  /** FTS5 关键词检索(未配置向量时退化方案) */
+  ftsSearch(query: string, limit?: number): Array<{ id: number; content: string; source: string }>
+  /** 知识库是否有块(有没有可检索内容) */
+  hasKbChunks(): boolean
+  countKbChunks(): number
+  clearKb(): void
+
   close(): void
 }
 
@@ -92,3 +138,15 @@ export type UsageStore = Pick<Db, 'listUsage' | 'allUsage' | 'addUsage'>
 export type EventStore = Pick<Db, 'addEvent'>
 export type StatsStore = Pick<Db, 'stats'>
 export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta'>
+export type ChatStore = Pick<Db, 'addChatLog' | 'listChatLogs' | 'countChatByCidDay' | 'chatDayCounts' | 'deleteAllChatLogs'>
+export type KbStore = Pick<
+  Db,
+  | 'upsertKbDoc'
+  | 'listKbDocs'
+  | 'getKbDoc'
+  | 'clearKbChunks'
+  | 'addKbChunk'
+  | 'deleteKbDoc'
+  | 'listKbChunksWithVector'
+  | 'ftsSearch'
+  | 'clearKb' | 'hasKbChunks' | 'countKbChunks'>
