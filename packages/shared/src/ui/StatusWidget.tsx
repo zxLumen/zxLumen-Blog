@@ -14,6 +14,7 @@ interface ServerStatus {
   siteUp?: boolean
   trend?: { day: string; cpu: number }[]
   at?: number
+  error?: string
 }
 
 const POS_KEY = 'zx-status-pos'
@@ -36,9 +37,12 @@ function Cell({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** 右上角悬浮「服务器状态」:可拖动 + 边缘吸附;悬停展开指标 + 近 7 天 CPU 趋势 */
+/** 右上角悬浮「服务器状态」:可拖动 + 边缘吸附;悬停展开指标 + 近 7 天 CPU 趋势。
+ *  数据源失败时显示降级气泡(不隐藏),便于发现 nas/token 问题。 */
 export function StatusWidget() {
   const [data, setData] = useState<ServerStatus | null>(null)
+  const [state, setState] = useState<'idle' | 'ok' | 'err'>('idle')
+  const [errText, setErrText] = useState('')
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const barTip = useBarTooltip()
@@ -64,10 +68,21 @@ export function StatusWidget() {
       fetch('/api/status', { cache: 'no-store' })
         .then((r) => (r.ok ? r.json() : null))
         .then((d: ServerStatus | null) => {
-          if (alive && d) setData(d)
+          if (!alive) return
+          if (d?.ok) {
+            setData(d)
+            setErrText('')
+            setState('ok')
+          } else {
+            setErrText(d?.error || 'status query failed')
+            setState('err')
+          }
         })
         .catch(() => {
-          /* ignore */
+          if (alive) {
+            setErrText('无法连接 /api/status')
+            setState('err')
+          }
         })
     }
     load()
@@ -139,11 +154,12 @@ export function StatusWidget() {
     }
   }, [])
 
-  if (!data?.ok) return null
+  if (state === 'idle') return null
 
-  const trend = data.trend ?? []
+  const ok = state === 'ok' && !!data?.ok
+  const trend = ok ? (data.trend ?? []) : []
   const maxCpu = Math.max(1, ...trend.map((t) => t.cpu))
-  const up = data.siteUp !== false
+  const up = ok ? data.siteUp !== false : false
   const style = pos ? { left: pos.x, top: pos.y, right: 'auto' as const } : undefined
 
   return (
@@ -170,42 +186,58 @@ export function StatusWidget() {
         }}
       >
         <span className="zx-statuswidget-dot" style={{ background: up ? '#37b24d' : '#ff6b6b' }} />
-        <span>CPU {fmtPct(data.cpu)}</span>
-        <span className="zx-statswidget-sep">·</span>
-        <span className="zx-muted">内存 {fmtPct(data.mem)}</span>
+        <span>{ok ? `CPU ${fmtPct(data?.cpu)}` : '状态异常'}</span>
+        {ok && (
+          <>
+            <span className="zx-statswidget-sep">·</span>
+            <span className="zx-muted">内存 {fmtPct(data?.mem)}</span>
+          </>
+        )}
       </button>
       {open && (
         <div className="zx-statuswidget-pop" onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
           <div className="zx-statuswidget-head">
-            <span className="zx-mono zx-muted">{'// SERVER STATUS'}</span>
+            <span className="zx-mono zx-muted">{ok ? '// SERVER STATUS' : '// STATUS ERROR'}</span>
             <span className="zx-mono" style={{ color: up ? '#37b24d' : '#ff6b6b' }}>
-              {up ? '在线' : '异常'}
+              {ok ? '在线' : '异常'}
             </span>
           </div>
-          <div className="zx-statuswidget-grid">
-            <Cell label="CPU" value={fmtPct(data.cpu)} />
-            <Cell label="内存" value={fmtPct(data.mem)} />
-            <Cell label="磁盘 /" value={fmtPct(data.disk)} />
-            <Cell label="负载(1m)" value={data.load == null ? '—' : data.load.toFixed(2)} />
-            <Cell label="运行时长" value={fmtUptime(data.uptimeSec)} />
-            <Cell label="站点" value={up ? '正常' : '异常'} />
-          </div>
-          <div
-            className="zx-statuswidget-trend"
-            onMouseMove={barTip.onMouseMove}
-            onMouseLeave={barTip.onMouseLeave}
-          >
-            {trend.map((d) => (
+          {ok ? (
+            <>
+              <div className="zx-statuswidget-grid">
+                <Cell label="CPU" value={fmtPct(data?.cpu)} />
+                <Cell label="内存" value={fmtPct(data?.mem)} />
+                <Cell label="磁盘 /" value={fmtPct(data?.disk)} />
+                <Cell label="负载(1m)" value={data?.load == null ? '—' : data.load.toFixed(2)} />
+                <Cell label="运行时长" value={fmtUptime(data?.uptimeSec)} />
+                <Cell label="站点" value={up ? '正常' : '异常'} />
+              </div>
               <div
-                key={d.day}
-                className={`zx-bar${d.cpu === 0 ? ' is-zero' : ''}`}
-                data-label={`${d.day.slice(5)} · CPU ${d.cpu}%`}
-                style={{ height: `${Math.max(3, (d.cpu / maxCpu) * 100)}%` }}
-              />
-            ))}
-          </div>
-          {barTip.node}
-          <div className="zx-statuswidget-foot zx-muted zx-mono">近 7 天 · CPU 日均</div>
+                className="zx-statuswidget-trend"
+                onMouseMove={barTip.onMouseMove}
+                onMouseLeave={barTip.onMouseLeave}
+              >
+                {trend.map((d) => (
+                  <div
+                    key={d.day}
+                    className={`zx-bar${d.cpu === 0 ? ' is-zero' : ''}`}
+                    data-label={`${d.day.slice(5)} · CPU ${d.cpu}%`}
+                    style={{ height: `${Math.max(3, (d.cpu / maxCpu) * 100)}%` }}
+                  />
+                ))}
+              </div>
+              {barTip.node}
+              <div className="zx-statuswidget-foot zx-muted zx-mono">近 7 天 · CPU 日均</div>
+            </>
+          ) : (
+            <div className="zx-statuswidget-err">
+              <div className="zx-mono" style={{ color: '#ff6b6b' }}>
+                DATA SOURCE UNREACHABLE
+              </div>
+              <div className="zx-muted zx-mono">{errText || '数据源不可用,状态未知'}</div>
+              <div className="zx-statuswidget-foot zx-muted">将持续重试,每 60s 刷新</div>
+            </div>
+          )}
         </div>
       )}
     </div>

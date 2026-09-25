@@ -90,9 +90,13 @@ export function UsageSection({
   // OpenCode workspace 列表(来自接口)+ 选择(单选,空=全部/总用量)
   const [wsList, setWsList] = useState<{ id: string; name: string }[]>([])
   const [pickedWs, setPickedWs] = useState<Record<DataSource, string[]>>(initialSel?.pickedWs ?? DEFAULT_SEL.pickedWs)
+  // OpenCode service account 筛选(多选,空=全部)
+  const [pickedSa, setPickedSa] = useState<Record<DataSource, string[]>>(initialSel?.pickedSa ?? DEFAULT_SEL.pickedSa)
   const [goQuotas, setGoQuotas] = useState<{ name: string; quota: GoQuota | null }[]>([])
   const curPicked = picked[dataSrc] ?? []
-  const curPickedKeys = pickedKeys[dataSrc] ?? []
+  // opencode 不做「提供方」筛选:忽略(并清空)其选择,避免旧 cookie 残留仍偷偷过滤
+  const curPickedKeys = dataSrc === 'opencode' ? [] : (pickedKeys[dataSrc] ?? [])
+  const curPickedSa = pickedSa[dataSrc] ?? []
   const curPickedWs = (pickedWs[dataSrc] ?? []).slice(0, 1)
   // 稳定的 workspace 选择 key(字符串):用于 fetch 依赖,选择变化才重新拉取
   const wsKey = (pickedWs.opencode ?? []).slice(0, 1).join(',')
@@ -106,8 +110,8 @@ export function UsageSection({
 
   // 任一筛选变化即写入存档 cookie(服务端随后用它渲染首帧,客户端再写入保持同步)
   useEffect(() => {
-    writeUsageSelCookie({ dataSrc, per, picked, pickedKeys, pickedWs })
-  }, [dataSrc, per, picked, pickedKeys, pickedWs])
+    writeUsageSelCookie({ dataSrc, per, picked, pickedKeys: { ...pickedKeys, opencode: [] }, pickedWs, pickedSa })
+  }, [dataSrc, per, picked, pickedKeys, pickedWs, pickedSa])
 
   useEffect(() => {
     if (rows?.length) {
@@ -219,12 +223,21 @@ export function UsageSection({
   )
   const hasKey = useMemo(() => allData.some((r) => !!r.apiKey), [allData])
 
+  // OpenCode service account 清单(来自当前数据)
+  const saList = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of allData) if (r.serviceAccount) s.add(r.serviceAccount)
+    return Array.from(s).sort((a, b) => a.localeCompare(b))
+  }, [allData])
+
   const active = useMemo(() => {
     let arr = allData
     if (curPicked.length > 0) arr = arr.filter((r) => curPicked.includes(r.model))
     if (curPickedKeys.length > 0) arr = arr.filter((r) => (r.apiKey ?? '') && curPickedKeys.includes(r.apiKey ?? ''))
+    if (curPickedSa.length > 0)
+      arr = arr.filter((r) => (r.serviceAccount ?? '') && curPickedSa.includes(r.serviceAccount ?? ''))
     return arr
-  }, [allData, curPicked, curPickedKeys])
+  }, [allData, curPicked, curPickedKeys, curPickedSa])
 
   // 分时显示:今天/昨天在所有数据源都画 24 根小时柱(北京时);其余区间按天
   const fmtCost = currency === 'USD' ? fmtUsd : fmtCny
@@ -314,6 +327,17 @@ export function UsageSection({
 
   function clearPickedKeys() {
     setPickedKeys((prev) => ({ ...prev, [dataSrc]: [] }))
+  }
+
+  function toggleSa(sa: string) {
+    setPickedSa((prev) => {
+      const list = prev[dataSrc] ?? []
+      return { ...prev, [dataSrc]: list.includes(sa) ? list.filter((x) => x !== sa) : [...list, sa] }
+    })
+  }
+
+  function clearPickedSa() {
+    setPickedSa((prev) => ({ ...prev, [dataSrc]: [] }))
   }
 
   // workspace 单选:点已选中的即取消(回到「全部」)
@@ -493,14 +517,36 @@ export function UsageSection({
         ))}
       </div>
 
-      {keys.length > 0 && (
-        <div className="zx-seg" role="group" aria-label={dataSrc === 'opencode' ? '提供方筛选' : 'API Key 筛选'}>
+      {dataSrc === 'opencode' && saList.length > 0 && (
+        <div className="zx-seg" role="group" aria-label="服务账号筛选">
+          <button
+            type="button"
+            className={`zx-chip${curPickedSa.length === 0 ? ' is-active' : ''}`}
+            onClick={clearPickedSa}
+          >
+            全部服务账号
+          </button>
+          {saList.map((sa) => (
+            <button
+              key={sa}
+              type="button"
+              className={`zx-chip${curPickedSa.includes(sa) ? ' is-active' : ''}`}
+              onClick={() => toggleSa(sa)}
+            >
+              {sa}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {keys.length > 0 && dataSrc !== 'opencode' && (
+        <div className="zx-seg" role="group" aria-label="API Key 筛选">
           <button
             type="button"
             className={`zx-chip${curPickedKeys.length === 0 ? ' is-active' : ''}`}
             onClick={clearPickedKeys}
           >
-            {dataSrc === 'opencode' ? '全部提供方' : '全部 API Key'}
+            全部 API Key
           </button>
           {keys.map((k) => (
             <button

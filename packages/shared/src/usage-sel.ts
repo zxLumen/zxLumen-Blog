@@ -25,6 +25,8 @@ export type UsageSel = {
   pickedKeys: Record<DataSource, string[]>
   /** OpenCode workspace 筛选(仅 opencode 用):单选,空=全部(总用量) */
   pickedWs: Record<DataSource, string[]>
+  /** OpenCode service account 筛选(仅 opencode 用):多选,空=全部 */
+  pickedSa: Record<DataSource, string[]>
 }
 
 export const defaultRangeSel = (): RangeSel => ({
@@ -46,6 +48,7 @@ export const DEFAULT_SEL: UsageSel = {
   picked: emptyStringArrays(),
   pickedKeys: emptyStringArrays(),
   pickedWs: emptyStringArrays(),
+  pickedSa: emptyStringArrays(),
 }
 
 const RANGES_SET: readonly Range[] = ['today', 'yesterday', '7d', '30d', 'month', 'lastmonth', 'custom']
@@ -108,6 +111,7 @@ const asSel = (v: Partial<UsageSel> | null | undefined): UsageSel => {
     picked: asBySrc(v?.picked, dataSrc),
     pickedKeys: asBySrc(v?.pickedKeys, dataSrc),
     pickedWs: asBySrc(v?.pickedWs, dataSrc),
+    pickedSa: asBySrc(v?.pickedSa, dataSrc),
   }
 }
 
