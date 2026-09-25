@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AdminPanel } from "@zx/shared/ui";
 import "@mantine/core/styles.layer.css";
-import { getRuntimeContent } from "@zx/shared/server";
+import { getAllProjectsForStats } from "@/lib/projects-config";
 
 export const metadata: Metadata = {
   title: "admin · liuzixiang",
@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const { PROJECTS } = await getRuntimeContent();
-  return <AdminPanel projects={PROJECTS} />;
+  // 含已删除(垃圾箱)项目:埋点 target 为项目 id,解析名称时即便项目已删除也应显示名称
+  const projects = await getAllProjectsForStats();
+  return <AdminPanel projects={projects} />;
 }

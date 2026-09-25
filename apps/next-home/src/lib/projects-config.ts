@@ -119,21 +119,32 @@ export async function resetStoredProjects(): Promise<StoredProject[]> {
   return fromStatic()
 }
 
+/** StoredProject → Project(用于展示/名称解析) */
+function toProject(p: StoredProject): Project {
+  return {
+    id: p.id,
+    name: p.name,
+    desc: p.desc,
+    tech: p.tech,
+    status: p.status,
+    kind: p.kind,
+    period: p.period || undefined,
+    demoUrl: p.demoUrl || undefined,
+    repoUrl: p.repoUrl || undefined,
+    highlights: p.highlights?.length ? p.highlights : undefined,
+    featured: p.featured || undefined,
+  }
+}
+
 /** 仅取首页要展示的项目(排除垃圾箱),并转回 Project 形状 */
 export async function getVisibleProjects(): Promise<Project[]> {
-  return (await getStoredProjects())
-    .filter((p) => !p.deleted)
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      desc: p.desc,
-      tech: p.tech,
-      status: p.status,
-      kind: p.kind,
-      period: p.period || undefined,
-      demoUrl: p.demoUrl || undefined,
-      repoUrl: p.repoUrl || undefined,
-      highlights: p.highlights?.length ? p.highlights : undefined,
-      featured: p.featured || undefined,
-    }))
+  return (await getStoredProjects()).filter((p) => !p.deleted).map(toProject)
+}
+
+/**
+ * 全部项目(含垃圾箱/已删除),转回 Project 形状。
+ * 供 admin 统计解析埋点 target(项目 id → 名称):即便项目已删除也能显示其名称,避免回退成原始 id。
+ */
+export async function getAllProjectsForStats(): Promise<Project[]> {
+  return (await getStoredProjects()).map(toProject)
 }
