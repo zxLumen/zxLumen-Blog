@@ -22,6 +22,7 @@ import {
 } from './usage/constants.js'
 import { GoQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
 import { RecentTable, UsageCharts } from './usage/UsageCharts.js'
+import { Pagination } from './Pagination.js'
 
 export function UsageSection({
   rows,
@@ -36,6 +37,9 @@ export function UsageSection({
   availableSources?: Partial<Record<DataSource, boolean>>
 }) {
   const [dataSrc, setDataSrc] = useState<DataSource>(initialSel?.dataSrc ?? DEFAULT_SEL.dataSrc)
+  // RECENT 明细表翻页
+  const [recentPage, setRecentPage] = useState(1)
+  const [recentPageSize, setRecentPageSize] = useState(10)
   // 各源可用性(已配置 + 近30天有数据);null=未知(按 feature 放行)
   const [avail, setAvail] = useState<Record<DataSource, boolean> | null>(
     availableSources ? (availableSources as Record<DataSource, boolean>) : null,
@@ -221,7 +225,10 @@ export function UsageSection({
     () => Array.from(new Set([...(knownKeys[dataSrc] ?? []), ...dataKeys])),
     [knownKeys, dataKeys, dataSrc],
   )
-  const hasKey = useMemo(() => allData.some((r) => !!r.apiKey), [allData])
+  const hasKey = useMemo(
+    () => (dataSrc === 'opencode' ? allData.some((r) => !!r.serviceAccount) : allData.some((r) => !!r.apiKey)),
+    [allData, dataSrc],
+  )
 
   // OpenCode service account 清单(来自当前数据)
   const saList = useMemo(() => {
@@ -243,7 +250,9 @@ export function UsageSection({
   const fmtCost = currency === 'USD' ? fmtUsd : fmtCny
   const rowLabel = (r: UsageRow) =>
     hourMode ? `${fmtDate(r.ts)} ${r.ts.slice(11, 13)}:00` : fmtDate(r.ts)
-  const keyLabel = dataSrc === 'opencode' ? 'provider' : 'key'
+  const keyLabel = dataSrc === 'opencode' ? 'service account' : 'key'
+  // RECENT 明细的 key 列取值:opencode 显示服务账号(多工作区已带 `工作区 · ` 前缀),其余显示 apiKey
+  const keyOf = (r: UsageRow) => (dataSrc === 'opencode' ? r.serviceAccount ?? '' : r.apiKey ?? '')
 
   const totals = tokensOf(active)
   const totalCost = active.reduce((a, r) => a + rowCost(r), 0)
@@ -305,7 +314,26 @@ export function UsageSection({
   const byModel = modelAggregate(active)
   const maxDaily = Math.max(1, ...daySeries.map((d) => d[1] + d[2]))
 
-  const recent = [...active].sort((a, b) => (a.ts < b.ts ? 1 : -1)).slice(0, 8)
+  const sortedRecent = useMemo(() => [...active].sort((a, b) => (a.ts < b.ts ? 1 : -1)), [active])
+  const recentTotal = sortedRecent.length
+  const recentTotalPages = Math.max(1, Math.ceil(recentTotal / recentPageSize))
+  const recentPageClamped = Math.min(recentPage, recentTotalPages)
+  const recent = sortedRecent.slice((recentPageClamped - 1) * recentPageSize, recentPageClamped * recentPageSize)
+
+  // 切换数据源/区间/筛选时 RECENT 回到第 1 页(用字符串 key 保证依赖稳定)
+  const recentResetKey = [
+    dataSrc,
+    range,
+    customApplied?.start ?? '',
+    customApplied?.end ?? '',
+    curPicked.join(','),
+    curPickedKeys.join(','),
+    curPickedSa.join(','),
+    curPickedWs.join(','),
+  ].join('|')
+  useEffect(() => {
+    setRecentPage(1)
+  }, [recentResetKey])
 
   function toggle(model: string) {
     setPicked((prev) => {
@@ -607,9 +635,21 @@ export function UsageSection({
         recent={recent}
         hasKey={hasKey}
         keyLabel={keyLabel}
+        keyOf={keyOf}
         showReq={showReq}
         rowLabel={rowLabel}
         fmtCost={fmtCost}
+      />
+      <Pagination
+        page={recentPageClamped}
+        totalPages={recentTotalPages}
+        total={recentTotal}
+        pageSize={recentPageSize}
+        onPage={(p) => setRecentPage(p)}
+        onPageSize={(s) => {
+          setRecentPageSize(s)
+          setRecentPage(1)
+        }}
       />
 
       <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', marginTop: '0.8rem' }}>

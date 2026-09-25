@@ -108,6 +108,7 @@ export function RecentTable({
   recent,
   hasKey,
   keyLabel,
+  keyOf,
   showReq,
   rowLabel,
   fmtCost,
@@ -118,6 +119,8 @@ export function RecentTable({
   recent: UsageRow[]
   hasKey: boolean
   keyLabel: string
+  /** 该列取值(缺省取 apiKey);如 opencode 取服务账号 */
+  keyOf?: (r: UsageRow) => string
   showReq: boolean
   rowLabel: (r: UsageRow) => string
   fmtCost: (n: number) => string
@@ -149,7 +152,7 @@ export function RecentTable({
             <tr key={i}>
               <td className="zx-mono">{rowLabel(r)}</td>
               <td>{modelLabel(r.model)}</td>
-              {hasKey && <td className="zx-mono">{r.apiKey || '—'}</td>}
+              {hasKey && <td className="zx-mono">{(keyOf ? keyOf(r) : r.apiKey || '') || '—'}</td>}
               <td className="num">{fmtInt(r.inputTokens)}</td>
               <td className="num">{fmtInt(r.outputTokens)}</td>
               <td className="num">{fmtInt(r.cacheHitTokens)}</td>
