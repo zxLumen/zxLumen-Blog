@@ -1,6 +1,19 @@
 'use client'
 
-import { Badge, Button, Checkbox, Group, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core'
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  Checkbox,
+  Group,
+  Paper,
+  Select,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+  Title,
+} from '@mantine/core'
 import { useCallback, useEffect, useState } from 'react'
 import type { StoredProject } from '../../schema.js'
 import { MantineBridge } from './mantine-bridge.js'
@@ -42,6 +55,76 @@ type Kind = NonNullable<StoredProject['kind']>
 
 function newId(): string {
   return `proj-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`
+}
+
+const MAX_HIGHLIGHTS = 6
+
+/** 亮点(highlights)编辑:多行「标签 + 数值」对,可增删(最多 MAX_HIGHLIGHTS 条) */
+function HighlightsEditor({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: { label: string; value: string }[]
+  onChange: (h: { label: string; value: string }[]) => void
+  disabled?: boolean
+}) {
+  const rows = value.length ? value : [{ label: '', value: '' }]
+  const setRow = (i: number, patch: Partial<{ label: string; value: string }>) =>
+    onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const addRow = () => {
+    if (rows.length >= MAX_HIGHLIGHTS) return
+    onChange([...rows, { label: '', value: '' }])
+  }
+  const delRow = (i: number) => onChange(rows.filter((_, j) => j !== i))
+  return (
+    <div>
+      <Text component="label" fz="xs" c="dimmed" style={{ display: 'block', marginBottom: 6 }}>
+        亮点(显示在简介下方;标签 + 数值,留空则不显示)
+      </Text>
+      <Stack gap={6}>
+        {rows.map((r, i) => (
+          <Group gap="xs" wrap="nowrap" align="center" key={i}>
+            <TextInput
+              size="xs"
+              placeholder="数值,如 20+"
+              value={r.value}
+              disabled={disabled}
+              onChange={(e) => setRow(i, { value: e.target.value })}
+              style={{ flex: 1 }}
+            />
+            <TextInput
+              size="xs"
+              placeholder="标签,如 大模型 APP"
+              value={r.label}
+              disabled={disabled}
+              onChange={(e) => setRow(i, { label: e.target.value })}
+              style={{ flex: 1 }}
+            />
+            <ActionIcon
+              size="input-xs"
+              variant="subtle"
+              color="red"
+              disabled={disabled}
+              onClick={() => delRow(i)}
+              aria-label="删除该亮点"
+            >
+              ×
+            </ActionIcon>
+          </Group>
+        ))}
+      </Stack>
+      <Button
+        size="compact-xs"
+        variant="subtle"
+        mt={6}
+        disabled={disabled || rows.length >= MAX_HIGHLIGHTS}
+        onClick={addRow}
+      >
+        + 添加亮点
+      </Button>
+    </div>
+  )
 }
 
 function statusBadge(value: string) {
@@ -124,7 +207,19 @@ export function AdminProjectsPanel({
   const add = () =>
     mutate((list) => [
       ...list,
-      { id: newId(), name: '新项目', desc: '', tech: [], status: 'online', kind: 'personal', period: '', demoUrl: '', repoUrl: '', featured: false },
+      {
+        id: newId(),
+        name: '新项目',
+        desc: '',
+        tech: [],
+        status: 'online',
+        kind: 'personal',
+        period: '',
+        demoUrl: '',
+        repoUrl: '',
+        highlights: [],
+        featured: false,
+      },
     ])
 
   const trash = (id: string) => mutate((list) => list.map((it) => (it.id === id ? { ...it, deleted: true } : it)))
@@ -206,11 +301,19 @@ export function AdminProjectsPanel({
           value={p.name}
           onChange={(e) => patch(p.id, { name: e.target.value })}
         />
-        <TextInput
+        <Textarea
           label="简介"
           size="xs"
+          autosize
+          minRows={2}
+          maxRows={8}
           value={p.desc}
           onChange={(e) => patch(p.id, { desc: e.target.value })}
+        />
+        <HighlightsEditor
+          value={p.highlights ?? []}
+          disabled={actionsDisabled}
+          onChange={(highlights) => patch(p.id, { highlights })}
         />
 
         <Group grow wrap="wrap" align="end" gap="sm">

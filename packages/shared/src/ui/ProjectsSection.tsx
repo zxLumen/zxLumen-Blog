@@ -22,11 +22,11 @@ function ProjectCard({
   clicks?: number
   pv?: number
 }) {
-  // 只有"本页 · 个人主页"(demoUrl 指向本站根路径)才把站内 PV 累计进点击数
+  // 本站项目(「本页 · 个人主页」):只显示全站访问量(PV),不计链接点击
   const self = project.demoUrl === '/'
   const demoUrl = normalizeUrl(project.demoUrl)
   const repoUrl = normalizeUrl(project.repoUrl)
-  const total = (clicks ?? 0) + (self ? pv ?? 0 : 0)
+  const total = self ? pv ?? 0 : clicks ?? 0
   return (
     <article
       className={`zx-card${project.featured ? ' is-featured' : ''}${project.status === 'archived' ? ' is-archived' : ''}`}
@@ -37,7 +37,7 @@ function ProjectCard({
         {total > 0 && (
           <span
             className="zx-project-clicks"
-            title={self ? '站内访问量 + 链接点击次数' : '链接点击次数'}
+            title={self ? '全站访问量' : '链接点击次数'}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M4 4l7 16 2.5-6.5L20 11 4 4z" />
@@ -58,52 +58,54 @@ function ProjectCard({
       </div>
       <p style={{ marginTop: '0.7rem' }}>{project.desc}</p>
 
-      {project.highlights && project.highlights.length > 0 && (
-        <div style={{ display: 'flex', gap: '1.4rem', margin: '0.2rem 0 0.6rem' }}>
-          {project.highlights.map((h) => (
-            <div key={h.label}>
-              <div className="zx-mono zx-accent" style={{ fontSize: '1.05rem', fontWeight: 700 }}>
-                {h.value}
+      <div className="zx-card-bottom">
+        {project.highlights && project.highlights.length > 0 && (
+          <div style={{ display: 'flex', gap: '1.4rem', margin: '0 0 0.6rem' }}>
+            {project.highlights.map((h) => (
+              <div key={h.label}>
+                <div className="zx-mono zx-accent" style={{ fontSize: '1.05rem', fontWeight: 700 }}>
+                  {h.value}
+                </div>
+                <div className="zx-muted zx-mono" style={{ fontSize: '0.66rem', textTransform: 'uppercase' }}>
+                  {h.label}
+                </div>
               </div>
-              <div className="zx-muted zx-mono" style={{ fontSize: '0.66rem', textTransform: 'uppercase' }}>
-                {h.label}
-              </div>
-            </div>
+            ))}
+          </div>
+        )}
+
+        <div className="zx-tags">
+          {project.tech.map((t) => (
+            <span className="zx-badge" key={t}>
+              {t}
+            </span>
           ))}
         </div>
-      )}
 
-      <div className="zx-tags" style={{ marginTop: '0.4rem' }}>
-        {project.tech.map((t) => (
-          <span className="zx-badge" key={t}>
-            {t}
-          </span>
-        ))}
-      </div>
-
-      <div className="zx-card-actions">
-        {demoUrl && (
-          <a
-            className="zx-btn zx-btn-sm"
-            href={demoUrl}
-            target={isExternalUrl(demoUrl) ? '_blank' : undefined}
-            rel="noreferrer"
-            onClick={() => trackEvent('project_click', project.id)}
-          >
-            试用 →
-          </a>
-        )}
-        {repoUrl && (
-          <a
-            className="zx-btn zx-btn-sm zx-btn-ghost"
-            href={repoUrl}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => trackEvent('project_click', project.id)}
-          >
-            repo
-          </a>
-        )}
+        <div className="zx-card-actions">
+          {demoUrl && (
+            <a
+              className="zx-btn zx-btn-sm"
+              href={demoUrl}
+              target={isExternalUrl(demoUrl) ? '_blank' : undefined}
+              rel="noreferrer"
+              onClick={() => trackEvent('project_click', project.id)}
+            >
+              试用 →
+            </a>
+          )}
+          {repoUrl && (
+            <a
+              className="zx-btn zx-btn-sm zx-btn-ghost"
+              href={repoUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => trackEvent('project_click', project.id)}
+            >
+              repo
+            </a>
+          )}
+        </div>
       </div>
     </article>
   )

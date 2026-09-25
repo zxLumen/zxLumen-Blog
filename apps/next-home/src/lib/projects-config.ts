@@ -26,6 +26,7 @@ async function fromStatic(): Promise<StoredProject[]> {
     period: p.period,
     demoUrl: p.demoUrl,
     repoUrl: p.repoUrl,
+    highlights: p.highlights,
     featured: p.featured,
   }))
 }
@@ -48,6 +49,16 @@ function normalizeOne(raw: unknown): StoredProject | null {
   const kind = KINDS.includes(r.kind as NonNullable<Project['kind']>)
     ? (r.kind as NonNullable<Project['kind']>)
     : inferKind(demoUrl)
+  const highlights = Array.isArray(r.highlights)
+    ? (r.highlights as unknown[])
+        .map((h) => {
+          const o = (h ?? {}) as Record<string, unknown>
+          const label = typeof o.label === 'string' ? o.label.trim() : ''
+          const value = typeof o.value === 'string' ? o.value.trim() : ''
+          return label && value ? { label, value } : null
+        })
+        .filter((h): h is { label: string; value: string } => h !== null)
+    : []
   return {
     id,
     name: typeof r.name === 'string' && r.name ? r.name : id,
@@ -58,6 +69,7 @@ function normalizeOne(raw: unknown): StoredProject | null {
     period: typeof r.period === 'string' ? r.period : '',
     demoUrl,
     repoUrl: normalizeUrl(typeof r.repoUrl === 'string' ? r.repoUrl : ''),
+    highlights: highlights.length ? highlights : undefined,
     featured: r.featured === true,
     deleted: r.deleted === true,
   }
@@ -66,17 +78,29 @@ function normalizeOne(raw: unknown): StoredProject | null {
 /**
  * 读取完整项目列表(含垃圾箱)。
  * 未配置时以静态 PROJECTS 为初始列表(不落库,保存后才生效)。
+ * highlights 兜底:DB 项目自身未配时,按 id 取静态同项(恢复历史亮点;admin 与首页一致)。
  */
 export async function getStoredProjects(): Promise<StoredProject[]> {
+  let list: StoredProject[]
   try {
     const raw = getDb().getMeta(META_KEY)
-    if (!raw) return fromStatic()
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return fromStatic()
-    const list = parsed.map(normalizeOne).filter((p): p is StoredProject => p !== null)
-    return list.length > 0 ? list : fromStatic()
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null
+    const mapped = Array.isArray(parsed)
+      ? parsed.map(normalizeOne).filter((p): p is StoredProject => p !== null)
+      : []
+    list = mapped.length > 0 ? mapped : await fromStatic()
   } catch {
     return fromStatic()
+  }
+  // 静态 highlights 兜底
+  try {
+    const { PROJECTS } = await getRuntimeContent()
+    const staticHl = new Map(PROJECTS.map((p) => [p.id, p.highlights]))
+    return list.map((p) =>
+      p.highlights?.length ? p : { ...p, highlights: staticHl.get(p.id)?.length ? staticHl.get(p.id) : undefined },
+    )
+  } catch {
+    return list
   }
 }
 
@@ -109,6 +133,7 @@ export async function getVisibleProjects(): Promise<Project[]> {
       period: p.period || undefined,
       demoUrl: p.demoUrl || undefined,
       repoUrl: p.repoUrl || undefined,
+      highlights: p.highlights?.length ? p.highlights : undefined,
       featured: p.featured || undefined,
     }))
 }
