@@ -18,6 +18,14 @@ echo "[deploy] IMAGE_TAG=${IMAGE_TAG} (工作目录: $(pwd))"
 # sudo 默认 env_reset 会清掉 IMAGE_TAG,用 env 显式传回 compose
 ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose pull app
 ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
+
+# 服务器侧配置(Caddyfile / compose)由 CI scp 同步过来;`up -d` 不会因挂载文件
+# 内容变化而重启 caddy,这里显式 reload 让它读到新的 Caddyfile(失败不阻断)。
+if ${SUDO:-} docker compose ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
+  ${SUDO:-} docker compose exec -T -w /etc/caddy caddy caddy reload \
+    || echo "[deploy] caddy reload 失败(配置可能未变或语法错误),已跳过"
+fi
+
 # 清理不被任何容器引用的旧镜像(回收 CI 各 tag 镜像;在用镜像不受影响)
 ${SUDO:-} docker image prune -af
 

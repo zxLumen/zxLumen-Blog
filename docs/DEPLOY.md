@@ -132,6 +132,13 @@ curl -X POST https://你的域名/api/usage \
 普通代码改动:**git push main 即可** —— CI 构建并自动部署,服务器拉新镜像滚动更新,自动清理旧镜像。
 内容改动(文案/简历/二维码):`export:content` + `scp site-content/*`(见第 5 节),无需 push。
 
+服务器侧配置(`docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh`):**改完 push 即可**
+—— CI 在部署前会自动 `scp` 这三份到 `~/zxLumen-Blog/docker/`,随后 `deploy.sh` 末尾 `caddy reload`
+让新 Caddyfile 生效。**服务器仓库从不 `git pull`**,所以任何「不进镜像」的配置都必须经由 CI 的 scp 步骤。
+
+> 仅当不走 CI 时,才需手动 `scp docker/Caddyfile docker/docker-compose.yml docker/deploy.sh zx@服务器:~/zxLumen-Blog/docker/`
+> 并在服务器上 `docker compose exec -w /etc/caddy caddy caddy reload`。
+
 > 简历生成(可选):仓库内 `apps/next-home/resume/` 有 `resume.py` + `resume.css`;
 > `python resume.py resume.md --chrome-path "<Chrome 路径>"` 生成 PDF 后再上传。
 

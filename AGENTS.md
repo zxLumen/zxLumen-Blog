@@ -106,9 +106,13 @@ cd apps/next-home && npm run lint && npm run build
 ## 部署:CI 构建 → GHCR → 服务器拉取(单环境)
 
 **服务器不构建镜像**:`git push main` → GitHub Actions 构建镜像推
-`ghcr.io/zxlumen/zx-home:<sha>+latest`(公开 → 服务器匿名 pull)→ SSH 跑
-`docker/deploy.sh`。个人内容**不进镜像**(`.dockerignore` 排除),由文件挂载提供。
-详见 `docs/DEPLOY.md` / `docs/CONTENT.md`。
+`ghcr.io/zxlumen/zx-home:<sha>+latest`(公开 → 服务器匿名 pull)→ **`scp` 同步服务器侧配置**
+(`docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh`)→ SSH 跑
+`docker/deploy.sh`(其末尾 `caddy reload` 让新 Caddyfile 生效)。个人内容**不进镜像**
+(`.dockerignore` 排除),由文件挂载提供。详见 `docs/DEPLOY.md` / `docs/CONTENT.md`。
+
+> 注意:服务器仓库**从不 `git pull`**。因此任何「不进镜像、又不在服务器上」的配置
+> (Caddyfile / compose)必须走 CI 的 `scp` 步骤,否则改动永不上线。
 
 ## 部署时必须同步的「不入库」内容(**每次上线都要做**)
 
@@ -122,8 +126,11 @@ cd apps/next-home && npm run lint && npm run build
 3. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
    改了邮箱/联系方式要**同时更新线上库**(线上 `/admin → 个人信息`,或直接改 `meta`)。
 
+> `docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` **无需手动传**:CI 会在
+> 部署前自动 `scp` 到服务器(见上)。
+>
 > 一句话:**源码改了 `content.local.ts` / 简历 / 二维码 / 联系方式 → 上线时把
-> `docker/site-content/*` 传服务器即可,镜像不用动**。
+> `docker/site-content/*` 传服务器即可,镜像与配置都不用动**。
 
 ## 上线授权(**重要**)
 
