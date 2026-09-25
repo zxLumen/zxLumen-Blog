@@ -19,8 +19,20 @@
 
 ### 修复
 
+- **项目卡片布局**:卡片改为纵向 flex,**亮点以下的内容(技术标签 + 操作按钮)贴卡片底部**,同排卡片底对齐,不再因简介长短参差
+- **项目简介换行**:admin 项目简介里手动换行(`\n`)在前端卡片上原样显示(项目简介段落加 `white-space: pre-line`)
+- **项目亮点(highlights)丢失**:admin 项目配置接管首页后,卡片亮点不再显示。现全链路补回——`StoredProject`/规范化/渲染均支持 highlights,admin 项目面板新增亮点编辑(标签+数值,最多 6 条,可增删);DB 项目未配亮点时按 id 回退静态内容,**存量无需重存即恢复**;该兜底同时用于 **admin 项目列表**,面板里不再显示为空
+- **项目简介输入框**:admin 项目面板简介由单行输入改为**自适应高度文本框**(autosize,2–8 行),长文本不再被截断
+- **项目卡片点击数**:「本页 · 个人主页」卡不再把全站 PV 与该链接点击数相加(点一次「试用」曾因跳回首页额外触发一次访问而显示 +2);改为只显示全站访问量(PV),与其它项目口径解耦
+- **埋点重复计数**:同一访客对同一「类型+目标」在 2 秒内的重复上报只记一次(防手抖双击 / beacon 重试);`visit`/`leave` 不受影响
 - **项目「试用」链接缺协议**:`demoUrl` / `repoUrl` 填裸域名(如 `rag.zxlumen.cn`)时被当成相对路径、拼成 `zxlumen.cn/rag.zxlumen.cn`。现统一补全 `https://`(站内 `/` 路径与已带协议的链接原样保留),覆盖前端渲染与后端存储/读取(存量数据无需重存即修复);admin 输入提示同步更新
 - **上线未同步服务器侧配置**:`docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` 此前靠人工 `scp`,易漏(曾致 `rag.<DOMAIN>` 反代未生效)。现由服务器 `docker/ci-run.sh` 在每次部署前从公开仓库自动 `git fetch` 同步这几个文件,并在 `deploy.sh` 末尾 `caddy reload` 使新 Caddyfile 即时生效(部署密钥被 `command=` 绑定到 `ci-run.sh`,scp 通道不可用,故不采用 CI scp)
+
+### 新增
+
+- **联系方式点击统计**:邮件 / 微信 / 电话 / GitHub / 留言 按钮点击上报 `contact_click`,admin「统计」新增「联系点击」面板(按方式计数);访客明细「最近操作」同步显示
+- **访客明细「新客 / 回头客」标识**:折叠行昵称旁直接显示徽标(此前仅展开后可见);判定按**访问日去重**——访问过 ≥ 2 个不同日期为「回头客」,仅某一天访问(当天多次也算)为「新客」
+- **内联 SVG 图标**:微信 / GitHub / 邮件 / 电话 / 留言改用内联 SVG(单色继承 `currentColor`),微信按钮不再与聊天气泡共用同一 emoji;聊天悬浮按钮改用对话气泡图标;微信图标固定 20×20
 
 
 - **本地 Grafana 查看面板**:新增 `grafana`(monitoring profile),数据源(Provisioning)指向 **Grafana Cloud 查询接口**(只读 token,不落地数据);由 Caddy 暴露 `grafana.<DOMAIN>`(basic_auth 保护,密码哈希经 `.env` 注入);自动导入 **Node Exporter Full** 与 **cAdvisor** 面板。这样日常看指标/日志在自有域名,存储/告警仍在 Grafana Cloud
@@ -41,6 +53,8 @@
 
 ### 变更
 
+- **用量面板 RECENT 明细表支持翻页**:由原来固定显示最新 8 条改为分页(默认 10 条/页,可选 5/10/20/50/100),切换数据源/区间/筛选时自动回到第 1 页
+- **用量面板 OpenCode RECENT 明细列**:由「提供方(provider)」改为「**服务账号**」(`service account`)——彻底替换该列;多工作区时显示 `工作区 · 服务账号`,无服务账号的记录显示 `—`;该列仅在区间内存在服务账号时出现;列名 `service account`(英文)
 - **用量面板 OpenCode 新增「服务账号」筛选**:官方导出新增解析 `service_account_name`(如 `bak_coding` / `bak_todo`),面板新增「全部服务账号」多选筛选(可当作 key 维度);聚合时保留该维度,不影响 provider/model
 - **用量面板 OpenCode 去掉「提供方」筛选**:opencode 源不再显示提供方筛选行(旧 cookie 里的选择一并忽略并清空),用量按**全部提供方合计**;DeepSeek / 智谱 的「全部 API Key」筛选保持不变
 - **用量面板 OpenCode workspace 改为单选**:点击某 workspace 只选中它,再点一次取消(回到「全部」);「全部 workspace」按钮清除选择;请求仍按所选 workspace 过滤
