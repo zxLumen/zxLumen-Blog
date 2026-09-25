@@ -1,6 +1,6 @@
 'use client'
 
-import { PROJECTS, type Project } from '../content.js'
+import { PROJECTS, normalizeUrl, isExternalUrl, type Project } from '../content.js'
 import { Section } from './Section.js'
 import { trackEvent } from './track.js'
 
@@ -24,6 +24,8 @@ function ProjectCard({
 }) {
   // 只有"本页 · 个人主页"(demoUrl 指向本站根路径)才把站内 PV 累计进点击数
   const self = project.demoUrl === '/'
+  const demoUrl = normalizeUrl(project.demoUrl)
+  const repoUrl = normalizeUrl(project.repoUrl)
   const total = (clicks ?? 0) + (self ? pv ?? 0 : 0)
   return (
     <article
@@ -80,21 +82,21 @@ function ProjectCard({
       </div>
 
       <div className="zx-card-actions">
-        {project.demoUrl && (
+        {demoUrl && (
           <a
             className="zx-btn zx-btn-sm"
-            href={project.demoUrl}
-            target={project.demoUrl.startsWith('http') ? '_blank' : undefined}
+            href={demoUrl}
+            target={isExternalUrl(demoUrl) ? '_blank' : undefined}
             rel="noreferrer"
             onClick={() => trackEvent('project_click', project.id)}
           >
             试用 →
           </a>
         )}
-        {project.repoUrl && (
+        {repoUrl && (
           <a
             className="zx-btn zx-btn-sm zx-btn-ghost"
-            href={project.repoUrl}
+            href={repoUrl}
             target="_blank"
             rel="noreferrer"
             onClick={() => trackEvent('project_click', project.id)}

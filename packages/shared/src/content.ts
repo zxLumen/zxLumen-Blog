@@ -38,6 +38,27 @@ export interface Project {
   featured?: boolean
 }
 
+/**
+ * 规范化外部链接:裸域名(如 `rag.zxlumen.cn`)补 `https://`,避免被当成相对路径
+ * 拼到当前站点(否则会打开 `zxlumen.cn/rag.zxlumen.cn`)。
+ * 站内路径(`/`、`#`、`?` 开头)与已带协议(`http(s)://`、`mailto:`、`tel:`)原样返回。
+ */
+export function normalizeUrl(raw?: string): string {
+  const s = (raw ?? '').trim()
+  if (!s) return ''
+  // 已带协议:http(s)/其它 `scheme://`,或 mailto:/tel: 这类无 `//` 的协议
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^(mailto|tel|sms):/i.test(s)) return s
+  if (/^[/#?]/.test(s)) return s // 站内路径 / 锚点 / 查询
+  return `https://${s}`
+}
+
+/** 判断链接是否应新开标签(绝对外链) */
+export function isExternalUrl(url?: string): boolean {
+  const s = (url ?? '').trim()
+  if (/^(mailto|tel|sms):/i.test(s)) return false
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(s)
+}
+
 export interface Profile {
   name: string
   handle: string

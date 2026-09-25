@@ -1,4 +1,5 @@
 import type { Project, StoredProject } from '@zx/shared'
+import { normalizeUrl } from '@zx/shared'
 import { getRuntimeContent } from '@zx/shared/server'
 import { getDb } from './db'
 
@@ -43,7 +44,7 @@ function normalizeOne(raw: unknown): StoredProject | null {
     : typeof r.tech === 'string'
       ? r.tech.split(',').map((t) => t.trim()).filter(Boolean)
       : []
-  const demoUrl = typeof r.demoUrl === 'string' ? r.demoUrl : ''
+  const demoUrl = normalizeUrl(typeof r.demoUrl === 'string' ? r.demoUrl : '')
   const kind = KINDS.includes(r.kind as NonNullable<Project['kind']>)
     ? (r.kind as NonNullable<Project['kind']>)
     : inferKind(demoUrl)
@@ -56,7 +57,7 @@ function normalizeOne(raw: unknown): StoredProject | null {
     kind,
     period: typeof r.period === 'string' ? r.period : '',
     demoUrl,
-    repoUrl: typeof r.repoUrl === 'string' ? r.repoUrl : '',
+    repoUrl: normalizeUrl(typeof r.repoUrl === 'string' ? r.repoUrl : ''),
     featured: r.featured === true,
     deleted: r.deleted === true,
   }

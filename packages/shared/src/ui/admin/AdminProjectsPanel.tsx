@@ -252,14 +252,14 @@ export function AdminProjectsPanel({
             label="demoUrl"
             size="xs"
             value={p.demoUrl ?? ''}
-            placeholder="/ 表示本站"
+            placeholder="https://rag.zxlumen.cn(或 / 表示本站)"
             onChange={(e) => patch(p.id, { demoUrl: e.target.value })}
           />
           <TextInput
             label="repoUrl"
             size="xs"
             value={p.repoUrl ?? ''}
-            placeholder="GitHub 链接"
+            placeholder="https://github.com/…"
             onChange={(e) => patch(p.id, { repoUrl: e.target.value })}
           />
         </Group>

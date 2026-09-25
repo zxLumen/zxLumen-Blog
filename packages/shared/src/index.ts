@@ -33,6 +33,8 @@ export {
   SECTION_LABELS,
   SITE_META,
   CONTACTS,
+  normalizeUrl,
+  isExternalUrl,
 } from './content.js'
 export type {
   LinkItem,
