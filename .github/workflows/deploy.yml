@@ -87,20 +87,10 @@ jobs:
           echo "::error::GHCR 包 ${NAME} 未确认 public(当前 ${VIS:-未知})"
           exit 1
 
-      # 服务器侧配置(不进镜像、也不在服务器上做 git pull):由 CI scp 同步,
-      # 否则 Caddyfile / compose 改动永远不会生效(曾导致 rag 反代丢失)。
-      - name: Sync server-side configs (Caddyfile / compose)
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_DEPLOY_KEY }}
-          port: ${{ secrets.SERVER_PORT || '22' }}
-          source: 'docker/Caddyfile,docker/docker-compose.yml,docker/deploy.sh'
-          target: '~/zxLumen-Blog'
-          # scp-action 的 strip_components 从左侧剥离目录层级
-          strip_components: 0
-
+      # 服务器侧配置(Caddyfile / compose / deploy.sh)不进镜像;服务器 repo 从不
+      # `git pull`。改由服务器上的 ci-run.sh 在部署前从公开仓库 fetched 这三个文件
+      # (见 docker/ci-run.sh),因此这里无需 scp —— 部署密钥被 authorized_keys 的
+      # command= 强制绑定到 ci-run.sh,scp 通道会被拦截。
       - name: SSH deploy to server
         uses: appleboy/ssh-action@v1.2.0
         with:

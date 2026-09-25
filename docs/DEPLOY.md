@@ -133,11 +133,11 @@ curl -X POST https://你的域名/api/usage \
 内容改动(文案/简历/二维码):`export:content` + `scp site-content/*`(见第 5 节),无需 push。
 
 服务器侧配置(`docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh`):**改完 push 即可**
-—— CI 在部署前会自动 `scp` 这三份到 `~/zxLumen-Blog/docker/`,随后 `deploy.sh` 末尾 `caddy reload`
-让新 Caddyfile 生效。**服务器仓库从不 `git pull`**,所以任何「不进镜像」的配置都必须经由 CI 的 scp 步骤。
+—— 服务器上的 `ci-run.sh` 在每次部署前会从公开仓库 `git fetch` 这几个文件,随后 `deploy.sh`
+末尾 `caddy reload` 让新 Caddyfile 生效。**服务器 repo 从不 `git pull`**,且部署密钥被
+`authorized_keys` 的 `command=` 强制绑定到 `ci-run.sh`(scp/sftp 会被拦截),所以**不要在 CI 里用 scp**。
 
-> 仅当不走 CI 时,才需手动 `scp docker/Caddyfile docker/docker-compose.yml docker/deploy.sh zx@服务器:~/zxLumen-Blog/docker/`
-> 并在服务器上 `docker compose exec -w /etc/caddy caddy caddy reload`。
+> 仅当不走 CI、需手动同步配置时:`scp docker/Caddyfile docker/docker-compose.yml docker/deploy.sh docker/ci-run.sh zx@服务器:~/zxLumen-Blog/docker/`(用你自己的运维密钥,非部署密钥),再在服务器上 `./deploy.sh`。
 
 > 简历生成(可选):仓库内 `apps/next-home/resume/` 有 `resume.py` + `resume.css`;
 > `python resume.py resume.md --chrome-path "<Chrome 路径>"` 生成 PDF 后再上传。

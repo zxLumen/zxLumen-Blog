@@ -20,7 +20,7 @@
 ### 修复
 
 - **项目「试用」链接缺协议**:`demoUrl` / `repoUrl` 填裸域名(如 `rag.zxlumen.cn`)时被当成相对路径、拼成 `zxlumen.cn/rag.zxlumen.cn`。现统一补全 `https://`(站内 `/` 路径与已带协议的链接原样保留),覆盖前端渲染与后端存储/读取(存量数据无需重存即修复);admin 输入提示同步更新
-- **上线未同步服务器侧配置**:`docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` 此前靠人工 `scp`,易漏(曾致 `rag.<DOMAIN>` 反代未生效)。现由 CI 在部署前自动 `scp`,并在 `deploy.sh` 末尾 `caddy reload` 使新 Caddyfile 即时生效
+- **上线未同步服务器侧配置**:`docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` 此前靠人工 `scp`,易漏(曾致 `rag.<DOMAIN>` 反代未生效)。现由服务器 `docker/ci-run.sh` 在每次部署前从公开仓库自动 `git fetch` 同步这几个文件,并在 `deploy.sh` 末尾 `caddy reload` 使新 Caddyfile 即时生效(部署密钥被 `command=` 绑定到 `ci-run.sh`,scp 通道不可用,故不采用 CI scp)
 
 
 - **本地 Grafana 查看面板**:新增 `grafana`(monitoring profile),数据源(Provisioning)指向 **Grafana Cloud 查询接口**(只读 token,不落地数据);由 Caddy 暴露 `grafana.<DOMAIN>`(basic_auth 保护,密码哈希经 `.env` 注入);自动导入 **Node Exporter Full** 与 **cAdvisor** 面板。这样日常看指标/日志在自有域名,存储/告警仍在 Grafana Cloud
