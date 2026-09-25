@@ -122,6 +122,8 @@ export function parseUsageCsv(text: string): Array<{
   created: number
   model: string
   provider: string
+  /** service account 名(可当 key 维度;可能为空) */
+  serviceAccount: string
   input: number
   output: number
   cacheRead: number
@@ -138,6 +140,7 @@ export function parseUsageCsv(text: string): Array<{
   const iCreated = col('created_at')
   const iModel = col('model')
   const iProvider = col('provider')
+  const iServiceAcct = col('service_account_name')
   const iInput = col('input_tokens')
   const iOutput = col('output_tokens')
   const iCache = col('cache_read_tokens')
@@ -156,6 +159,7 @@ export function parseUsageCsv(text: string): Array<{
     const model = String(line[iModel] ?? '').trim()
     const provider = String(line[iProvider] ?? '').trim()
     if (!Number.isFinite(created) || !model || !provider) continue
+    const serviceAccount = iServiceAcct >= 0 ? String(line[iServiceAcct] ?? '').trim() : ''
     const input = iInput >= 0 ? num(line[iInput] ?? '') : 0
     const output = iOutput >= 0 ? num(line[iOutput] ?? '') : 0
     const cacheRead = iCache >= 0 ? num(line[iCache] ?? '') : 0
@@ -173,6 +177,7 @@ export function parseUsageCsv(text: string): Array<{
       created,
       model,
       provider,
+      serviceAccount,
       input,
       output,
       cacheRead,
@@ -227,7 +232,7 @@ async function fetchRows30(ws: OcWorkspace): Promise<UsageRow[]> {
   // 聚合为小时级(权限最大粒度),供任意区间二次聚合/回退
   const merged = new Map<string, UsageRow>()
   for (const r of records) {
-    const k = `${hourTs(r.created)}|${r.model}|${r.provider}`
+    const k = `${hourTs(r.created)}|${r.model}|${r.provider}|${r.serviceAccount}`
     const ex = merged.get(k)
     if (ex) {
       ex.inputTokens += r.input
@@ -240,6 +245,7 @@ async function fetchRows30(ws: OcWorkspace): Promise<UsageRow[]> {
         ts: hourTs(r.created),
         model: r.model,
         apiKey: r.provider,
+        serviceAccount: r.serviceAccount || undefined,
         inputTokens: r.input,
         outputTokens: r.output,
         cacheHitTokens: r.cacheRead,
@@ -288,13 +294,13 @@ export function filterUsageOpenCode(
   let rows: UsageRow[]
   if (granularity === 'hour') {
     const merged = new Map<string, UsageRow>()
-    for (const r of within) merged.set(`${r.ts}|${r.model}|${r.apiKey ?? ''}`, r)
+    for (const r of within) merged.set(`${r.ts}|${r.model}|${r.apiKey ?? ''}|${r.serviceAccount ?? ''}`, r)
     rows = [...merged.values()]
   } else {
-    // 天级:按 (北京日 × 模型 × 提供方) 合并
+    // 天级:按 (北京日 × 模型 × 提供方 × 服务账号) 合并
     rows = aggregateRows(
       within,
-      (r) => `${r.ts.slice(0, 10)}|${r.model}|${r.apiKey ?? ''}`,
+      (r) => `${r.ts.slice(0, 10)}|${r.model}|${r.apiKey ?? ''}|${r.serviceAccount ?? ''}`,
       (r) => ({ ...r, ts: `${r.ts.slice(0, 10)}T00:00:00Z` }),
     )
   }
@@ -339,12 +345,21 @@ export function mergeUsageOpenCode(
     end = data.end
     platformLimit = platformLimit || data.platformLimit
     for (const r of data.rows) {
-      prefixed.push(single ? r : { ...r, apiKey: `${ws.name} · ${r.apiKey ?? ''}` })
+      prefixed.push(
+        single
+          ? r
+          : {
+              ...r,
+              apiKey: `${ws.name} · ${r.apiKey ?? ''}`,
+              serviceAccount: r.serviceAccount ? `${ws.name} · ${r.serviceAccount}` : r.serviceAccount,
+            },
+      )
     }
   }
-  const rows = aggregateRows(prefixed, (r) => `${r.ts}|${r.model}|${r.apiKey ?? ''}`).sort((a, b) =>
-    a.ts < b.ts ? -1 : 1,
-  )
+  const rows = aggregateRows(
+    prefixed,
+    (r) => `${r.ts}|${r.model}|${r.apiKey ?? ''}|${r.serviceAccount ?? ''}`,
+  ).sort((a, b) => (a.ts < b.ts ? -1 : 1))
   const models = Array.from(new Set(rows.map((r) => r.model)))
   const providers = Array.from(new Set(rows.map((r) => r.apiKey ?? '').filter(Boolean)))
   return {
