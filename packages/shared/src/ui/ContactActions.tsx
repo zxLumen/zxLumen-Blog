@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CONTACTS, type Contacts } from '../content.js'
+import { trackEvent } from './track.js'
+import { MailIcon, PhoneIcon, WeChatIcon } from './icons.js'
 
 interface ContactActionsProps {
   contacts?: Contacts
@@ -57,6 +59,7 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
 
   // 点击微信:复制微信号 + 在点击处右上角弹出二维码浮窗
   function onWechat(e: React.MouseEvent) {
+    trackEvent('contact_click', 'wechat')
     if (c.wechat) void copy(c.wechat, '微信号已复制,请在微信中搜索添加')
     if (!c.wechatQr) return
 
@@ -108,6 +111,7 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
 
   async function onPhone() {
     if (!c.hasPhone && !(c.phoneReversed && c.phoneReversed.length)) return
+    trackEvent('contact_click', 'phone')
     const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
     // 移动端:优先用预取号码,在用户手势的同步栈内跳 tel:(避免 await 后跳转被拦)
     if (mobile && phoneRef.current) {
@@ -146,7 +150,9 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
   if (variant === 'compact') {
     return (
       <span className="zx-contact-compact">
-        <a href={`mailto:${c.email}`}>邮件</a>
+        <a href={`mailto:${c.email}`} onClick={() => trackEvent('contact_click', 'email')}>
+          邮件
+        </a>
         {c.wechat && (
           <button type="button" className="zx-linkbtn" onClick={onWechat}>
             微信
@@ -165,16 +171,16 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
 
   return (
     <>
-      <a className="zx-btn" href={`mailto:${c.email}`}>
+      <a className="zx-btn" href={`mailto:${c.email}`} onClick={() => trackEvent('contact_click', 'email')}>
         <span className="zx-ico zx-ico-lg" aria-hidden="true">
-          ✉
+          <MailIcon size={1} />
         </span>{' '}
         邮件
       </a>
       {c.wechat && (
         <button type="button" className="zx-btn" onClick={onWechat} title={`微信号:${c.wechat}`}>
-          <span className="zx-ico zx-ico-sm" aria-hidden="true">
-            💬
+          <span className="zx-ico zx-ico-sm" aria-hidden="true" style={{ color: '#07c160' }}>
+            <WeChatIcon />
           </span>{' '}
           微信 · {c.wechat}
         </button>
@@ -182,7 +188,7 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
       {hasPhone && (
         <button type="button" className="zx-btn" onClick={() => void onPhone()} title="点击拨打 / 复制">
           <span className="zx-ico zx-ico-lg" aria-hidden="true">
-            ☎
+            <PhoneIcon size={1} />
           </span>{' '}
           电话
         </button>

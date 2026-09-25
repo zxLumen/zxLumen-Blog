@@ -3,6 +3,7 @@
 // 右下角漂浮的问答机器人。配置走 /api/chat/config(公开,不含密钥);
 // 流式读取 /api/chat 返回的 text/plain。
 import { useEffect, useRef, useState } from 'react'
+import { MessageIcon } from './icons.js'
 
 interface ChatConfig {
   enabled: boolean
@@ -183,7 +184,7 @@ export function ChatWidget() {
       )}
       {!open && (
         <button className="zxchat-fab" onClick={() => setOpen(true)} aria-label="聊天机器人">
-          💬
+          <MessageIcon size={1.15} />
         </button>
       )}
     </>

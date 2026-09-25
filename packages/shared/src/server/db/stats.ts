@@ -136,10 +136,21 @@ export function statsStore(db: SqliteDb): StatsStore {
       const clicksByTarget: Record<string, number> = {}
       for (const r of clickRows) clicksByTarget[r.target] = r.count
 
+      const contactRows = db
+        .prepare(
+          `SELECT target, COUNT(*) AS count FROM events
+           WHERE type='contact_click' AND target != '' GROUP BY target`,
+        )
+        .all() as { target: string; count: number }[]
+      const contactsByTarget: Record<string, number> = {}
+      for (const r of contactRows) contactsByTarget[r.target] = r.count
+
       const events = {
         projectClicks: n(`SELECT COUNT(*) AS n FROM events WHERE type='project_click'`),
         resumeDownloads: n(`SELECT COUNT(*) AS n FROM events WHERE type='resume_download'`),
         clicksByTarget,
+        contactClicks: n(`SELECT COUNT(*) AS n FROM events WHERE type='contact_click'`),
+        contactsByTarget,
       }
 
       // ---- 访客访问详情(最近活跃的 30 位;仅 opts.visitors 时计算) ----
@@ -162,6 +173,16 @@ export function statsStore(db: SqliteDb): StatsStore {
           .all() as { author_cid: string; author: string }[]
         const nickMap = new Map<string, string>()
         for (const r of nickRows) if (!nickMap.has(r.author_cid)) nickMap.set(r.author_cid, r.author)
+
+        // 回头客判定:访问日 ≥ 2 天(即在不同日期访问过,视为回访;单日多次仍算新客)
+        const visitDayRows = db
+          .prepare(
+            `SELECT cid, COUNT(DISTINCT day) AS dayCount
+               FROM events WHERE cid != '' AND type='visit' GROUP BY cid`,
+          )
+          .all() as { cid: string; dayCount: number }[]
+        const visitDays = new Map<string, number>()
+        for (const r of visitDayRows) visitDays.set(r.cid, r.dayCount)
 
         const ccRows = db
           .prepare(
@@ -205,7 +226,7 @@ export function statsStore(db: SqliteDb): StatsStore {
             nickname: nickMap.get(r.cid) ?? '',
             lastSeen: bjTime(r.lastTs),
             firstSeen: bjTime(hist[0]?.ts ?? r.lastTs),
-            returning: r.visits > 1,
+            returning: (visitDays.get(r.cid) ?? 0) >= 2,
             device: parseDevice(hist[hist.length - 1]?.ua ?? ''),
             sessions,
             avgSessionSec: avgSec,

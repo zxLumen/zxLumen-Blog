@@ -10,10 +10,20 @@ const EVENT_LABEL: Record<EventType, string> = {
   resume_download: '简历下载',
   leave: '离开',
   section_view: '区块浏览',
+  contact_click: '联系点击',
 }
 
 function targetLabel(t: string, projects: Project[]) {
   return projects.find((p) => p.id === t)?.name ?? t
+}
+
+/** 联系方式点击目标 → 中文名 */
+const CONTACT_LABEL: Record<string, string> = {
+  email: '邮件',
+  wechat: '微信',
+  phone: '电话',
+  github: 'GitHub',
+  guestbook: '留言',
 }
 
 /** 访客明细行:点击展开该访客的操作记录 */
@@ -54,6 +64,7 @@ export function VisitorDetailRow({
       const id = target.split('#')[1] ?? target
       return SECTION_LABELS[id] ?? target
     }
+    if (type === 'contact_click') return CONTACT_LABEL[target] ?? target
     return targetLabel(target, projects)
   }
   const ops = v.recent
@@ -63,6 +74,12 @@ export function VisitorDetailRow({
         <td>
           <div>
             {v.nickname || `访客 ${v.cid.slice(0, 8)}`}
+            <span
+              className={`zx-visitor-tag ${v.returning ? 'is-returning' : 'is-new'}`}
+              title={v.returning ? '回头客 · 分不同日期访问过' : '新客 · 仅当日访问'}
+            >
+              {v.returning ? '回头客' : '新客'}
+            </span>
             {v.nickname ? (
               <span className="zx-muted" style={{ fontSize: '0.7rem' }}>
                 {' '}

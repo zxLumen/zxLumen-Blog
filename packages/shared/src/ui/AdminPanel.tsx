@@ -28,6 +28,15 @@ async function loadPageData(page: number, pageSize: number): Promise<PagedCommen
   return (await res.json()) as PagedComments
 }
 
+/** 联系方式点击目标 → 中文名 */
+const CONTACT_LABEL: Record<string, string> = {
+  email: '邮件',
+  wechat: '微信',
+  phone: '电话',
+  github: 'GitHub',
+  guestbook: '留言',
+}
+
 export function AdminPanel({ projects }: { projects?: Project[] }) {
   const projList = projects ?? PROJECTS
   const [ready, setReady] = useState(false)
@@ -1125,6 +1134,34 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
                     .map(([id, count]) => (
                       <tr key={id}>
                         <td>{projList.find((p) => p.id === id)?.name ?? id}</td>
+                        <td className="num">{fmtInt(count)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="zx-panel">
+            <h3>
+              联系点击 <span>按次数</span>
+            </h3>
+            {Object.keys(stats.events.contactsByTarget ?? {}).length === 0 ? (
+              <div className="zx-c-empty">暂无联系点击</div>
+            ) : (
+              <table className="zx-table">
+                <thead>
+                  <tr>
+                    <th>方式</th>
+                    <th className="num">点击</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(stats.events.contactsByTarget ?? {})
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([t, count]) => (
+                      <tr key={t}>
+                        <td>{CONTACT_LABEL[t] ?? t}</td>
                         <td className="num">{fmtInt(count)}</td>
                       </tr>
                     ))}

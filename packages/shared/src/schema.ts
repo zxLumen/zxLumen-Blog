@@ -174,8 +174,17 @@ export interface UsageRow {
 
 export type Visibility = 'public' | 'private'
 
-/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数) */
-export type EventType = 'visit' | 'project_click' | 'resume_download' | 'leave' | 'section_view'
+/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击) */
+export type EventType =
+  | 'visit'
+  | 'project_click'
+  | 'resume_download'
+  | 'leave'
+  | 'section_view'
+  | 'contact_click'
+
+/** 联系方式点击的目标(email | wechat | phone | github | guestbook) */
+export type ContactTarget = 'email' | 'wechat' | 'phone' | 'github' | 'guestbook'
 
 export interface NewEventInput {
   type: EventType
@@ -257,6 +266,10 @@ export interface StatsResult {
     resumeDownloads: number
     /** 各项目点击次数(projectId → count) */
     clicksByTarget: Record<string, number>
+    /** 联系方式点击总次数 */
+    contactClicks: number
+    /** 各联系方式点击次数(email/wechat/phone/github/guestbook → count) */
+    contactsByTarget: Record<string, number>
   }
   /** 访客访问详情(按最近活跃,仅站长接口) */
   visitors: VisitorDetail[]
@@ -336,6 +349,7 @@ export interface StoredProject {
   period?: string
   demoUrl?: string
   repoUrl?: string
+  highlights?: { label: string; value: string }[]
   featured?: boolean
   /** true=在垃圾箱(首页不显示);缺省/false=正常 */
   deleted?: boolean

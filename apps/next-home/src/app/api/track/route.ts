@@ -6,12 +6,25 @@ import { cidCookie, isMockActive, resolveCid } from '@/lib/clientid'
 
 export const dynamic = 'force-dynamic'
 
-const TYPES = new Set<EventType>(['visit', 'project_click', 'resume_download', 'leave', 'section_view'])
+const TYPES = new Set<EventType>(['visit', 'project_click', 'resume_download', 'leave', 'section_view', 'contact_click'])
 /** 常见爬虫/扫描器 UA(beacon 为 JS 触发,这里再兜一层) */
 const BOT_RE =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora|pinterest|headless|python-requests|curl|wget|go-http-client|axios|node-fetch/i
 
 const empty = () => new Response(null, { status: 204 })
+
+/** 防抖:同一 cid+type+target 在窗口内重复上报只记一次(防手抖双击 / sendBeacon 重试) */
+const DEDUP_MS = 2000
+const recent = new Map<string, number>()
+function isDuplicate(key: string): boolean {
+  const now = Date.now()
+  // 顺手清理过期项,避免 map 无限增长
+  for (const [k, t] of recent) if (now - t > DEDUP_MS) recent.delete(k)
+  const prev = recent.get(key)
+  if (prev != null && now - prev < DEDUP_MS) return true
+  recent.set(key, now)
+  return false
+}
 
 /**
  * 埋点上报:访问 / 项目点击 / 简历下载。站长、MOCK、爬虫不计入。
@@ -44,6 +57,12 @@ export async function POST(req: Request) {
   }
 
   const { cid, isNew } = await resolveCid()
+  // 同一访客短时间内重复点击同一目标(手抖双击 / 广播重试)只记一次;visit/leave 不防抖
+  if (type !== 'visit' && type !== 'leave' && isDuplicate(`${cid}|${type}|${target}`)) {
+    const dup = empty()
+    if (isNew) dup.headers.append('Set-Cookie', cidCookie(cid))
+    return dup
+  }
   ;(await getDb()).addEvent({ type, target, cid, ua: ua.slice(0, 200), referrer, dwell })
 
   const res = empty()
