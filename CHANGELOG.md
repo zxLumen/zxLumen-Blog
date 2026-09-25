@@ -16,6 +16,13 @@
 
 - **首页服务器状态悬浮件 + 导航「监控」入口**:右上角新增**可拖动**的状态浮件(CPU / 内存 / 磁盘 / 负载 / 运行时长 / 站点在线 + **近 7 天 CPU 日均趋势**),悬停展开、移出收起(与访客统计一致);数据由新接口 `GET /api/status` 只读查询 Grafana Cloud(60s 缓存,失败时显示降级「状态异常」气泡、可展开看错误,不再自动隐藏);**所有悬浮件(访客统计 + 服务器状态)拖动后靠近视口边缘自动吸附**;顶栏导航在「留言板」下新增「监控」外链,直达 Node Exporter Full 面板
 - **悬浮件失败态可见**:服务器状态浮件在数据源不可用(token 缺失 / 网络失败等)时**不再整体消失**,改为显示红色降级气泡(「状态异常」,悬停可查看 `error` 文案),每 60s 自动重试;本地 dev 通过 `apps/next-home/.env.local`(已 gitignore)固定 `GRAFANA_READ_TOKEN`,避免裸 `npm run dev` 丢失 token
+
+### 修复
+
+- **项目「试用」链接缺协议**:`demoUrl` / `repoUrl` 填裸域名(如 `rag.zxlumen.cn`)时被当成相对路径、拼成 `zxlumen.cn/rag.zxlumen.cn`。现统一补全 `https://`(站内 `/` 路径与已带协议的链接原样保留),覆盖前端渲染与后端存储/读取(存量数据无需重存即修复);admin 输入提示同步更新
+- **上线未同步服务器侧配置**:`docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` 此前靠人工 `scp`,易漏(曾致 `rag.<DOMAIN>` 反代未生效)。现由 CI 在部署前自动 `scp`,并在 `deploy.sh` 末尾 `caddy reload` 使新 Caddyfile 即时生效
+
+
 - **本地 Grafana 查看面板**:新增 `grafana`(monitoring profile),数据源(Provisioning)指向 **Grafana Cloud 查询接口**(只读 token,不落地数据);由 Caddy 暴露 `grafana.<DOMAIN>`(basic_auth 保护,密码哈希经 `.env` 注入);自动导入 **Node Exporter Full** 与 **cAdvisor** 面板。这样日常看指标/日志在自有域名,存储/告警仍在 Grafana Cloud
 - **服务器监控(可观测性)**:本地采集 → Grafana Cloud + Sentry(EU)。`docker compose --profile monitoring`(默认不启)加载 `node-exporter` + **筛选版 cAdvisor** + `grafana/alloy`(抓主机/容器指标、抓应用 `/metrics`、采集 app/caddy 容器日志 → Mimir/Loki);新增应用 `GET /api/health`(供外部合成探测)与 `GET /api/metrics`(Prometheus 文本,`X-Metrics-Token` 保护,Caddy 对公网屏蔽);`onRequestError` 计数并可选上报 Sentry(`dataCollection` 关闭 PII、`tunnelRoute:/monitoring`);文档见 `docs/MONITORING.md`
 - **用量饼图交互**:`BY_MODEL` 甜甜圈由 `conic-gradient` 改为 SVG 扇区(每块一个元素);鼠标悬停某块时该块**以圆心为中心放大 1.08**(几何整体缩放),模型名/tokens/占比显示在**甜甜圈下方的固定行**里;悬停图例行同样放大对应扇区(双向联动)。单模型渲染整环,无数据显示占位环
