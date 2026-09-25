@@ -74,6 +74,20 @@ grafana.{$DOMAIN} {
 # 	reverse_proxy demo2:8080
 # }
 
+# RAG 知识库问答 demo(独立容器,需加入 docker_web 网络;见 RAG 仓库 deploy/)
+rag.{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy rag:8000
+}
+
 # (可选)Alloy 自带 UI/调试页:仅在需要时启用,并务必加 basic_auth
 # alloy.{$DOMAIN} {
 # 	basic_auth {
