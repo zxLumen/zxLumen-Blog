@@ -1325,21 +1325,20 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   );
 }
 
-.zx-bar[data-label]::after {
-  content: attr(data-label);
-  position: absolute;
-  top: -1.3rem;
-  left: 50%;
-  transform: translateX(-50%);
+/* 柱状图「跟随鼠标」提示(由 useBarTooltip 渲染到 body) */
+.zx-bartip {
+  position: fixed;
+  z-index: 500;
+  pointer-events: none;
+  background: #0d1117;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 3px 7px;
   font-family: var(--font-mono);
-  font-size: 0.6rem;
-  color: var(--accent);
-  opacity: 0;
+  font-size: 0.72rem;
   white-space: nowrap;
-}
-
-.zx-bar:hover[data-label]::after {
-  opacity: 1;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.8);
 }
 
 .zx-donut-wrap {
@@ -3081,18 +3080,6 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   min-width: 0;
 }
 
-/* 趋势两端柱子的提示向内侧对齐,避免溢出被裁切 */
-.zx-statswidget-trend .zx-bar:first-child[data-label]::after {
-  left: 0;
-  transform: none;
-}
-
-.zx-statswidget-trend .zx-bar:last-child[data-label]::after {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
 .zx-statswidget-foot {
   font-size: 0.55rem;
   text-align: right;
@@ -3196,4 +3183,103 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   flex-wrap: wrap;
   gap: 0.12rem 1.1rem;
   font-size: 0.72rem;
+}
+
+/* ---------- 服务器状态悬浮件(右上角) ---------- */
+
+.zx-statuswidget {
+  position: fixed;
+  top: 7rem;
+  right: 1rem;
+  z-index: 399;
+  font-family: var(--font-mono);
+}
+
+.zx-statuswidget-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  background: color-mix(in srgb, var(--bg-2) 85%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  backdrop-filter: blur(var(--card-blur));
+  -webkit-backdrop-filter: blur(var(--card-blur));
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.zx-statuswidget-btn:hover,
+.zx-statuswidget-btn.is-open {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+.zx-statuswidget-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.zx-statuswidget-pop {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: min(240px, calc(100vw - 2rem));
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.75rem;
+  box-shadow: 0 20px 50px -24px rgba(0, 0, 0, 0.9);
+}
+
+.zx-statuswidget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.64rem;
+}
+
+.zx-statuswidget-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.zx-statuswidget-cell {
+  text-align: center;
+}
+
+.zx-statuswidget-val {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.zx-statuswidget-lbl {
+  font-size: 0.55rem;
+  color: var(--fg-muted);
+}
+
+.zx-statuswidget-trend {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  height: 59px;
+  padding-top: 20px;
+  margin-bottom: 0.2rem;
+}
+
+.zx-statuswidget-foot {
+  font-size: 0.58rem;
+  text-align: center;
 }

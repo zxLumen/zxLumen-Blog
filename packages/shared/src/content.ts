@@ -97,6 +97,7 @@ export const NAV = [
   { label: 'Token用量', href: '/#usage' },
   { label: '关于', href: '/#about' },
   { label: '留言板', href: '/#guestbook' },
+  { label: '监控', href: 'https://grafana.zxlumen.cn/d/rYdddlPWk/node-exporter-full' },
 ]
 
 const NAV_SECTION_IDS = NAV.filter((n) => n.href.includes('#')).map((n) => n.href.split('#')[1])

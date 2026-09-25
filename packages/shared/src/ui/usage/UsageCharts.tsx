@@ -5,6 +5,7 @@ import { fmtCompact, fmtInt } from '../../format.js'
 import type { UsageRow } from '../../schema.js'
 import { modelColor, modelLabel, rowCost } from './constants.js'
 import { Donut } from './Donut.js'
+import { useBarTooltip } from '../BarTooltip.js'
 
 export function UsageCharts({
   hourMode,
@@ -24,6 +25,7 @@ export function UsageCharts({
   hasPicked: boolean
 }) {
   const [hover, setHover] = useState<string | null>(null)
+  const barTip = useBarTooltip()
   const total = Math.max(1, byModel.reduce((a, m) => a + m.input + m.output, 0))
   const activeModel = hover ? byModel.find((m) => m.model === hover) ?? null : null
 
@@ -36,7 +38,7 @@ export function UsageCharts({
             {hourMode ? '一天内分时 · UTC+8 · input + output' : `${rangeLabel} · input + output`}
           </span>
         </h3>
-        <div className="zx-bars">
+        <div className="zx-bars" onMouseMove={barTip.onMouseMove} onMouseLeave={barTip.onMouseLeave}>
           {daySeries.map(([dt, input, output]) => {
             const v = input + output
             const label = hourMode ? `${dt.slice(5, 10)} ${dt.slice(11, 13)}:00` : dt.slice(5)
@@ -50,6 +52,7 @@ export function UsageCharts({
             )
           })}
         </div>
+        {barTip.node}
       </div>
 
       <div className="zx-panel">

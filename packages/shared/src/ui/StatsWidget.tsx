@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { StatsResult } from '../schema.js'
 import { fmtCompact } from '../format.js'
+import { FLOAT_MARGIN, snapEdge } from './floating.js'
+import { useBarTooltip } from './BarTooltip.js'
 
 const POS_KEY = 'zx-stats-pos'
 const POP_W = 232
@@ -41,6 +43,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   }, [])
 
   useEffect(() => setMounted(true), [])
+  const barTip = useBarTooltip()
 
   useEffect(
     () => () => {
@@ -79,14 +82,20 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
       dragRef.current = null
       if (d?.moved) {
         setPos((p) => {
-          if (p) {
-            try {
-              window.localStorage.setItem(POS_KEY, JSON.stringify(p))
-            } catch {
-              /* ignore */
-            }
+          if (!p) return p
+          const el = btnRef.current
+          const w = el?.offsetWidth ?? 120
+          const h = el?.offsetHeight ?? 28
+          const snapped = {
+            x: snapEdge(p.x, window.innerWidth - w - FLOAT_MARGIN),
+            y: snapEdge(p.y, window.innerHeight - h - FLOAT_MARGIN),
           }
-          return p
+          try {
+            window.localStorage.setItem(POS_KEY, JSON.stringify(snapped))
+          } catch {
+            /* ignore */
+          }
+          return snapped
         })
       }
     }
@@ -163,7 +172,11 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
               <Cell label="访问量(PV)" value={fmtCompact(visits.pv)} />
               <Cell label="访客(UV)" value={fmtCompact(visits.uv)} />
             </div>
-            <div className="zx-statswidget-trend">
+            <div
+              className="zx-statswidget-trend"
+              onMouseMove={barTip.onMouseMove}
+              onMouseLeave={barTip.onMouseLeave}
+            >
               {days.map((d) => (
                 <div
                   key={d.day}
@@ -173,6 +186,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
                 />
               ))}
             </div>
+            {barTip.node}
             <div className="zx-statswidget-foot zx-muted zx-mono">近 7 天 · 访问量(PV)</div>
           </div>,
           document.body,

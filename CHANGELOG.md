@@ -6,6 +6,7 @@
 
 ### 新增
 
+- **首页服务器状态悬浮件 + 导航「监控」入口**:右上角新增**可拖动**的状态浮件(CPU / 内存 / 磁盘 / 负载 / 运行时长 / 站点在线 + **近 7 天 CPU 日均趋势**),悬停展开、移出收起(与访客统计一致);数据由新接口 `GET /api/status` 只读查询 Grafana Cloud(60s 缓存,失败自动隐藏);**所有悬浮件(访客统计 + 服务器状态)拖动后靠近视口边缘自动吸附**;顶栏导航在「留言板」下新增「监控」外链,直达 Node Exporter Full 面板
 - **本地 Grafana 查看面板**:新增 `grafana`(monitoring profile),数据源(Provisioning)指向 **Grafana Cloud 查询接口**(只读 token,不落地数据);由 Caddy 暴露 `grafana.<DOMAIN>`(basic_auth 保护,密码哈希经 `.env` 注入);自动导入 **Node Exporter Full** 与 **cAdvisor** 面板。这样日常看指标/日志在自有域名,存储/告警仍在 Grafana Cloud
 - **服务器监控(可观测性)**:本地采集 → Grafana Cloud + Sentry(EU)。`docker compose --profile monitoring`(默认不启)加载 `node-exporter` + **筛选版 cAdvisor** + `grafana/alloy`(抓主机/容器指标、抓应用 `/metrics`、采集 app/caddy 容器日志 → Mimir/Loki);新增应用 `GET /api/health`(供外部合成探测)与 `GET /api/metrics`(Prometheus 文本,`X-Metrics-Token` 保护,Caddy 对公网屏蔽);`onRequestError` 计数并可选上报 Sentry(`dataCollection` 关闭 PII、`tunnelRoute:/monitoring`);文档见 `docs/MONITORING.md`
 - **用量饼图交互**:`BY_MODEL` 甜甜圈由 `conic-gradient` 改为 SVG 扇区(每块一个元素);鼠标悬停某块时该块**以圆心为中心放大 1.08**(几何整体缩放),模型名/tokens/占比显示在**甜甜圈下方的固定行**里;悬停图例行同样放大对应扇区(双向联动)。单模型渲染整环,无数据显示占位环
@@ -36,6 +37,7 @@
 
 ### 修复
 
+- **柱状图 hover 提示遮挡/看不清**:提示由「蓝字(`accent`)固定压柱顶」改为**跟随鼠标的深色气泡**(新增 `useBarTooltip`,portal 固定定位、白字 0.72rem),并**自动收敛到视口内**(靠近右/下边缘会翻到鼠标左上,不出屏);全站柱状图(用量趋势 / 访客统计 / 服务器状态)统一生效;移除旧的 `.zx-bar[data-label]::after`(并顺带消除其导致的横向溢出)
 - **用量面板饼图/图例颜色不可区分**:未收录进 `PRICING` 的模型(OpenCode Go / 智谱等)全部回落 `accent` 蓝色;改为按模型名哈希取确定性调色板颜色
 - **用量面板柱状图下方空白**:两列网格 `align-items: start` 时,左列柱状图面板被右侧甜甜圈面板撑高的网格行留下空白;改为 `stretch`,并让柱区填满面板高度
 - **`layoutMeta` 可能返回未放行布局**:`theme-context` 取布局元数据时用了全量 `LAYOUTS` 查找、未受 admin 放行集合约束;改为基于已过滤的 `layouts`,与 `themeMeta` 行为一致

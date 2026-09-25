@@ -7,6 +7,7 @@ import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
 import { UsageSection } from './UsageSection.js'
 import { StatsWidget } from './StatsWidget.js'
+import { StatusWidget } from './StatusWidget.js'
 import { TrackBeacon } from './TrackBeacon.js'
 import { AboutSection } from './AboutSection.js'
 import { GuestbookSection, type NewComment } from './GuestbookSection.js'
@@ -63,6 +64,7 @@ export function HomePage({
     <>
       <TrackBeacon path="/" />
       <StatsWidget stats={stats} />
+      <StatusWidget />
       <Hero profile={profile} />
       <ProjectsSection projects={projects} clicks={stats?.events.clicksByTarget} pv={stats?.visits.pv} />
       <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} availableSources={availableSources} />

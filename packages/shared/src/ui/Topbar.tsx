@@ -160,17 +160,23 @@ export function Topbar({
           <span className="z">❯</span> {shell ?? PROFILE.shell}
         </Comp>
         <nav className="zx-nav">
-          {nav.map((item) => (
-            <Comp
-              key={item.href}
-              href={item.href}
-              data-nav={navKey(item.href)}
-              onClick={(e) => onNavClick(e, item.href)}
-              {...linkExtra}
-            >
-              {item.label}
-            </Comp>
-          ))}
+          {nav.map((item) =>
+            /^https?:\/\//.test(item.href) ? (
+              <a key={item.href} href={item.href} target="_blank" rel="noreferrer">
+                {item.label}
+              </a>
+            ) : (
+              <Comp
+                key={item.href}
+                href={item.href}
+                data-nav={navKey(item.href)}
+                onClick={(e) => onNavClick(e, item.href)}
+                {...linkExtra}
+              >
+                {item.label}
+              </Comp>
+            ),
+          )}
         </nav>
         {extra}
         <ThemePicker />
