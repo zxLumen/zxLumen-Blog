@@ -6,7 +6,16 @@
 
 ### 新增
 
-- **首页服务器状态悬浮件 + 导航「监控」入口**:右上角新增**可拖动**的状态浮件(CPU / 内存 / 磁盘 / 负载 / 运行时长 / 站点在线 + **近 7 天 CPU 日均趋势**),悬停展开、移出收起(与访客统计一致);数据由新接口 `GET /api/status` 只读查询 Grafana Cloud(60s 缓存,失败自动隐藏);**所有悬浮件(访客统计 + 服务器状态)拖动后靠近视口边缘自动吸附**;顶栏导航在「留言板」下新增「监控」外链,直达 Node Exporter Full 面板
+- **AI 问答机器人「Lumen · 子祥的分身」**:右下角漂浮聊天组件,访客可用自己写过的文字向"分身"提问。
+  - **人格 / 知识库**:`persona.md`(第一人称人设,每问都注入)+ `faq.json`(引导问答)+ `knowledge/*.md`(站点知识)+ `corpus/`(蒸馏原料);服务端 mtime 热加载,改文件即生效。
+  - **多 provider**:DeepSeek / OpenAI / 智谱 GLM / 百炼 / Moonshot / 硅基流动 / OpenRouter / OpenCode Zen / 本地 Ollama / 自定义(OpenAI 兼容),配置存 `meta.chatbot_config`,密钥单独存 meta 且支持环境变量回退。
+  - **混合检索(RAG)**:FTS5 关键词 + embedding 余弦(支持 OpenAI 兼容与 Ollama 两类向量模型),未配置向量时自动降级纯关键词。
+  - **蒸馏流水线/admin**:`admin → 机器人` tab 可配对话/检索/限流,扫描 corpus 自动分类(人格素材 vs 事实知识)、把知识切块入向量库、调用 LLM 生成 `persona.md + faq.json`;对话日志按日统计 + 明细。
+  - **记录与限流**:对话落 `chat_logs`(含 MOCK 身份,口径同访客统计),每人每日提问上限、IP 限流只读接口公开配置 `GET /api/chat/config`(不含密钥)。
+  - 运行目录 `docker/site-content/chatbot/`(`npm run seed:chatbot` 生成骨架,部署随 site-content 挂载);文档见 `docs/CHATBOT.md`。
+
+- **首页服务器状态悬浮件 + 导航「监控」入口**:右上角新增**可拖动**的状态浮件(CPU / 内存 / 磁盘 / 负载 / 运行时长 / 站点在线 + **近 7 天 CPU 日均趋势**),悬停展开、移出收起(与访客统计一致);数据由新接口 `GET /api/status` 只读查询 Grafana Cloud(60s 缓存,失败时显示降级「状态异常」气泡、可展开看错误,不再自动隐藏);**所有悬浮件(访客统计 + 服务器状态)拖动后靠近视口边缘自动吸附**;顶栏导航在「留言板」下新增「监控」外链,直达 Node Exporter Full 面板
+- **悬浮件失败态可见**:服务器状态浮件在数据源不可用(token 缺失 / 网络失败等)时**不再整体消失**,改为显示红色降级气泡(「状态异常」,悬停可查看 `error` 文案),每 60s 自动重试;本地 dev 通过 `apps/next-home/.env.local`(已 gitignore)固定 `GRAFANA_READ_TOKEN`,避免裸 `npm run dev` 丢失 token
 - **本地 Grafana 查看面板**:新增 `grafana`(monitoring profile),数据源(Provisioning)指向 **Grafana Cloud 查询接口**(只读 token,不落地数据);由 Caddy 暴露 `grafana.<DOMAIN>`(basic_auth 保护,密码哈希经 `.env` 注入);自动导入 **Node Exporter Full** 与 **cAdvisor** 面板。这样日常看指标/日志在自有域名,存储/告警仍在 Grafana Cloud
 - **服务器监控(可观测性)**:本地采集 → Grafana Cloud + Sentry(EU)。`docker compose --profile monitoring`(默认不启)加载 `node-exporter` + **筛选版 cAdvisor** + `grafana/alloy`(抓主机/容器指标、抓应用 `/metrics`、采集 app/caddy 容器日志 → Mimir/Loki);新增应用 `GET /api/health`(供外部合成探测)与 `GET /api/metrics`(Prometheus 文本,`X-Metrics-Token` 保护,Caddy 对公网屏蔽);`onRequestError` 计数并可选上报 Sentry(`dataCollection` 关闭 PII、`tunnelRoute:/monitoring`);文档见 `docs/MONITORING.md`
 - **用量饼图交互**:`BY_MODEL` 甜甜圈由 `conic-gradient` 改为 SVG 扇区(每块一个元素);鼠标悬停某块时该块**以圆心为中心放大 1.08**(几何整体缩放),模型名/tokens/占比显示在**甜甜圈下方的固定行**里;悬停图例行同样放大对应扇区(双向联动)。单模型渲染整环,无数据显示占位环
@@ -25,6 +34,8 @@
 
 ### 变更
 
+- **用量面板 OpenCode 新增「服务账号」筛选**:官方导出新增解析 `service_account_name`(如 `bak_coding` / `bak_todo`),面板新增「全部服务账号」多选筛选(可当作 key 维度);聚合时保留该维度,不影响 provider/model
+- **用量面板 OpenCode 去掉「提供方」筛选**:opencode 源不再显示提供方筛选行(旧 cookie 里的选择一并忽略并清空),用量按**全部提供方合计**;DeepSeek / 智谱 的「全部 API Key」筛选保持不变
 - **用量面板 OpenCode workspace 改为单选**:点击某 workspace 只选中它,再点一次取消(回到「全部」);「全部 workspace」按钮清除选择;请求仍按所选 workspace 过滤
 - **内部解耦(第一阶段)**:统一用量区间类型——`@zx/shared` 新增导出 `RANGES`,`deepseek` 复用共享 `UsageRange` 并 re-export;`ui/admin` 面板改为相对 import(消除 `ui → root` 依赖边);根 barrel 补 `fmtUsd`;删除死代码(styles.css 沙盒段、AdminPanel 恒真的 `showTabs/showOc/showZhipu` 常量及 `!showTabs` 分支)
 - **内部解耦(第四阶段)**:`AdminPanel` 抽出 `admin/admin-types.ts`(共享状态类型 + `validTab` + `NotifyMsg`,消除两个已抽面板里重复的 `NotifyMsg`)与 `admin/VisitorDetailRow.tsx`(访客明细行);`UsageSection` 抽出 `usage/constants.ts` 与展示组件 `usage/QuotaPanels.tsx`(Go / 智谱配额)、`usage/UsageCharts.tsx`(趋势/占比图 + RECENT 明细表);`GuestbookSection` 抽出 `guestbook/{types,cookies,api}.ts`
