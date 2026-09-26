@@ -10,6 +10,7 @@ import { fetchUsage } from "@/lib/deepseek";
 import { getSourceAvailability } from "@/lib/usage-sources";
 import { getRuntimeContent } from "@zx/shared/server";
 import { getVisibleProjects } from "@/lib/projects-config";
+import { getVisibleVlogSeries, pickRandomVlogStart } from "@/lib/vlog-config";
 export const dynamic = "force-dynamic";
 
 /** 昵称 cookie 键:模拟访客时按身份分键(与 shared nickKey 规则一致) */
@@ -71,6 +72,11 @@ export default async function Home() {
   const projects = await getVisibleProjects();
   const content = await getRuntimeContent();
 
+  // 抖音旅行视频系列(admin 后台配置;未配置则 Hero 右侧回退显示主题 ASCII)
+  const vlogSeries = getVisibleVlogSeries();
+  // 每次进入首页随机选一个视频起播(服务端随机 → SSR 与 hydration 一致)
+  const vlogStart = pickRandomVlogStart(vlogSeries);
+
   return (
     <HomePage
       commentsPage={commentsPage}
@@ -88,6 +94,8 @@ export default async function Home() {
       links={content.LINKS}
       tech={content.TECH}
       timeline={content.TIMELINE}
+      vlogSeries={vlogSeries}
+      vlogStart={vlogStart}
     />
   );
 }

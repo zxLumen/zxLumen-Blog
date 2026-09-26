@@ -910,6 +910,279 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   animation-delay: 0.6s;
 }
 
+/* ---------- hero vlog(抖音短视频播放器) ---------- */
+
+.zx-vlog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.zx-vlog-tabs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.zx-vlog-tab {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  color: var(--fg-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.zx-vlog-tab:hover {
+  color: var(--fg);
+}
+
+.zx-vlog-tab.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--ascii-glow);
+}
+
+/* 轮播:多卡重叠,拖动跟手滑动切换 */
+.zx-vlog-carousel {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  touch-action: pan-y;
+  cursor: grab;
+  --card-w: min(300px, 78%);
+  --card-aspect: 0.4821;
+}
+
+.zx-vlog-carousel.is-dragging {
+  cursor: grabbing;
+}
+
+.zx-vlog-carousel.is-landscape {
+  --card-w: 100%;
+  /* 与 PC 播放器原生 740×451 一致 */
+  --card-aspect: 1.6408;
+}
+
+/* 视口:宽度取卡片宽,高度由 aspect-ratio 撑开(不依赖父高度) */
+.zx-vlog-viewport {
+  position: relative;
+  width: var(--card-w);
+  margin-inline: auto;
+  aspect-ratio: var(--card-aspect);
+}
+
+.zx-vlog-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  aspect-ratio: var(--card-aspect);
+  transform: translate(-50%, -50%) translateX(var(--dx, 0px)) scale(var(--sc, 1));
+  opacity: var(--op, 1);
+  z-index: var(--z, 1);
+  border: 1px solid var(--line);
+  border-left: var(--ascii-border-left);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  overflow: hidden;
+  box-shadow: var(--ascii-glow);
+  transition: transform 0.34s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.34s;
+  will-change: transform;
+}
+
+.zx-vlog-carousel.is-dragging .zx-vlog-card {
+  transition: none;
+}
+
+.zx-vlog-card.is-active {
+  box-shadow: var(--ascii-glow), 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.zx-vlog-ghost {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  color: var(--fg-dim);
+}
+
+.zx-vlog-ghost-n {
+  font-size: 1.8rem;
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+.zx-vlog-ghost-t {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  max-height: 6em;
+  overflow: hidden;
+}
+
+/* 相邻卡:显示真实画面(暂停的抖音帧),点击可切过去 */
+.zx-vlog-card:not(.is-active) {
+  cursor: pointer;
+}
+
+.zx-vlog-card:not(.is-active) .zx-vlog-iframe {
+  pointer-events: none;
+}
+
+.zx-vlog-card-badge {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.4rem;
+  z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0.18rem 0.42rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  color: var(--fg);
+  border: 1px solid var(--line);
+}
+
+.zx-vlog-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+  width: 2.3rem;
+  height: 2.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  color: var(--fg);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.zx-vlog-arrow:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.zx-vlog-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.zx-vlog-arrow.is-prev {
+  left: 0.35rem;
+}
+
+.zx-vlog-arrow.is-next {
+  right: 0.35rem;
+}
+
+/* 按抖音播放器原生尺寸渲染,再缩放贴合卡片(避免播放器固定 324×672 溢出被裁) */
+.zx-vlog-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--player-w, 100%);
+  height: var(--player-h, 100%);
+  transform: scale(var(--iframe-scale, 1));
+  transform-origin: top left;
+  border: 0;
+  display: block;
+}
+
+.zx-vlog-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: min(320px, 100%);
+  margin-inline: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--fg-dim);
+}
+
+.zx-vlog-now {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zx-vlog-count {
+  flex: none;
+  color: var(--accent);
+}
+
+.zx-vlog-episodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.zx-vlog-ep {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  min-width: 2ch;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.zx-vlog-ep:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+.zx-vlog-ep.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--bg-2);
+}
+
+/* 横屏:占满右栏、16:9;标题栏拉齐 */
+.zx-vlog.is-landscape .zx-vlog-meta {
+  width: 100%;
+}
+
+.zx-vlog-ep.is-landscape::after {
+  content: '▭';
+  margin-left: 0.25ch;
+  opacity: 0.7;
+}
+
+.zx-vlog-link {
+  align-self: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+[data-layout='centered'] .zx-hero .zx-vlog {
+  display: none;
+}
+
 /* ---------- 按钮 ---------- */
 
 .zx-btn {
@@ -3404,6 +3677,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   max-height: min(560px, 75vh);
   display: flex;
   flex-direction: column;
+  font-family: var(--font-mono);
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -3549,7 +3823,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 0.82rem;
+  font-size: 0.9375rem;
   flex: 1;
   min-height: 180px;
   scroll-behavior: smooth;
@@ -3580,14 +3854,13 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 .zxchat-chip {
-  font-size: 0.7rem;
+  font-size: 0.8125rem;
   padding: 4px 10px;
   border-radius: 999px;
   background: var(--bg-2);
   border: 1px dashed var(--line-strong);
   color: inherit;
   cursor: pointer;
-  opacity: 0.85;
 }
 
 .zxchat-chip:hover {
@@ -3618,7 +3891,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   border-radius: 8px;
   color: inherit;
   padding: 7px 10px;
-  font-size: 0.82rem;
+  font-size: 0.9375rem;
   outline: none;
 }
 
@@ -3700,7 +3973,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 .zxchat-hname {
   font-weight: 700;
-  font-size: 0.84rem;
+  font-size: 0.875rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3709,7 +3982,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.64rem;
+  font-size: 0.75rem;
   opacity: 0.65;
 }
 .zxchat-dot {
@@ -3947,4 +4220,66 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   border: 1.5px solid var(--accent);
   color: var(--accent);
   box-shadow: 0 8px 24px -14px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- 入口气泡(V5 卡片浮层;与窗口互斥;短暂停留) ---------- */
+.zxchat-teaser {
+  position: fixed;
+  z-index: 350;
+  transform: translateY(-50%);
+  max-width: 250px;
+  padding: 0.55rem 0.8rem 0.55rem 2.15rem;
+  font-family: var(--font-mono);
+  background: var(--bg-2);
+  color: inherit;
+  border: none;
+  border-radius: 16px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  cursor: pointer;
+  box-shadow: 0 20px 46px -20px rgba(0, 0, 0, 0.85);
+  animation: zxchat-teaser-in 0.24s ease-out;
+}
+.zxchat-teaser::before {
+  content: '刘';
+  position: absolute;
+  left: 0.55rem;
+  top: 0.5rem;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.zxchat-teaser::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  margin-top: -6px;
+  border: 6px solid transparent;
+  border-left-color: var(--bg-2);
+}
+.zxchat-teaser-right::after {
+  right: auto;
+  left: -6px;
+  border-left-color: transparent;
+  border-right-color: var(--bg-2);
+}
+.zxchat-teaser:hover {
+  box-shadow: 0 24px 54px -20px rgba(0, 0, 0, 0.9);
+}
+@keyframes zxchat-teaser-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
 }

@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ArchivedCommentRow, CommentRow, PagedComments, StatsResult } from '../schema.js'
+import type { ArchivedCommentRow, CommentRow, PagedComments, StatsResult, VlogSeries } from '../schema.js'
 import { fmtDateTime, fmtInt } from '../format.js'
 import { PROJECTS, type Project } from '../content.js'
 import { Pagination } from './Pagination.js'
 import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
+import { AdminVlogPanel } from './admin/AdminVlogPanel.js'
 import { AdminThemePanel } from './admin/AdminThemePanel.js'
 import { AdminChatbotPanel } from './admin/AdminChatbotPanel.js'
 import { VisitorDetailRow } from './admin/VisitorDetailRow.js'
@@ -37,8 +38,19 @@ const CONTACT_LABEL: Record<string, string> = {
   guestbook: '留言',
 }
 
-export function AdminPanel({ projects }: { projects?: Project[] }) {
+export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlogSeries?: VlogSeries[] }) {
   const projList = projects ?? PROJECTS
+  /** 视频ID → 「系列 · 集标题」,用于统计表展示 */
+  const vlogLabel = (vid: string): string => {
+    for (const s of vlogSeries ?? []) {
+      const idx = s.videos.findIndex((v) => v.vid === vid)
+      if (idx >= 0) {
+        const t = s.videos[idx].title?.trim() || `第 ${idx + 1} 集`
+        return `${s.name} · ${t}`
+      }
+    }
+    return vid
+  }
   const [ready, setReady] = useState(false)
   const [authed, setAuthed] = useState(false)
   /** 首屏因网络错误/超时未能判定登录态:不误判为「未登录」,改为可重试的错误页 */
@@ -681,7 +693,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
         <div className="zx-tabs is-inline">
-          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'themes', 'chatbot'] as const).map((t) => (
+          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'vlog', 'themes', 'chatbot'] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -698,11 +710,13 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
                       ? '个人信息'
                       : t === 'projects'
                         ? '项目'
-                        : t === 'themes'
-                          ? '外观'
-                          : t === 'chatbot'
-                            ? '机器人'
-                            : 'Token用量'}
+                        : t === 'vlog'
+                          ? '视频'
+                          : t === 'themes'
+                            ? '外观'
+                            : t === 'chatbot'
+                              ? '机器人'
+                              : 'Token用量'}
             </button>
           ))}
         </div>
@@ -715,6 +729,10 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
 
       {tab === 'projects' && (
         <AdminProjectsPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
+      )}
+
+      {tab === 'vlog' && (
+        <AdminVlogPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
       )}
 
       {tab === 'themes' && (
@@ -1367,6 +1385,34 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
                     .map(([t, count]) => (
                       <tr key={t}>
                         <td>{CONTACT_LABEL[t] ?? t}</td>
+                        <td className="num">{fmtInt(count)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="zx-panel">
+            <h3>
+              视频播放 <span>按次数</span>
+            </h3>
+            {Object.keys(stats.events.playsByVid ?? {}).length === 0 ? (
+              <div className="zx-c-empty">暂无播放</div>
+            ) : (
+              <table className="zx-table">
+                <thead>
+                  <tr>
+                    <th>视频</th>
+                    <th className="num">播放</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(stats.events.playsByVid ?? {})
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([vid, count]) => (
+                      <tr key={vid}>
+                        <td>{vlogLabel(vid)}</td>
                         <td className="num">{fmtInt(count)}</td>
                       </tr>
                     ))}

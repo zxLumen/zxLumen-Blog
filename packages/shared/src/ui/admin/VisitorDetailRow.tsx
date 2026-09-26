@@ -11,6 +11,7 @@ const EVENT_LABEL: Record<EventType, string> = {
   leave: '离开',
   section_view: '区块浏览',
   contact_click: '联系点击',
+  vlog_play: '视频播放',
 }
 
 function targetLabel(t: string, projects: Project[]) {

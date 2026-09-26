@@ -2,6 +2,7 @@
 
 import type { Contacts, LinkItem, Profile, Project, TechItem, TimelineEntry } from '../content.js'
 import type { CommentRow, PagedComments, StatsResult, UsageRow } from '../schema.js'
+import type { VlogSeries, VlogStart } from '../schema.js'
 import type { SourceAvailability, UsageSel } from '../usage-sel.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
@@ -37,6 +38,10 @@ interface HomePageProps {
   timeline?: TimelineEntry[]
   /** 项目(已合并 admin 覆盖;缺省用静态 PROJECTS) */
   projects?: Project[]
+  /** 抖音旅行短视频系列(admin 配置) */
+  vlogSeries?: VlogSeries[]
+  /** 首页随机起播点(服务端随机;缺省从第一个开始) */
+  vlogStart?: VlogStart | null
   onSubmitComment?: (input: NewComment) => Promise<CommentRow> | CommentRow
 }
 
@@ -58,6 +63,8 @@ export function HomePage({
   tech,
   timeline,
   projects,
+  vlogSeries,
+  vlogStart,
   onSubmitComment,
 }: HomePageProps) {
   return (
@@ -65,7 +72,7 @@ export function HomePage({
       <TrackBeacon path="/" />
       <StatsWidget stats={stats} />
       <StatusWidget />
-      <Hero profile={profile} />
+      <Hero profile={profile} vlogSeries={vlogSeries} vlogStart={vlogStart} />
       <ProjectsSection projects={projects} clicks={stats?.events.clicksByTarget} pv={stats?.visits.pv} />
       <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} availableSources={availableSources} />
       <AboutSection contacts={contacts} profile={profile} links={links} tech={tech} timeline={timeline} />

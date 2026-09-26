@@ -6,7 +6,7 @@ import { cidCookie, isMockActive, resolveCid } from '@/lib/clientid'
 
 export const dynamic = 'force-dynamic'
 
-const TYPES = new Set<EventType>(['visit', 'project_click', 'resume_download', 'leave', 'section_view', 'contact_click'])
+const TYPES = new Set<EventType>(['visit', 'project_click', 'resume_download', 'leave', 'section_view', 'contact_click', 'vlog_play'])
 /** 常见爬虫/扫描器 UA(beacon 为 JS 触发,这里再兜一层) */
 const BOT_RE =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora|pinterest|headless|python-requests|curl|wget|go-http-client|axios|node-fetch/i

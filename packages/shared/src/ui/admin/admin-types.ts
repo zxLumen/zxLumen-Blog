@@ -5,7 +5,7 @@ export interface NotifyMsg {
   text: string
 }
 
-export type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats' | 'projects' | 'themes' | 'chatbot'
+export type TabKey = 'comments' | 'archive' | 'profile' | 'token' | 'stats' | 'projects' | 'vlog' | 'themes' | 'chatbot'
 
 export const VALID_TABS: readonly TabKey[] = [
   'comments',
@@ -14,6 +14,7 @@ export const VALID_TABS: readonly TabKey[] = [
   'token',
   'stats',
   'projects',
+  'vlog',
   'themes',
   'chatbot',
 ]

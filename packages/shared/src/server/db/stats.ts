@@ -145,12 +145,23 @@ export function statsStore(db: SqliteDb): StatsStore {
       const contactsByTarget: Record<string, number> = {}
       for (const r of contactRows) contactsByTarget[r.target] = r.count
 
+      const playRows = db
+        .prepare(
+          `SELECT target, COUNT(*) AS count FROM events
+           WHERE type='vlog_play' AND target != '' GROUP BY target`,
+        )
+        .all() as { target: string; count: number }[]
+      const playsByVid: Record<string, number> = {}
+      for (const r of playRows) playsByVid[r.target] = r.count
+
       const events = {
         projectClicks: n(`SELECT COUNT(*) AS n FROM events WHERE type='project_click'`),
         resumeDownloads: n(`SELECT COUNT(*) AS n FROM events WHERE type='resume_download'`),
         clicksByTarget,
         contactClicks: n(`SELECT COUNT(*) AS n FROM events WHERE type='contact_click'`),
         contactsByTarget,
+        vlogPlays: n(`SELECT COUNT(*) AS n FROM events WHERE type='vlog_play'`),
+        playsByVid,
       }
 
       // ---- 访客访问详情(最近活跃的 30 位;仅 opts.visitors 时计算) ----

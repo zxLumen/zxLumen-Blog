@@ -174,7 +174,7 @@ export interface UsageRow {
 
 export type Visibility = 'public' | 'private'
 
-/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击) */
+/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击;vlog_play = 抖音视频播放) */
 export type EventType =
   | 'visit'
   | 'project_click'
@@ -182,6 +182,7 @@ export type EventType =
   | 'leave'
   | 'section_view'
   | 'contact_click'
+  | 'vlog_play'
 
 /** 联系方式点击的目标(email | wechat | phone | github | guestbook) */
 export type ContactTarget = 'email' | 'wechat' | 'phone' | 'github' | 'guestbook'
@@ -270,6 +271,10 @@ export interface StatsResult {
     contactClicks: number
     /** 各联系方式点击次数(email/wechat/phone/github/guestbook → count) */
     contactsByTarget: Record<string, number>
+    /** 抖音视频播放总次数 */
+    vlogPlays: number
+    /** 各视频播放次数(videoId → count) */
+    playsByVid: Record<string, number>
   }
   /** 访客访问详情(按最近活跃,仅站长接口) */
   visitors: VisitorDetail[]
@@ -353,4 +358,38 @@ export interface StoredProject {
   featured?: boolean
   /** true=在垃圾箱(首页不显示);缺省/false=正常 */
   deleted?: boolean
+}
+
+/** 抖音短视频(以抖音数字视频ID为唯一键,可选标题;无需下载,iframe 嵌入播放) */
+export interface StoredVlogVideo {
+  /** 抖音数字视频ID(来自 PC 端 douyin.com/video/<id>) */
+  vid: string
+  /** 可选标题;留空则前端显示「第 N 集」 */
+  title?: string
+  /** 画面方向:缺省=按视频宽高自动判断(宽>高为横屏) */
+  orientation?: 'portrait' | 'landscape'
+  /** 视频原始宽(官方接口返回,用于自动判断方向;无需手填) */
+  w?: number
+  /** 视频原始高 */
+  h?: number
+}
+
+/** 一个旅行系列(如「东北大环线」),内含按顺序播放的短视频 */
+export interface StoredVlogSeries {
+  id: string
+  name: string
+  videos: StoredVlogVideo[]
+  /** true=在垃圾箱(首页不显示);缺省/false=正常 */
+  deleted?: boolean
+}
+
+/** 展示用系列(去掉 deleted) */
+export type VlogSeries = Omit<StoredVlogSeries, 'deleted'>
+/** 展示用视频 */
+export type VlogVideo = StoredVlogVideo
+
+/** 首页首次播放的随机起点(服务端按每次请求随机,SSR/hydration 一致) */
+export interface VlogStart {
+  series: number
+  video: number
 }
