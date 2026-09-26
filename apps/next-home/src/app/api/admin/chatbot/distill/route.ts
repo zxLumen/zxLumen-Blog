@@ -1,6 +1,6 @@
 import { isAdmin } from '@/lib/auth'
 import { readJson } from '@/lib/db'
-import { clearKb, distillStatus, generatePersona, processCorpus } from '@/lib/chat/distill'
+import { clearKb, distillStatus, generatePersona, processCorpus, setKindOverride } from '@/lib/chat/distill'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,8 +14,12 @@ export async function GET() {
 }
 
 interface Body {
-  action?: 'process' | 'persona' | 'clear'
+  action?: 'process' | 'persona' | 'clear' | 'set-kind'
   force?: boolean
+  /** set-kind:corpus 相对路径 */
+  source?: string
+  /** set-kind:persona | knowledge | auto(恢复自动) */
+  kind?: 'persona' | 'knowledge' | 'auto'
 }
 
 export async function POST(req: Request) {
@@ -25,6 +29,16 @@ export async function POST(req: Request) {
   try {
     if (action === 'process') {
       const items = await processCorpus(!!body?.force)
+      return Response.json({ ok: true, action, items })
+    }
+    if (action === 'set-kind') {
+      const source = (body?.source ?? '').trim()
+      const kind = body?.kind
+      if (!source || (kind !== 'persona' && kind !== 'knowledge' && kind !== 'auto')) {
+        return Response.json({ ok: false, error: '参数无效' }, { status: 400 })
+      }
+      setKindOverride(source, kind)
+      const items = await processCorpus(true)
       return Response.json({ ok: true, action, items })
     }
     if (action === 'persona') {

@@ -16,6 +16,7 @@ export interface CorpusStatusItem {
   size: number
   sha: string
   kind: 'persona' | 'knowledge' | null
+  origin: 'override' | 'directive' | 'rule' | 'auto'
   status: 'pending' | 'processed' | 'error'
   error: string
   fromDb: boolean
@@ -67,20 +68,98 @@ export async function classifyText(cfg: ChatBotConfig, name: string, text: strin
     model: cfg.chatModel,
     messages: [{ role: 'user', content: prompt }],
     temperature: 0,
-    maxTokens: 200,
+    maxTokens: 1000,
+    provider: cfg.chatProvider,
+    sessionId: `distill:classify:${name}`,
   })
   const m = raw.match(/\{[\s\S]*?\}/)
-  if (!m) throw new Error('LLM 未返回 JSON')
+  if (!m) throw new Error('LLM 未返回 JSON(可能被 max_tokens 截断;推理模型请加大预算)')
   const j = JSON.parse(m[0]) as { kind?: string; title?: string; note?: string }
   const kind = j.kind === 'knowledge' ? 'knowledge' : 'persona'
   return { kind, title: j.title || name, note: j.note || '' }
+}
+
+/* ---------- 类别判定优先级:手动覆盖 > 文件头指令 > 文件名/目录规则 > LLM ---------- */
+
+export type CorpusKind = 'persona' | 'knowledge'
+export type KindOrigin = 'override' | 'directive' | 'rule' | 'auto'
+
+const K_OVERRIDES = 'chatbot_kind_overrides'
+
+/** 手动类别覆盖(source 相对路径 → 类别);空串等非法值忽略 */
+export function getKindOverrides(): Record<string, CorpusKind> {
+  const raw = getDb().getMeta(K_OVERRIDES)
+  if (!raw) return {}
+  try {
+    const j = JSON.parse(raw) as Record<string, unknown>
+    const out: Record<string, CorpusKind> = {}
+    for (const [k, v] of Object.entries(j)) if (v === 'persona' || v === 'knowledge') out[k] = v
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/** 设置/清除手动覆盖(kind='auto' 表示恢复自动) */
+export function setKindOverride(source: string, kind: CorpusKind | 'auto'): void {
+  const db = getDb()
+  const cur = getKindOverrides()
+  if (kind === 'auto') delete cur[source]
+  else cur[source] = kind
+  if (Object.keys(cur).length) db.setMeta(K_OVERRIDES, JSON.stringify(cur))
+  else db.delMeta(K_OVERRIDES)
+}
+
+/** 文件头指令:前 500 字里 `<!-- kind: knowledge -->` 或独占一行 `kind: persona` */
+function kindFromDirective(text: string): CorpusKind | null {
+  const head = text.slice(0, 500)
+  const m =
+    head.match(/<!--\s*kind:\s*(persona|knowledge)\s*-->/i) ??
+    head.match(/^[ \t>*-]*kind:\s*(persona|knowledge)\s*$/im)
+  return m ? (m[1].toLowerCase() as CorpusKind) : null
+}
+
+const KNOWLEDGE_HINTS = ['site-content', 'content', 'knowledge', 'api', 'docs', 'faq', '技术']
+const PERSONA_HINTS = ['about-me', 'about_me', 'aboutme', 'resume', 'persona', 'self-intro', '自述', '随笔']
+
+/** 文件名/目录规则(确定性) */
+export function kindFromName(name: string, rel: string): CorpusKind | null {
+  const n = name.toLowerCase()
+  const r = rel.toLowerCase().replace(/\\/g, '/')
+  if (r.includes('corpus/knowledge/')) return 'knowledge'
+  if (r.includes('corpus/persona/')) return 'persona'
+  if (KNOWLEDGE_HINTS.some((h) => n.includes(h))) return 'knowledge'
+  if (PERSONA_HINTS.some((h) => n.includes(h))) return 'persona'
+  return null
+}
+
+/** 不含 LLM 的来源判定(用于显示已在库的文件) */
+export function originOf(rel: string, name: string, text: string): KindOrigin {
+  if (getKindOverrides()[rel]) return 'override'
+  if (kindFromDirective(text)) return 'directive'
+  if (kindFromName(name, rel)) return 'rule'
+  return 'auto'
+}
+
+/** 综合判定:命中确定性规则即不调用 LLM */
+async function determineKind(
+  cfg: ChatBotConfig,
+  file: { name: string; rel: string; text: string },
+): Promise<{ kind: CorpusKind; title: string; origin: KindOrigin }> {
+  const ov = getKindOverrides()[file.rel]
+  if (ov) return { kind: ov, title: file.name.replace(/\.[^.]+$/, ''), origin: 'override' }
+  const dir = kindFromDirective(file.text)
+  if (dir) return { kind: dir, title: file.name.replace(/\.[^.]+$/, ''), origin: 'directive' }
+  const rule = kindFromName(file.name, file.rel)
+  if (rule) return { kind: rule, title: file.name.replace(/\.[^.]+$/, ''), origin: 'rule' }
+  const cls = await classifyText(cfg, file.name, file.text)
+  return { kind: cls.kind, title: cls.title, origin: 'auto' }
 }
 
 /** 组装一个知识库源文件的全部 chunk 文本 */
 export function chunksOf(text: string, cfg: ChatBotConfig): string[] {
   return chunkText(text, cfg.chunkSize || 500, cfg.chunkOverlap || 75)
 }
-
 /** 把知识片段写入 kb_chunks(向量可选:embedding 未配置时只存文本,关键词可用) */
 export async function indexChunks(
   cfg: ChatBotConfig,
@@ -133,6 +212,7 @@ export async function processCorpus(force = false): Promise<CorpusStatusItem[]> 
       size: file.text.length,
       sha: file.sha,
       kind: doc?.status === 'error' ? null : (doc?.kind as 'persona' | 'knowledge' | undefined) ?? null,
+      origin: originOf(file.rel, file.name, file.text),
       status: doc?.error ? 'error' : done ? 'processed' : 'pending',
       error: doc?.error ?? '',
       fromDb: !!doc,
@@ -142,8 +222,9 @@ export async function processCorpus(force = false): Promise<CorpusStatusItem[]> 
       continue
     }
     try {
-      const cls = await classifyText(cfg, file.name, file.text)
+      const cls = await determineKind(cfg, file)
       base.kind = cls.kind
+      base.origin = cls.origin
       const docId = db.upsertKbDoc({
         source: file.rel,
         kind: cls.kind,
@@ -159,7 +240,7 @@ export async function processCorpus(force = false): Promise<CorpusStatusItem[]> 
       }
       base.status = 'processed'
       base.error = ''
-      db.setMeta('chatbot_last_distill', `[${new Date().toISOString()}] ${file.name} → ${cls.kind}`)
+      db.setMeta('chatbot_last_distill', `[${new Date().toISOString()}] ${file.name} → ${cls.kind} (${cls.origin})`)
     } catch (e) {
       db.upsertKbDoc({
         source: file.rel,
@@ -222,7 +303,9 @@ export async function generatePersona(): Promise<{ persona: boolean; faq: number
       model: cfg.chatModel,
       messages: [{ role: 'user', content: personaPrompt }],
       temperature: 0.7,
-      maxTokens: 1500,
+      maxTokens: 3000,
+      provider: cfg.chatProvider,
+      sessionId: 'distill:persona',
     }),
     completeChat({
       protocol: chatProtocol(),
@@ -231,7 +314,9 @@ export async function generatePersona(): Promise<{ persona: boolean; faq: number
       model: cfg.chatModel,
       messages: [{ role: 'user', content: faqPrompt }],
       temperature: 0.3,
-      maxTokens: 600,
+      maxTokens: 1200,
+      provider: cfg.chatProvider,
+      sessionId: 'distill:faq',
     }),
   ])
 
@@ -268,10 +353,12 @@ export async function distillStatus() {
         size: f.text.length,
         sha: f.sha,
         kind: d?.kind ?? null,
+        origin: originOf(f.rel, f.name, f.text),
         status: d?.status ?? 'pending',
         error: d?.error ?? '',
       }
     }),
+    kindOverrides: getKindOverrides(),
     docs: db.listKbDocs().map((d) => ({ source: d.source, kind: d.kind, status: d.status, size: d.size, error: d.error, sha: d.sha })),
     chunkCount: db.countKbChunks(),
     hasPersona: !!soul.persona,

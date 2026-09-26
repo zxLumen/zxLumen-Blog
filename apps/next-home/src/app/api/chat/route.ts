@@ -91,6 +91,8 @@ export async function POST(req: Request) {
             temperature: cfg.temperature,
             maxTokens: cfg.maxTokens,
             signal: ac.signal,
+            provider: cfg.chatProvider,
+            sessionId,
           },
           (d) => {
             streamedText += d
@@ -101,6 +103,15 @@ export async function POST(req: Request) {
             }
           },
         )
+        if (!streamedText.trim()) {
+          const hint =
+            r.finishReason === 'length'
+              ? '模型输出被 max_tokens 截断(推理模型会先消耗思维链),请在 admin 把「最大输出」调大(建议 4096+)'
+              : r.reasoningLen
+                ? '模型只返回了思考、没有正式回答(推理模型),请重试或换用非推理模型'
+                : '模型没有返回任何内容,请重试'
+          throw new Error(hint)
+        }
         db.addChatLog({
           session_id: sessionId,
           cid,
@@ -112,23 +123,22 @@ export async function POST(req: Request) {
           out_tokens: r.outTokens ?? 0,
           latency_ms: Date.now() - started,
         })
+        setLastError('')
         rcc.close()
       } catch (e) {
         const msg = String(e).slice(0, 300)
         setLastError(msg)
-        if (streamedText) {
-          db.addChatLog({
-            session_id: sessionId,
-            cid,
-            role: 'assistant',
-            content: streamedText,
-            provider: cfg.chatProvider,
-            model: cfg.chatModel,
-            in_tokens: 0,
-            out_tokens: 0,
-            latency_ms: Date.now() - started,
-          })
-        }
+        db.addChatLog({
+          session_id: sessionId,
+          cid,
+          role: 'assistant',
+          content: streamedText || `[模型出错了] ${msg}`,
+          provider: cfg.chatProvider,
+          model: cfg.chatModel,
+          in_tokens: 0,
+          out_tokens: 0,
+          latency_ms: Date.now() - started,
+        })
         try {
           rcc.enqueue(
             encoder.encode(

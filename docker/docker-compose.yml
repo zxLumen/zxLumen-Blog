@@ -13,10 +13,15 @@ services:
       NODE_ENV: production
       # 运行时站点内容(hot reload:mtime 变更即生效,无需重启/重建)
       CONTENT_FILE: /srv/site/content.json
+      # 机器人目录(corpus/persona/faq/knowledge);不设则应用找不到、蒸馏失效
+      CHATBOT_DIR: /srv/site/chatbot
     volumes:
       - zx-data:/data
       # 站点内容 + 简历 PDF / 二维码(不入镜像,由 Caddy 静态服务)
       - ./site-content:/srv/site:ro
+      # 机器人目录需可写(蒸馏生成 persona.md/faq.json);更具体的挂载覆盖上面的 :ro
+      # 注意:宿主机该目录须对容器内用户(uid 10001)可写,见 docs/CHATBOT.md「部署」
+      - ./site-content/chatbot:/srv/site/chatbot
     expose:
       - "3000"
     networks:

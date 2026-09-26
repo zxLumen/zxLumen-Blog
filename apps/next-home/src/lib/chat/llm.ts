@@ -1,5 +1,8 @@
 // LLM / embedding 客户端:openai 兼容 + ollama 两种协议,纯 fetch 流式(无 SDK 依赖)。
+import { randomUUID } from 'node:crypto'
+
 const DEFAULT_TIMEOUT = 60_000
+const UA = 'zx-home-chatbot/1.0 (+https://zxlumen.cn)'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -15,6 +18,10 @@ export interface StreamChatOpts {
   temperature?: number
   maxTokens?: number
   signal?: AbortSignal
+  /** provider 预设 id(用于识别 OpenCode Go 等需特殊头的服务) */
+  provider?: string
+  /** 会话 id:OpenCode Go 需 `x-opencode-session` 做路由与 prompt 缓存 */
+  sessionId?: string
 }
 
 export interface StreamChatResult {
@@ -22,21 +29,35 @@ export interface StreamChatResult {
   /** 供应商回传的用量(带 include_usage 时);缺省为 undefined */
   inTokens?: number
   outTokens?: number
+  /** 结束原因:'stop' | 'length' 等(截断时为 'length') */
+  finishReason?: string
+  /** 推理模型思维链字符数(仅用于诊断;不计入 text) */
+  reasoningLen?: number
 }
 
 function ensureUrl(base: string): string {
   return base.replace(/\/+$/, '')
 }
 
-/** OpenAI 兼容协议(DeepSeek / OpenAI / 智谱 / 百炼 / 硅基 / OpenRouter / OpenCode Zen) */
+/** OpenCode Go 需自定义 UA + 稳定的会话头;其它 OpenAI 兼容端点不需要 */
+function isOpenCodeGo(opts: StreamChatOpts): boolean {
+  return opts.provider === 'opencode-z' || /opencode\.ai\/zen\/go/.test(opts.baseUrl)
+}
+
+/** OpenAI 兼容协议(DeepSeek / OpenAI / 智谱 / 百炼 / 硅基 / OpenRouter / OpenCode Go) */
 async function streamOpenAi(opts: StreamChatOpts, onToken: (d: string) => void): Promise<StreamChatResult> {
   const url = `${ensureUrl(opts.baseUrl)}/chat/completions`
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${opts.apiKey}`,
+  }
+  if (isOpenCodeGo(opts)) {
+    headers['x-opencode-session'] = opts.sessionId || randomUUID()
+    headers['User-Agent'] = UA
+  }
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${opts.apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model: opts.model,
       messages: opts.messages,
@@ -60,6 +81,8 @@ async function consumeSse(res: Response, onToken: (d: string) => void): Promise<
   const decoder = new TextDecoder()
   let buf = ''
   let text = ''
+  let reasoningLen = 0
+  let finishReason: string | undefined
   let inTokens: number | undefined
   let outTokens: number | undefined
 
@@ -70,14 +93,18 @@ async function consumeSse(res: Response, onToken: (d: string) => void): Promise<
     if (data === '[DONE]') return
     try {
       const j = JSON.parse(data) as {
-        choices?: Array<{ delta?: { content?: string | null } }>
+        choices?: Array<{ delta?: { content?: string | null; reasoning_content?: string | null }; finish_reason?: string | null }>
         usage?: { prompt_tokens?: number; completion_tokens?: number } | null
       }
-      const delta = j.choices?.[0]?.delta?.content
+      const ch = j.choices?.[0]
+      const delta = ch?.delta?.content
       if (delta) {
         text += delta
         onToken(delta)
       }
+      // 推理模型的思维链:不计入正文,只统计长度用于诊断
+      if (ch?.delta?.reasoning_content) reasoningLen += ch.delta.reasoning_content.length
+      if (ch?.finish_reason) finishReason = ch.finish_reason
       if (j.usage) {
         inTokens = j.usage.prompt_tokens
         outTokens = j.usage.completion_tokens
@@ -99,7 +126,7 @@ async function consumeSse(res: Response, onToken: (d: string) => void): Promise<
     }
   }
   if (buf.trim()) handleLine(buf)
-  return { text, inTokens, outTokens }
+  return { text, inTokens, outTokens, finishReason, reasoningLen }
 }
 
 /** Ollama 原生 /api/chat 流(NDJSON) */

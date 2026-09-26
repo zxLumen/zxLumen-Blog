@@ -17,6 +17,8 @@ interface BotConfig {
   enabled: boolean
   name: string
   greeting: string
+  greetings: string[]
+  autoOpen: boolean
   suggestions: string[]
   chatProvider: string
   chatBaseUrl: string
@@ -48,6 +50,7 @@ interface CorpusItem {
   name: string
   rel: string
   kind: 'persona' | 'knowledge' | null
+  origin: 'override' | 'directive' | 'rule' | 'auto'
   status: string
   error: string
 }
@@ -64,6 +67,7 @@ interface KbDoc {
 interface DistillStatus {
   corpus: CorpusItem[]
   docs: KbDoc[]
+  kindOverrides: Record<string, 'persona' | 'knowledge'>
   chunkCount: number
   hasPersona: boolean
   faqCount: number
@@ -86,6 +90,9 @@ interface LogRow {
 function gate(showTabs: boolean, tab: string): boolean {
   return showTabs && tab === 'chatbot'
 }
+
+/** 类别判定来源的展示文案 */
+const ORIGIN_TEXT: Record<string, string> = { override: '手动', directive: '指令', rule: '规则', auto: 'AI' }
 
 const num = (s: string, fallback: number) => {
   const n = Number(s)
@@ -116,7 +123,7 @@ export function AdminChatbotPanel({
   const [saving, setSaving] = useState(false)
 
   const [distill, setDistill] = useState<DistillStatus | null>(null)
-  const [dBusy, setDBusy] = useState<'process' | 'persona' | 'clear' | ''>('')
+  const [dBusy, setDBusy] = useState<'process' | 'persona' | 'clear' | 'kind' | ''>('')
   const [force, setForce] = useState(false)
 
   const [logs, setLogs] = useState<LogRow[]>([])
@@ -286,6 +293,26 @@ export function AdminChatbotPanel({
     }
   }
 
+  const setKind = async (source: string, kind: 'persona' | 'knowledge' | 'auto') => {
+    setDBusy('kind')
+    try {
+      const r = await fetch('/api/admin/chatbot/distill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action: 'set-kind', source, kind }),
+      })
+      const d = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean }
+      if (!r.ok || !d.ok) throw new Error(d.error || '设置失败')
+      await loadDistill()
+      notify('ok', kind === 'auto' ? '已恢复自动分类' : `已设为${kind === 'persona' ? '人格' : '知识'}并重新入库`)
+    } catch (e) {
+      notify('err', e instanceof Error ? e.message : '设置失败')
+    } finally {
+      setDBusy('')
+    }
+  }
+
   const clearLogs = async () => {
     if (!confirm('清空全部对话日志?')) return
     const r = await fetch('/api/admin/chatbot/logs', { method: 'DELETE', credentials: 'same-origin' })
@@ -319,6 +346,10 @@ export function AdminChatbotPanel({
           <label className="zx-check">
             <input type="checkbox" checked={cfg.enabled} onChange={(e) => set('enabled', e.target.checked)} />
             <span>启用机器人</span>
+          </label>
+          <label className="zx-check">
+            <input type="checkbox" checked={cfg.autoOpen} onChange={(e) => set('autoOpen', e.target.checked)} />
+            <span>进入页面自动弹出</span>
           </label>
           <input className="zx-input" style={{ maxWidth: 200 }} placeholder="名字(Lumen · 子祥的分身)" value={cfg.name} onChange={(e) => set('name', e.target.value)} />
           <input className="zx-input" style={{ maxWidth: 120 }} placeholder="每日上限" value={cfg.dailyCap} onChange={(e) => set('dailyCap', num(e.target.value, 0))} />
@@ -360,7 +391,7 @@ export function AdminChatbotPanel({
             温度
             <input className="zx-input" style={{ maxWidth: 80 }} type="number" step="0.1" min="0" max="2" value={cfg.temperature} onChange={(e) => set('temperature', num(e.target.value, 0.7))} />
           </label>
-          <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="单次回复最大长度(tokens)">
+          <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="单次回复最大长度(tokens,含推理模型思维链)。推理模型建议 ≥4096,否则思维链可能吃满导致空回答。">
             最大输出
             <input className="zx-input" style={{ maxWidth: 100 }} type="number" value={cfg.maxTokens} onChange={(e) => set('maxTokens', num(e.target.value, 1024))} />
           </label>
@@ -370,7 +401,7 @@ export function AdminChatbotPanel({
             placeholder={cfg.chatApiKey ? `已配置 ${cfg.chatApiKey}(留空不改)` : '聊天 API Key'} value={chatKey} onChange={(e) => setChatKey(e.target.value)} autoComplete="off" />
           <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>回退环境变量 CHATBOT_API_KEY;Key 仅存服务器</span>
         </div>
-        <textarea className="zx-input zx-textarea" style={{ marginTop: '0.6rem' }} rows={3} placeholder="开场问候语" value={cfg.greeting} onChange={(e) => set('greeting', e.target.value)} />
+        <textarea className="zx-input zx-textarea" style={{ marginTop: '0.6rem' }} rows={4} placeholder="问候语(每行一条,进入页面随机取一条)" value={(cfg.greetings ?? []).join('\n')} onChange={(e) => set('greetings', e.target.value.split(/[\n、]/).map((s) => s.trim()).filter(Boolean))} />
         <textarea className="zx-input zx-textarea" style={{ marginTop: '0.4rem' }} rows={2} placeholder="建议问题(逗号/换行分隔)" value={(cfg.suggestions ?? []).join('、')} onChange={(e) => set('suggestions', e.target.value.split(/[、\n]/).map((s) => s.trim()).filter(Boolean))} />
         <textarea className="zx-input zx-textarea" style={{ marginTop: '0.4rem' }} rows={2} placeholder="额外人格指令(可选,追加到 system prompt)" value={cfg.promptExtra} onChange={(e) => set('promptExtra', e.target.value)} />
       </div>
@@ -448,7 +479,23 @@ export function AdminChatbotPanel({
                   {distill.corpus.map((c) => (
                     <tr key={c.rel}>
                       <td className="zx-mono">{c.name}</td>
-                      <td>{c.kind ?? '?'}{c.kind === null ? '(蒸馏后定)' : c.kind === 'persona' ? '人格' : '知识'}</td>
+                      <td>
+                        <select
+                          className="zx-input"
+                          style={{ maxWidth: 100, fontSize: '0.72rem' }}
+                          disabled={!!dBusy}
+                          value={distill.kindOverrides?.[c.rel] ?? 'auto'}
+                          onChange={(e) => void setKind(c.rel, e.target.value as 'persona' | 'knowledge' | 'auto')}
+                        >
+                          <option value="auto">自动</option>
+                          <option value="persona">人格</option>
+                          <option value="knowledge">知识</option>
+                        </select>
+                        <span className="zx-muted zx-mono" style={{ fontSize: '0.62rem', marginLeft: '0.35rem' }}>
+                          {c.kind === null ? '?' : c.kind === 'persona' ? '→ 人格' : '→ 知识'}
+                          {c.origin ? ` · ${ORIGIN_TEXT[c.origin] ?? c.origin}` : ''}
+                        </span>
+                      </td>
                       <td>
                         {c.status === 'processed' ? '✓' : c.status === 'error' ? <span className="zx-msg err">{c.error}</span> : '待处理'}
                       </td>

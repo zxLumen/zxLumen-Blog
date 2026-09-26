@@ -19,7 +19,12 @@ const K_ERR = 'chatbot_last_error'
 export interface ChatBotConfig {
   enabled: boolean
   name: string
+  /** @deprecated 兼容旧单条;实际展示用 greetings(随机取一条) */
   greeting: string
+  /** 多条问候语,进入页面随机取一条 */
+  greetings: string[]
+  /** 进入页面自动弹出问候语 */
+  autoOpen: boolean
   suggestions: string[]
   /** 聊天 provider 预设 id(custom = 自定义 OpenAI 兼容端点) */
   chatProvider: string
@@ -47,12 +52,22 @@ export const DEFAULT_CONFIG: ChatBotConfig = {
   enabled: false,
   name: 'Lumen · 子祥的分身',
   greeting: '你好,我是刘子祥的 AI 分身。关于他、他的项目、职业与技术,都可以问我。',
+  greetings: [
+    '你好,我是刘子祥的 AI 分身。关于他、他的项目、职业与技术,都可以问我。',
+    '嗨,想了解子祥点什么?经历、项目、技术栈,我都能聊。',
+    '我是子祥的分身,替他在这儿待命,有什么想问的尽管说。',
+    '你好呀。子祥的简历、项目、技术方向,或者这个网站本身,都可以问我。',
+    '想认识一下子祥?从工作经历到项目细节,问我准没错。',
+    '来了?我是子祥的 AI 分身,他的事我基本都知道。',
+  ],
+  autoOpen: true,
   suggestions: ['介绍一下你自己', '他都做过哪些项目？', '这个网站的 Token 用量怎么看？'],
   chatProvider: 'deepseek',
   chatBaseUrl: '',
   chatModel: '',
   temperature: 0.7,
-  maxTokens: 1024,
+  /** 单次回复上限(含推理模型思维链);推理模型建议 ≥4096 */
+  maxTokens: 4096,
   embedProvider: 'zhipuai',
   embedBaseUrl: '',
   embedModel: 'embedding-3',
@@ -65,22 +80,43 @@ export const DEFAULT_CONFIG: ChatBotConfig = {
   promptExtra: '',
 }
 
+const cleanList = (v: unknown): string[] =>
+  Array.isArray(v) ? v.map((s) => String(s).trim()).filter(Boolean) : []
+
+/** 归一化:迁移旧单条 greeting,补默认,清洗数组 */
+function normalize(cfg: ChatBotConfig): ChatBotConfig {
+  const greetings = cleanList(cfg.greetings)
+  if (greetings.length === 0) greetings.push(...(cfg.greeting ? [cfg.greeting] : DEFAULT_CONFIG.greetings))
+  return {
+    ...cfg,
+    greetings,
+    greeting: greetings[0] ?? '',
+    suggestions: cleanList(cfg.suggestions),
+    autoOpen: typeof cfg.autoOpen === 'boolean' ? cfg.autoOpen : DEFAULT_CONFIG.autoOpen,
+  }
+}
+
 export function getConfig(): ChatBotConfig {
   const db = getDb()
   const raw = db.getMeta(K_CFG)
-  if (!raw) return { ...DEFAULT_CONFIG }
+  if (!raw) return normalize({ ...DEFAULT_CONFIG })
   try {
     const p = JSON.parse(raw) as Partial<ChatBotConfig>
-    return { ...DEFAULT_CONFIG, ...p }
+    return normalize({ ...DEFAULT_CONFIG, ...p })
   } catch {
-    return { ...DEFAULT_CONFIG }
+    return normalize({ ...DEFAULT_CONFIG })
   }
 }
 
 export function saveConfig(partial: Partial<ChatBotConfig>): ChatBotConfig {
   const db = getDb()
   const cur = getConfig()
-  const next: ChatBotConfig = { ...cur, ...partial, suggestions: Array.isArray(partial.suggestions) ? partial.suggestions : cur.suggestions }
+  const next = normalize({
+    ...cur,
+    ...partial,
+    suggestions: Array.isArray(partial.suggestions) ? partial.suggestions : cur.suggestions,
+    greetings: Array.isArray(partial.greetings) ? partial.greetings : cur.greetings,
+  })
   // 预设 provider:自动同步 baseUrl(未显式覆盖);自定义则保留用户填的端点
   if (!partial.chatBaseUrl || partial.chatBaseUrl === '') {
     const p = getProvider(next.chatProvider)
