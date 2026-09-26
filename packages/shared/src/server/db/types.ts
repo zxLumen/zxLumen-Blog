@@ -74,6 +74,8 @@ export interface Db {
   getMeta(key: string): string | null
   setMeta(key: string, value: string): void
   delMeta(key: string): void
+  /** 元键列表(按字面前缀,用于「按前缀找回历史键」,如 opencode 快照) */
+  listMetaKeys(prefix: string): string[]
 
   // 问答机器人
   addChatLog(input: NewChatLogInput): ChatLogRow
@@ -137,7 +139,7 @@ export type CommentStore = Pick<
 export type UsageStore = Pick<Db, 'listUsage' | 'allUsage' | 'addUsage'>
 export type EventStore = Pick<Db, 'addEvent'>
 export type StatsStore = Pick<Db, 'stats'>
-export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta'>
+export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta' | 'listMetaKeys'>
 export type ChatStore = Pick<Db, 'addChatLog' | 'listChatLogs' | 'countChatByCidDay' | 'chatDayCounts' | 'deleteAllChatLogs'>
 export type KbStore = Pick<
   Db,

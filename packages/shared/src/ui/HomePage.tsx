@@ -2,7 +2,7 @@
 
 import type { Contacts, LinkItem, Profile, Project, TechItem, TimelineEntry } from '../content.js'
 import type { CommentRow, PagedComments, StatsResult, UsageRow } from '../schema.js'
-import type { DataSource, UsageSel } from '../usage-sel.js'
+import type { SourceAvailability, UsageSel } from '../usage-sel.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
 import { UsageSection } from './UsageSection.js'
@@ -21,7 +21,7 @@ interface HomePageProps {
   /** 用量区块存档(cookie 下发,用于 SSR 首帧渲染正确筛选) */
   initialSel?: UsageSel
   /** 各数据源可用性(SSR 计算;隐藏未配置/无数据的源) */
-  availableSources?: Partial<Record<DataSource, boolean>>
+  availableSources?: SourceAvailability
   isAdmin?: boolean
   apiBase?: string
   initialAuthor?: string

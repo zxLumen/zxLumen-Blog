@@ -11,6 +11,9 @@ import {
   fetchGoQuotaWs,
   getWorkspaces,
   getLastData,
+  getAnySnapshot,
+  getHourlyRows,
+  ensureHourlyScheduler,
   getLastError as ocLastError,
   type GoQuota,
   type OcWorkspace,
@@ -86,6 +89,9 @@ const isIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
 
 /** OpenCode 数据源:官方 Console 导出,多 workspace 合并;今天/昨天按小时,其余按天 */
 async function opencodeUsage(range: UsageRange, start?: string, end?: string, wsParam?: string) {
+  // 启动自建小时采样(仅注册一次;不影响本次请求)
+  ensureHourlyScheduler()
+
   const filter =
     range === 'custom'
       ? {
@@ -181,17 +187,30 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
   }
 
   // 全部失败:回退各 ws 快照
+  const wantHour = range === 'today' || range === 'yesterday'
   const snaps: Array<{ ws: OcWorkspace; data: PlatformUsageOpenCode }> = []
   for (const ws of selected) {
     const raw = await getLastData(ws.id)
     if (!raw) continue
     try {
-      const snap = JSON.parse(raw) as { rows?: UsageRow[] }
+      const snap = JSON.parse(raw) as { rows?: UsageRow[]; grain?: 'hour' | 'day' }
       if (Array.isArray(snap.rows) && snap.rows.length) {
-        snaps.push({ ws, data: filterUsageOpenCode(snap.rows, range, filter) })
+        const hourly = wantHour ? await getHourlyRows(ws.id) : undefined
+        snaps.push({ ws, data: filterUsageOpenCode(snap.rows, range, filter, { grain: snap.grain, hourly }) })
       }
     } catch {
       /* ignore */
+    }
+  }
+  // 当前 workspace 一个快照都没有(列表被改过 / 换过 id):回落到任意 ws 的上次成功快照
+  let orphanNote = ''
+  if (snaps.length === 0) {
+    const any = await getAnySnapshot()
+    if (any) {
+      const ws = selected[0] ?? all[0]
+      const hourly = wantHour ? await getHourlyRows(ws.id) : undefined
+      snaps.push({ ws, data: filterUsageOpenCode(any.rows, range, filter, { grain: any.grain, hourly }) })
+      orphanNote = '(显示的是其它 workspace 的上次成功快照)'
     }
   }
   if (snaps.length > 0) {
@@ -199,7 +218,7 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
     const first = parts.find((p) => !p.ok) as Extract<(typeof parts)[number], { ok: false }> | undefined
     const error = first ? (first.err instanceof Error ? first.err.message : String(first.err)) : '拉取失败'
     return send(merged, 'stale', Date.now(), {
-      lastError: error,
+      lastError: error + orphanNote,
       goQuotas: goQuotas.length ? goQuotas : undefined,
     })
   }

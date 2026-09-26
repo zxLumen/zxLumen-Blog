@@ -7,6 +7,17 @@ export const RANGES = ['today', 'yesterday', '7d', '30d', 'month', 'lastmonth', 
 export const DATA_SOURCES = ['deepseek', 'opencode', 'zhipu'] as const
 export type DataSource = (typeof DATA_SOURCES)[number]
 
+/**
+ * 各数据源可用性(已配置 + 近 30 天有数据,**含快照回退**)。
+ * `errors` 只用于 UI 角标提示(例如密钥失效),不影响 tab 是否显示。
+ */
+export interface SourceAvailability {
+  deepseek?: boolean
+  opencode?: boolean
+  zhipu?: boolean
+  errors?: Partial<Record<DataSource, string>>
+}
+
 /** 时间区间 + 自定义日期(按数据源各自保存) */
 export type RangeSel = {
   range: Range

@@ -2,7 +2,7 @@ import type { UsageRow } from '@zx/shared'
 import { getDb } from './db'
 import { windowOf, type UsageRange } from './usage/range'
 import { makeTtlCache } from './usage/cache'
-import { usageError } from './usage/errors'
+import { errorCode, usageError } from './usage/errors'
 import type { PlatformUsageBase } from './usage/types'
 
 /**
@@ -38,6 +38,32 @@ export const getLastError = async () => (await getDb()).getMeta(K_ERR) ?? ''
 export const setLastError = async (e: string) => (await getDb()).setMeta(K_ERR, e)
 export const getLastData = async () => (await getDb()).getMeta(K_DATA) ?? ''
 export const clearLastData = async () => (await getDb()).setMeta(K_DATA, '')
+
+const K_FAIL = 'zhipu_last_fail'
+
+export interface SourceFailure {
+  code: string
+  message: string
+  at: number
+}
+
+/** 最近一次拉取失败(含错误码),成功即清空;供首页可用性探测免网络判定「key 已失效」 */
+export async function getLastFailure(): Promise<SourceFailure | null> {
+  const raw = (await getDb()).getMeta(K_FAIL)
+  if (!raw) return null
+  try {
+    const f = JSON.parse(raw) as SourceFailure
+    return typeof f?.code === 'string' ? f : null
+  } catch {
+    return null
+  }
+}
+export async function setLastFailure(code: string, message: string) {
+  ;(await getDb()).setMeta(K_FAIL, JSON.stringify({ code, message, at: Date.now() }))
+}
+export async function clearLastFailure() {
+  ;(await getDb()).setMeta(K_FAIL, '')
+}
 
 /* ---------- 拉取 ---------- */
 
@@ -83,7 +109,10 @@ async function zhipuGet<T>(origin: string, path: string, key: string): Promise<T
       signal: AbortSignal.timeout(12000),
     })
   } catch (e) {
-    throw new Error(e instanceof Error && e.name === 'TimeoutError' ? '智谱接口超时' : '智谱接口请求失败')
+    throw usageError(
+      e instanceof Error && e.name === 'TimeoutError' ? 'TIMEOUT' : 'HTTP',
+      e instanceof Error && e.name === 'TimeoutError' ? '智谱接口超时' : '智谱接口请求失败',
+    )
   }
   let body: ZhipuEnvelope<T> | null = null
   try {
@@ -93,7 +122,9 @@ async function zhipuGet<T>(origin: string, path: string, key: string): Promise<T
   }
   if (!res.ok || !body || body.success === false || (body.code && body.code !== 200)) {
     const code = body?.code
-    throw new Error(body?.msg || classifyError(code, res.status))
+    const msg = body?.msg || classifyError(code, res.status)
+    const badKey = res.status === 401 || res.status === 403 || code === 401 || code === 1002 || code === 403
+    throw usageError(badKey ? 'INVALID_KEY' : 'HTTP', msg)
   }
   return body.data as T
 }
@@ -132,6 +163,7 @@ export interface PlatformUsageZhipu extends PlatformUsageBase {
 export async function fetchUsageZhipu(range: UsageRange, filter?: { start?: string; end?: string }): Promise<PlatformUsageZhipu> {
   const key = await getApiKey()
   if (!key) {
+    await setLastFailure('UNCONFIGURED', '未配置智谱 API Key')
     throw usageError('UNCONFIGURED', '未配置智谱 API Key')
   }
   const origin = await getBaseUrl()
@@ -142,7 +174,13 @@ export async function fetchUsageZhipu(range: UsageRange, filter?: { start?: stri
   endDate.setDate(endDate.getDate() + 1)
   const qs = `?startTime=${encodeURIComponent(fmtLocal(startDate))}&endTime=${encodeURIComponent(fmtLocal(endDate))}`
 
-  const data = await zhipuGet<ModelUsageData>(origin, `/api/monitor/usage/model-usage${qs}`, key)
+  let data: ModelUsageData
+  try {
+    data = await zhipuGet<ModelUsageData>(origin, `/api/monitor/usage/model-usage${qs}`, key)
+  } catch (e) {
+    await setLastFailure(errorCode(e) ?? 'HTTP', e instanceof Error ? e.message : String(e))
+    throw e
+  }
   const list = data?.totalUsage?.modelSummaryList ?? []
   const ts = `${start}T00:00:00Z`
   const rows: UsageRow[] = []
@@ -163,6 +201,7 @@ export async function fetchUsageZhipu(range: UsageRange, filter?: { start?: stri
   }
 
   await setLastError('')
+  if (await getLastFailure()) await clearLastFailure()
   ;(await getDb()).setMeta(K_DATA, JSON.stringify({ at: Date.now(), rows }))
   return {
     rows,

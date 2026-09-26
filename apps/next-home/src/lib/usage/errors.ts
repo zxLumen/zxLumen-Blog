@@ -1,4 +1,10 @@
-export type UsageErrorCode = 'UNCONFIGURED' | 'INVALID_TOKEN' | 'INVALID_KEY' | 'TIMEOUT' | 'HTTP'
+export type UsageErrorCode =
+  | 'UNCONFIGURED'
+  | 'INVALID_TOKEN'
+  | 'INVALID_KEY'
+  | 'NO_PERMISSION'
+  | 'TIMEOUT'
+  | 'HTTP'
 
 /** 构造带 code 的用量错误(供接口区分 unconfigured / invalid / error) */
 export function usageError(code: UsageErrorCode, message: string): Error {
@@ -15,6 +21,6 @@ export function errorCode(e: unknown): string | undefined {
 /** 错误码 → 接口 source 字段 */
 export function codeToSource(code: string | undefined): 'unconfigured' | 'invalid' | 'error' {
   if (code === 'UNCONFIGURED') return 'unconfigured'
-  if (code === 'INVALID_TOKEN' || code === 'INVALID_KEY') return 'invalid'
+  if (code === 'INVALID_TOKEN' || code === 'INVALID_KEY' || code === 'NO_PERMISSION') return 'invalid'
   return 'error'
 }

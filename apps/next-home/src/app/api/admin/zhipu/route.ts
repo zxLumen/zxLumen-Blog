@@ -1,5 +1,6 @@
 import { isAdmin } from '@/lib/auth'
 import { readJson } from '@/lib/db'
+import { invalidateAvailability } from '@/lib/usage-sources'
 import {
   getApiKey,
   getBaseUrl,
@@ -9,6 +10,7 @@ import {
   setLastError,
   getSnapshotStatus,
   clearLastData,
+  clearLastFailure,
   fetchUsageZhipu,
 } from '@/lib/zhipu'
 
@@ -43,10 +45,14 @@ export async function POST(req: Request) {
     }
     if (url) await setBaseUrl(url)
     await setApiKey(key)
+    // 换过 key:清掉「凭证失效」短路标记 + 可用性缓存,面板立刻重新探测
+    await clearLastFailure()
+    invalidateAvailability()
     return Response.json({ ok: true, ...(await status()) })
   }
 
   if (action === 'refresh') {
+    invalidateAvailability()
     try {
       const r = await fetchUsageZhipu('30d')
       return Response.json({ ok: true, rows: r.rows.length, ...(await status()) })
@@ -67,6 +73,8 @@ export async function POST(req: Request) {
     await setBaseUrl('')
     await setLastError('')
     await clearLastData()
+    await clearLastFailure()
+    invalidateAvailability()
     return Response.json({ ok: true, ...(await status()) })
   }
 

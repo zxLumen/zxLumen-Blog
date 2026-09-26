@@ -74,7 +74,7 @@ export { nowIso, bjDay, bjTime, bjTimeSec, tsMs } from './time.js'
 
 // 用量区块筛选存档(客户端/服务端共用)
 export { USAGE_SEL_COOKIE, DEFAULT_SEL, defaultRangeSel, parseUsageSel, encodeUsageSel, writeUsageSelCookie, DATA_SOURCES, RANGES } from './usage-sel.js'
-export type { UsageSel, RangeSel, Range as UsageRange, DataSource as UsageSource } from './usage-sel.js'
+export type { UsageSel, RangeSel, Range as UsageRange, DataSource as UsageSource, SourceAvailability } from './usage-sel.js'
 
 // OpenCode Go 订阅价目(费用折算)
 export { GO_MODELS, goPriceOf, estimateGoCost, isGoModelKnown, expiredPromos } from './go-pricing.js'

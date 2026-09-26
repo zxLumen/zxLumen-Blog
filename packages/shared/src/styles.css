@@ -2911,6 +2911,13 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
+/* 数据源 tab 上的「拉取失败」角标(hover 显示原因) */
+.zx-chip-warn {
+  color: var(--accent);
+  cursor: help;
+  font-weight: 700;
+}
+
 .zx-chip:hover {
   color: var(--fg);
   border-color: var(--line-strong);

@@ -20,6 +20,25 @@
 
 ### 修复
 
+- **「Token用量」里 OpenCode 整块消失(官方接口 v1→v2 迁移)**:2026-09-26 官方把用量导出从
+  `GET /api/v1/usage/export?scope=organization&range=30d` 迁到 **`GET /api/v2/usage/export?range=30d`**;
+  旧 v1 对 `scope=organization` 直接返回 `403 {"_tag":"Forbidden"}`(**不是 key/权限问题**:同一 key 打
+  `/zen/go/v1/usage`、`/api/v1/budgets/members` 仍 200;v2 一打就 200),而可用性探测只做实时拉取、
+  失败即 `false`,于是 OpenCode tab 被过滤掉、用户既看不到用量也看不到报错。现:①改用 **v2 优先 + v1 兜底**,
+  并把 401/403 文案区分开(401=key 无效/吊销,403=服务账号无「读取用量」权限);②拉取失败回退**上次成功快照**
+  判定可用性,数据源不再整块消失(切进去显示上次数据 + 底部注明更新时间/错误),当前 workspace 无快照时
+  **回落到任意 workspace 的上次快照并注明来源**;③tab 上加 `!` 角标(hover 看原因),`/api/usage/sources` 增返回 `errors`,
+  失败原因落 `meta.opencode_last_fail` / `meta.zhipu_last_fail`,成功即清并清掉旧 `opencode_last_error`;
+  admin 支持一键切换新旧 Console 域名(`opencode.ai/console` / `console.opencode.ai`)
+  与 403 报错旁的 Console Usage 直达链接。**首页速度优先**:可用性结果进程内缓存 60s;401 后不再重复请求,
+  403 走 10 分钟宽限自动重试 —— 实测 `/api/usage/sources` 数毫秒、首页 SSR 40–110ms
+- **OpenCode「今天/昨天」分时(v2 只给天级 → 本站自建小时数据)**:官方 v2 导出是**天级累计**
+  (`day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,last_active_at`),
+  没有逐条时间戳、也不再支持 `24h`,因此「今天/昨天按小时」无法直接得到。现由本站**每小时采样**:
+  整点前 30 秒拉一次 v2,把每个 `(day × model × provider × user_name)` 的当天累计与上次读数相减,
+  得到**本小时增量**写入 `meta.opencode_hourly.<wsId>`(基线读数存 `meta.opencode_cum.<wsId>`);
+  进程内定时器 + 启动补抓触发,admin 新增「采样小时数据」手动补采。今天/昨天有小时数据则出 24 根小时柱,
+  否则回退天级单柱。**局限**:进程跨过整点未运行会丢那一小时,且无法补历史,只能从现在开始积累
 - **邮件服务器 Dovecot 起不来 / 收信断**(服务器 `~/mail/`,配置不入库,见 `docs/MAIL.md`):`restart: unless-stopped` 走的是 `docker restart`、**保留容器文件系统**,上次残留的 `/run/dovecot/master.pid` 让 s6 判定"Dovecot 已在运行"而拒绝启动 —— 不只是没有 IMAP,**收信投递(LMTP)也断**、容器 `unhealthy`、`mail.log` 停止写入,且**每次重启必复发**。现给 compose 加 `entrypoint` 包装:启动前清掉 `dovecot`/`rsyslog` 残留 pid 与 socket 再 `exec /init`;同一包装还会在启动时重建各域 DKIM 软链(`/opt/haraka-*/config/dkim/<域>`,原先由后台页面按需创建,**容器重建即丢,会让出站邮件静默不签名**)
 - **邮件服务器公网暴露收窄**:`nftables` 定向拒绝 `110`/`143`/`8080`/`8443` 的公网直连(仅保留本机与 docker 网桥),只放行 `25`/`465`/`587`/`993`;不动 forward 链与 `22`/`2096`,因此不影响 Docker 端口映射、SSH 与 VLESS。踩坑记录:Caddy 上游是 `host.docker.internal:8443`(从 `br-*` 进来而非 loopback),漏放行会让 `mail.<DOMAIN>` 整个 000
 - **容器监控失效**:cAdvisor 旧版(v0.49.1)不支持 Docker 29 默认的 **containerd 镜像存储(snapshotter)**,导致容器指标全空(只剩主机总量);且 Alloy 侧还丢弃了容器 `name` 标签。现升级 **cAdvisor v0.60.6**(`ghcr.io/google/cadvisor`,v0.54+ 支持 containerd snapshotter)、**保留 `name`/`service` 标签**、**开启容器磁盘 IO**、**容器日志改为采集全部容器**(mailserver 几乎不写 stdout,无噪声);本地 Grafana 的 cAdvisor 面板(uid `pMEd7m0Mz`)随之可用

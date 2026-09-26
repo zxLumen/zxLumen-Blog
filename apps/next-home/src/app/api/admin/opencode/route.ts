@@ -1,5 +1,6 @@
 import { isAdmin } from '@/lib/auth'
 import { readJson } from '@/lib/db'
+import { invalidateAvailability } from '@/lib/usage-sources'
 import {
   getConsoleUrl,
   setConsoleUrl,
@@ -7,8 +8,11 @@ import {
   setWorkspaces,
   getLastError,
   setLastError,
+  clearLastFailure,
   getSnapshotStatus,
   fetchUsageOpenCodeWs,
+  captureHourlyOpenCode,
+  ensureHourlyScheduler,
   type OcWorkspace,
 } from '@/lib/opencode'
 
@@ -55,6 +59,9 @@ export async function POST(req: Request) {
     if (url) await setConsoleUrl(url)
     await setWorkspaces(merged)
     await setLastError('')
+    // 换过 key:清掉「凭证失效」短路标记 + 可用性缓存,面板立刻重新探测
+    await clearLastFailure()
+    invalidateAvailability()
     return Response.json({ ok: true, ...(await status()) })
   }
 
@@ -70,21 +77,41 @@ export async function POST(req: Request) {
       } catch (e) {
         const code = (e as { code?: string }).code
         errors.push(
-          `${w.name}:${code === 'UNCONFIGURED' ? '未配置 Key' : code === 'INVALID_KEY' ? '密钥无效或无权限' : e instanceof Error ? e.message : '拉取失败'}`,
+          `${w.name}:${
+            code === 'UNCONFIGURED'
+              ? '未配置 Key'
+              : code === 'INVALID_KEY'
+                ? '密钥无效/已吊销(401)'
+                : code === 'NO_PERMISSION'
+                  ? '服务账号无读取用量权限(403,需 All permissions)'
+                  : e instanceof Error
+                    ? e.message
+                    : '拉取失败'
+          }`,
         )
       }
     }
     await setLastError(errors.join(';'))
+    invalidateAvailability()
     if (errors.length === list.length) {
       return Response.json({ error: errors.join(';'), ...(await status()) }, { status: 400 })
     }
     return Response.json({ ok: true, rows: total, ...(await status()) })
   }
 
+  if (action === 'capture') {
+    // 手动补采样一次(自动采样由 ensureHourlyScheduler 每小时跑)
+    ensureHourlyScheduler()
+    const r = await captureHourlyOpenCode()
+    return Response.json({ ok: true, captured: r.captured, bucket: r.bucket, ...(await status()) })
+  }
+
   if (action === 'clear') {
     await setWorkspaces([])
     await setConsoleUrl('')
     await setLastError('')
+    await clearLastFailure()
+    invalidateAvailability()
     return Response.json({ ok: true, ...(await status()) })
   }
 

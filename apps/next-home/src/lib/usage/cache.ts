@@ -15,5 +15,8 @@ export function makeTtlCache<T>(globalKey: string, ttlMs = CACHE_TTL) {
     set(key: string, value: T): void {
       store.set(key, { at: Date.now(), value })
     },
+    del(key: string): void {
+      store.delete(key)
+    },
   }
 }

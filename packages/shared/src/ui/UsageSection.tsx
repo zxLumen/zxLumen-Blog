@@ -6,13 +6,14 @@ import { tokensOf } from '../pricing.js'
 import type { UsageRow } from '../schema.js'
 import { fmtCompact, fmtCny, fmtUsd, fmtDate, fmtInt } from '../format.js'
 import { DEFAULT_SEL, defaultRangeSel, writeUsageSelCookie } from '../usage-sel.js'
-import type { DataSource, Range, RangeSel, UsageSel } from '../usage-sel.js'
+import type { DataSource, Range, RangeSel, SourceAvailability, UsageSel } from '../usage-sel.js'
 import { Section } from './Section.js'
 import {
   localIso,
   mergeUnique,
   modelColor,
   modelLabel,
+  pickAvail,
   rangeLabel,
   rowCost,
   RANGES,
@@ -34,23 +35,28 @@ export function UsageSection({
   window?: { start?: string; end?: string }
   initialSel?: UsageSel
   /** SSR 计算的数据源可用性;未提供则客户端探测 */
-  availableSources?: Partial<Record<DataSource, boolean>>
+  availableSources?: SourceAvailability
 }) {
   const [dataSrc, setDataSrc] = useState<DataSource>(initialSel?.dataSrc ?? DEFAULT_SEL.dataSrc)
   // RECENT 明细表翻页
   const [recentPage, setRecentPage] = useState(1)
   const [recentPageSize, setRecentPageSize] = useState(10)
-  // 各源可用性(已配置 + 近30天有数据);null=未知(按 feature 放行)
+  // 各源可用性(已配置 + 近30天有数据,含快照回退);null=未知(全部显示)
   const [avail, setAvail] = useState<Record<DataSource, boolean> | null>(
-    availableSources ? (availableSources as Record<DataSource, boolean>) : null,
+    availableSources ? pickAvail(availableSources) : null,
   )
+  // 各源最近一次拉取错误(仅用于 tab 上的报错角标)
+  const [srcErrors, setSrcErrors] = useState<Partial<Record<DataSource, string>>>(availableSources?.errors ?? {})
   useEffect(() => {
     if (availableSources) return
     let alive = true
     fetch('/api/usage/sources', { credentials: 'same-origin', cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: Record<DataSource, boolean> | null) => {
-        if (alive && d) setAvail(d)
+      .then((d: SourceAvailability | null) => {
+        if (alive && d) {
+          setAvail(pickAvail(d))
+          setSrcErrors(d.errors ?? {})
+        }
       })
       .catch(() => {
         /* 探测失败:不隐藏任何源 */
@@ -151,6 +157,13 @@ export function UsageSection({
         setCurrency(d.currency === 'USD' ? 'USD' : 'CNY')
         setAt(d.at)
         setLastError(d.lastError)
+        // 该源的真实拉取结果回写到角标(访问过之后角标才是最新的)
+        setSrcErrors((prev) => {
+          const next = { ...prev }
+          if (d.lastError) next[src] = d.lastError
+          else delete next[src]
+          return next
+        })
         setGoQuotas(d.goQuotas ?? [])
         if (d.workspaces) setWsList(d.workspaces)
         setZhipuQuota(d.zhipuQuota ?? null)
@@ -445,11 +458,13 @@ export function UsageSection({
               type="button"
               className={`zx-chip${dataSrc === s.key ? ' is-active' : ''}`}
               onClick={() => setDataSrc(s.key)}
+              title={srcErrors[s.key] ? `${s.label} 拉取失败:${srcErrors[s.key]}` : undefined}
             >
               {s.label}
               <span className="zx-muted zx-mono" style={{ fontSize: '0.6rem', marginLeft: '0.35rem' }}>
                 {s.hint}
               </span>
+              {srcErrors[s.key] && <span className="zx-chip-warn" aria-label="拉取失败">!</span>}
             </button>
           ))}
         </div>

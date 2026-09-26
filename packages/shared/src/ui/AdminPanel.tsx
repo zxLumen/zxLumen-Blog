@@ -227,8 +227,8 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     if (res.ok) applyOc((await res.json()) as OcStatus)
   }
 
-  async function ocAction(action: 'save' | 'refresh' | 'clear') {
-    if (action === 'refresh' && !oc?.configured) {
+  async function ocAction(action: 'save' | 'refresh' | 'clear' | 'capture') {
+    if ((action === 'refresh' || action === 'capture') && !oc?.configured) {
       setMsg({ kind: 'err', text: '未配置 workspace:请先添加至少一个 workspace(名称 + oc_sk_ Key)并保存' })
       return
     }
@@ -243,7 +243,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
         credentials: 'same-origin',
         body: JSON.stringify({ action, workspaces: ocWs, consoleUrl: ocUrl || undefined }),
       })
-      const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
+      const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number; captured?: number }
       if (!res.ok) throw new Error(d.error || '操作失败')
       await loadOpenCode()
       setMsg({
@@ -251,9 +251,11 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
         text:
           action === 'refresh'
             ? `已从官方 Console 拉取 ${d.rows ?? 0} 行(校验通过)`
-            : action === 'save'
-              ? 'workspace 已保存'
-              : '已清除',
+            : action === 'capture'
+              ? `已采样小时数据(${d.captured ?? 0} 行增量)`
+              : action === 'save'
+                ? 'workspace 已保存'
+                : '已清除',
       })
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
@@ -808,7 +810,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       {tab === 'token' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
-          OpenCode 用量 <span>官方 Console 导出 · 今天/昨天分时</span>
+          OpenCode 用量 <span>官方 Console v2(天级)+ 自建小时数据</span>
         </h3>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
           状态:{oc?.configured ? `已配置 ${ocWs.length} 个 workspace` : '未配置'}
@@ -820,11 +822,16 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.6rem' }}>
           <input
             className="zx-input"
+            list="oc-console-urls"
             style={{ maxWidth: 240, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
             placeholder="Console URL(默认生产)"
             value={ocUrl}
             onChange={(e) => setOcUrl(e.target.value)}
           />
+          <datalist id="oc-console-urls">
+            <option value="https://opencode.ai/console" />
+            <option value="https://console.opencode.ai" />
+          </datalist>
           <button
             className="zx-btn zx-btn-sm"
             disabled={ocBusy}
@@ -886,6 +893,14 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
           <button
             className="zx-btn zx-btn-sm zx-btn-ghost"
             disabled={ocBusy || !oc?.configured}
+            onClick={() => void ocAction('capture')}
+            title="立即采样一次「当天累计」求增量,写入自建小时数据(正常每小时自动采样)"
+          >
+            采样小时数据
+          </button>
+          <button
+            className="zx-btn zx-btn-sm zx-btn-ghost"
+            disabled={ocBusy || !oc?.configured}
             onClick={() => void ocAction('clear')}
           >
             清除
@@ -894,10 +909,34 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
         <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
           每个 workspace 一个 service-account Key(<span className="zx-accent">oc_sk_…</span>):
           到 <span className="zx-accent">opencode.ai/console</span> → 切到对应 workspace → API keys 创建(需用量读取权限)。
-          名称留空自动用 Key 尾号占位。官方仅提供最近 30 天(UTC 零点对齐);「今天/昨天」按小时展示,其余按天。
+          名称留空自动用 Key 尾号占位。官方 v2 仅提供最近 30 天(UTC 零点对齐)且为**天级**;
+          「今天/昨天」的小时数据由本站**每小时自动采样**(点「采样小时数据」可手动补一次)。
           Key 仅存服务器,不下发前端。
+          <br />
+          <span className="zx-accent">注意权限:</span>服务账号/Key 需勾选 <span className="zx-accent">All permissions</span>(至少含用量读取);
+          inference-only 的 Key 读用量会被官方拒(<span className="zx-mono">403</span>),报「服务账号无读取用量权限」。
+          <br />
+          <span className="zx-accent">域名:</span>旧站 <span className="zx-mono">opencode.ai/console</span>(workspace 口径)、
+          新站 <span className="zx-mono">console.opencode.ai</span>(organization 口径)均提供该接口,可在上方 URL 框切换(留空=旧站)。
         </p>
-        {oc?.lastError && <div className="zx-msg err">{oc.lastError}</div>}
+        {oc?.lastError && (
+          <div className="zx-msg err">
+            {oc.lastError}
+            {/403|权限|permission/i.test(oc.lastError) && (
+              <>
+                {' '}
+                <a
+                  className="zx-accent"
+                  href={`${oc.consoleUrl || 'https://opencode.ai/console'}/usage`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  打开 Console Usage 页核对 →
+                </a>
+              </>
+            )}
+          </div>
+        )}
       </div>
       )}
 
