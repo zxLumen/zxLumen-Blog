@@ -405,7 +405,7 @@ async function fetchRows30Raw(ws: OcWorkspace): Promise<OcRows30> {
         inputTokens: r.input,
         outputTokens: r.output,
         cacheHitTokens: r.cacheRead,
-        requests: 1,
+        requests: r.requests,
         cost: r.cost,
         source: 'opencode',
       })

@@ -22,6 +22,7 @@
 
 ### 修复
 
+- **OpenCode 多天区间「请求数」严重偏小**(7天/30天/本月/上月等天级区间,含 RECENT 明细):合并 v2 天级 CSV 时,每个 `(天 × 模型 × provider × service account)` 分组的**首行把 `requests` 写死成 1**(`opencode.ts` 的 `fetchRows30Raw`),导致请求数被压成"分组条数"(实测 7 天应 5903、却显示 ≈13)。改为取该行真实 `requests`(对旧 v1 逐条数据无影响,其 `requests` 本就是 1);tokens/费用不受影响。今天/昨天走推理日志/自采样路径,`requests` 一直正确,故此前只有多天区间露馅。
 - **admin 面板抗网络抖动(「一直加载 / 加载不出来」)**:此前 admin 的 fetch **无超时**,且 `loadPage` 把**任何**错误都当作「未登录」,`loadSettings` 无 try/catch(未捕获拒绝上报 Sentry)。跨境链路偶发「连接建立后卡住」时,表现为后台长时间转圈、且一次抖动就像被登出。现:①新增统一封装 `adminFetch`(同源凭证 + 15s 超时,`packages/shared/src/ui/admin/admin-fetch.ts`),AdminPanel / 项目 / 外观 / 机器人面板全部改用它;②`loadSettings` 改为逐请求容错 + `Promise.all` 并行,单接口失败不影响其余;③仅 **401** 才判「未登录」,网络错误/超时保留登录态并显示「加载失败」+ **重试**按钮;④首屏网络失败不再显示登录框,而是可重试的错误页;⑤`useEffect` 补 `.catch()` 兜底。
 - **聊天窗口「卡死」**:`ChatWidget` 发送改为带 `AbortController` 客户端超时(120s),连接中断/超时后重置为可重试,不再永久停在「正在输入…」。
 - **Caddy 开启访问日志**:`{$DOMAIN}` 站点写 JSON 访问日志到 `caddy-data` 卷(`/data/access.log`,10MiB×5 轮转),便于下次区分「请求没到 / 到了但上游没回 / 超时」;不外发第三方(访客 IP 不出服务器)。
