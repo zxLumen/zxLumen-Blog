@@ -9,6 +9,16 @@
 {$DOMAIN} {
 	encode zstd gzip
 
+	# 访问日志:用于排查「请求是否到达 / 是否超时 / 返回码」,尤其链路卡住时。
+	# 写 caddy-data 卷(/data),容器重建不丢;不随 Alloy 外发,避免第三方留存访客 IP。
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		format json
+	}
+
 	# 安全响应头
 	header {
 		X-Content-Type-Options nosniff
