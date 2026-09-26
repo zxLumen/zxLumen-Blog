@@ -1,3 +1,10 @@
+# 关闭 HTTP/3,释放 UDP 443 交给 Hysteria2(伪装成 QUIC/HTTP3 流量)
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
 # 主页根域名(需先把 A 记录指向服务器 IP)
 {$DOMAIN} {
 	encode zstd gzip

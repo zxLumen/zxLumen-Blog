@@ -44,7 +44,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"
+      # 443/udp (HTTP/3) 已关闭:让给同机 Hysteria2 使用 UDP 443;见 Caddyfile 全局 protocols
     environment:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
