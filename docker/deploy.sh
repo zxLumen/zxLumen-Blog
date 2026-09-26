@@ -26,6 +26,15 @@ if ${SUDO:-} docker compose ps --status running --services 2>/dev/null | grep -q
     || echo "[deploy] caddy reload 失败(配置可能未变或语法错误),已跳过"
 fi
 
+# 监控配置(observability/alloy.alloy 等)由 ci-run.sh 同步;alloy 以「文件」形式
+# bind-mount,配置被覆盖后 inode 变化,旧容器仍读旧文件 → 需重建才能生效。
+# grafana 的面板/provisioning 以「目录」挂载,内部文件替换后会被自动读到,但重建一次
+# 更省心(容器轻量)。仅当 monitoring profile 正在运行才重建,失败不阻断部署。
+if ${SUDO:-} docker compose --profile monitoring ps --status running --services 2>/dev/null | grep -qE '^(alloy|grafana)$'; then
+  ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose --profile monitoring up -d --force-recreate alloy grafana \
+    || echo "[deploy] 监控容器重建失败,已跳过(可手动 docker compose --profile monitoring up -d --force-recreate alloy grafana)"
+fi
+
 # 清理不被任何容器引用的旧镜像(回收 CI 各 tag 镜像;在用镜像不受影响)
 ${SUDO:-} docker image prune -af
 

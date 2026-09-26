@@ -33,8 +33,12 @@ if [ "${IMAGE_TAG}" != "latest" ]; then
   cp "${TMP}/docker/docker-compose.yml" ./docker-compose.yml
   cp "${TMP}/docker/deploy.sh"          ./deploy.sh          && chmod +x ./deploy.sh
   cp "${TMP}/docker/ci-run.sh"          ./ci-run.sh          && chmod +x ./ci-run.sh
-  rm -rf ./observability
-  cp -r "${TMP}/docker/observability"   ./observability
+  # 原地同步 observability/:不能 `rm -rf` 整个目录再 `cp -r`(会换掉目录 inode,
+  # 让已挂载该目录的 grafana/alloy 容器读到旧路径 → provisioning 报 no such file)。
+  # 改为清空内容再复制,保留目录本身。
+  mkdir -p ./observability
+  find ./observability -mindepth 1 -delete
+  cp -r "${TMP}/docker/observability/." ./observability/
   echo "==> 配置已更新"
 fi
 
