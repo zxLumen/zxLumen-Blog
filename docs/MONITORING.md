@@ -106,12 +106,22 @@ Grafana Cloud → Explore / Metrics / Logs 应能看到数据。
 5. 隐私:v11 用 `dataCollection` 关闭 `userInfo`/`cookies`/请求体,并对敏感头脱敏;客户端事件经 `tunnelRoute:/monitoring` 走自身域名。
 
 ## 五、建议告警规则(Grafana Cloud → Alerting)
-- 站点 Down(合成探测失败)
-- 5xx 比例升高 / P95 延迟
-- 磁盘使用 > 85%、内存 > 90%
-- 容器反复重启
-- 证书剩余 < 14 天
-全部通知到 **邮件**。
+全部通知到 **邮件**。以下规则用 Mimir 数据源,`for` 为持续时间(必须写;否则单次抖动就会误报)。
+
+| 规则 | 查询(instant) | 条件 | for |
+| --- | --- | --- | --- |
+| **站点不可达** | `min_over_time(probe_success{job=~"zxlumen.*"}[5m])` | `< 1` | 3m |
+| **实例重启** | `changes(node_boot_time_seconds[10m])` | `> 0` | 0m |
+| **app 容器不可用** | `up{job="zx-app"}` | `< 1` | 2m |
+| **app 容器重启** | `changes(container_start_time_seconds{name=~"docker-app-1"}[10m])` | `> 0` | 0m |
+| 磁盘使用 | `(1 - max(node_filesystem_avail_bytes{mountpoint="/"}) / max(node_filesystem_size_bytes{mountpoint="/"})) * 100` | `> 85` | 10m |
+| 内存使用 | `(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100` | `> 90` | 10m |
+| 5xx 比例 / P95 延迟 | 由合成探测或 Caddy 日志派生(可选) | — | — |
+| 证书剩余 | `probe_tls_certificate_expiry_seconds`(如启用 TLS 探测) | `< 14d` | 1h |
+
+> `站点不可达` 与 `实例重启` 是本次事件(2026-09-26 宿主机硬重启)最该有的两条:
+> 前者一眼知道「站在乘客视角挂了多久」,后者直接指出是**宿主重启**而非应用问题。
+> 域名 NS 在 DNSPod,如怀疑解析问题,可再加一条外部 DNS 探测(如 Grafana Synthetic 的 DNS 检查)。
 
 ## 六、资源 / 安全
 - `cadvisor` 需 `privileged` + 宿主挂载;**必须用 v0.54+**(如 `ghcr.io/google/cadvisor:v0.60.6`):
@@ -126,6 +136,9 @@ Grafana Cloud → Explore / Metrics / Logs 应能看到数据。
 - `.env` 含机密:`chmod 600`,不入库、不进 CI。
 
 ## 七、排障 / 回滚
+- **Caddy 访问日志**(2026-09-26 起默认开启):`docker exec docker-caddy-1 tail -n 200 /data/access.log`
+  (JSON 行,含 client IP / 方法 / URI / 状态码 / 耗时)。用于确认「请求是否到达 Caddy、是否超时、返回什么码」——
+  链路卡住导致「一直加载」时,靠它区分是「请求没到」还是「到了但上游没回」。
 - Alloy 配置错误:`docker logs docker-alloy-1`。
 - cAdvisor 无数据:
   - 确认 `--profile monitoring` 已启动;

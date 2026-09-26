@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FLOAT_MARGIN, snapEdge } from './floating.js'
-import { useBarTooltip } from './BarTooltip.js'
+import { Sparkline, type SparkPoint } from './Sparkline.js'
+
+type Metric = 'cpu' | 'mem' | 'disk' | 'load'
 
 interface ServerStatus {
   ok: boolean
@@ -12,14 +14,23 @@ interface ServerStatus {
   load?: number
   uptimeSec?: number
   siteUp?: boolean
-  trend?: { day: string; cpu: number }[]
+  series?: Partial<Record<Metric, SparkPoint[]>>
   at?: number
   error?: string
 }
 
+const METRICS: { key: Metric; label: string; pct: boolean }[] = [
+  { key: 'cpu', label: 'CPU', pct: true },
+  { key: 'mem', label: '内存', pct: true },
+  { key: 'disk', label: '磁盘 /', pct: true },
+  { key: 'load', label: '负载(1m)', pct: false },
+]
+
 const POS_KEY = 'zx-status-pos'
 
 const fmtPct = (v?: number) => (v == null ? '—' : `${v.toFixed(0)}%`)
+const fmtMetric = (m: { pct: boolean }, v?: number) =>
+  v == null ? '—' : m.pct ? `${v.toFixed(0)}%` : v.toFixed(2)
 
 const fmtUptime = (s?: number) => {
   if (s == null) return '—'
@@ -28,24 +39,15 @@ const fmtUptime = (s?: number) => {
   return d > 0 ? `${d}d${h}h` : `${h}h`
 }
 
-function Cell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="zx-statuswidget-cell">
-      <div className="zx-statuswidget-val">{value}</div>
-      <div className="zx-statuswidget-lbl">{label}</div>
-    </div>
-  )
-}
-
-/** 右上角悬浮「服务器状态」:可拖动 + 边缘吸附;悬停展开指标 + 近 7 天 CPU 趋势。
+/** 右上角悬浮「服务器状态」:可拖动 + 边缘吸附;悬停展开指标 + 近 24h 折线(按指标切换)。
  *  数据源失败时显示降级气泡(不隐藏),便于发现 nas/token 问题。 */
 export function StatusWidget() {
   const [data, setData] = useState<ServerStatus | null>(null)
   const [state, setState] = useState<'idle' | 'ok' | 'err'>('idle')
   const [errText, setErrText] = useState('')
   const [open, setOpen] = useState(false)
+  const [metric, setMetric] = useState<Metric>('cpu')
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
-  const barTip = useBarTooltip()
   const ref = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -157,9 +159,11 @@ export function StatusWidget() {
   if (state === 'idle') return null
 
   const ok = state === 'ok' && !!data?.ok
-  const trend = ok ? (data.trend ?? []) : []
-  const maxCpu = Math.max(1, ...trend.map((t) => t.cpu))
   const up = ok ? data.siteUp !== false : false
+  const active = METRICS.find((m) => m.key === metric)!
+  const pts = ok ? (data?.series?.[metric] ?? []) : []
+  const peak = pts.length ? Math.max(...pts.map((p) => p.v)) : null
+  const cur = ok ? data?.[metric] : undefined
   const style = pos ? { left: pos.x, top: pos.y, right: 'auto' as const } : undefined
 
   return (
@@ -205,29 +209,37 @@ export function StatusWidget() {
           {ok ? (
             <>
               <div className="zx-statuswidget-grid">
-                <Cell label="CPU" value={fmtPct(data?.cpu)} />
-                <Cell label="内存" value={fmtPct(data?.mem)} />
-                <Cell label="磁盘 /" value={fmtPct(data?.disk)} />
-                <Cell label="负载(1m)" value={data?.load == null ? '—' : data.load.toFixed(2)} />
-                <Cell label="运行时长" value={fmtUptime(data?.uptimeSec)} />
-                <Cell label="站点" value={up ? '正常' : '异常'} />
-              </div>
-              <div
-                className="zx-statuswidget-trend"
-                onMouseMove={barTip.onMouseMove}
-                onMouseLeave={barTip.onMouseLeave}
-              >
-                {trend.map((d) => (
-                  <div
-                    key={d.day}
-                    className={`zx-bar${d.cpu === 0 ? ' is-zero' : ''}`}
-                    data-label={`${d.day.slice(5)} · CPU ${d.cpu}%`}
-                    style={{ height: `${Math.max(3, (d.cpu / maxCpu) * 100)}%` }}
-                  />
+                {METRICS.map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className={`zx-statuswidget-cell${metric === m.key ? ' is-active' : ''}`}
+                    aria-pressed={metric === m.key}
+                    onClick={() => setMetric(m.key)}
+                    title={`查看 ${m.label} 近 24h 曲线`}
+                  >
+                    <div className="zx-statuswidget-val">{fmtMetric(m, data?.[m.key])}</div>
+                    <div className="zx-statuswidget-lbl">{m.label}</div>
+                  </button>
                 ))}
+                <div className="zx-statuswidget-cell">
+                  <div className="zx-statuswidget-val">{fmtUptime(data?.uptimeSec)}</div>
+                  <div className="zx-statuswidget-lbl">运行时长</div>
+                </div>
+                <div className="zx-statuswidget-cell">
+                  <div className="zx-statuswidget-val">{up ? '正常' : '异常'}</div>
+                  <div className="zx-statuswidget-lbl">站点</div>
+                </div>
               </div>
-              {barTip.node}
-              <div className="zx-statuswidget-foot zx-muted zx-mono">近 7 天 · CPU 日均</div>
+              <Sparkline
+                points={pts}
+                formatValue={(v) => fmtMetric(active, v)}
+                stroke="var(--accent)"
+              />
+              <div className="zx-statuswidget-foot zx-muted zx-mono">
+                近 24h · {active.label} · 当前 {fmtMetric(active, cur)} / 峰值{' '}
+                {peak == null ? '—' : fmtMetric(active, peak)}
+              </div>
             </>
           ) : (
             <div className="zx-statuswidget-err">

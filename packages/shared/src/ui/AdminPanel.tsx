@@ -9,6 +9,7 @@ import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
 import { AdminThemePanel } from './admin/AdminThemePanel.js'
 import { AdminChatbotPanel } from './admin/AdminChatbotPanel.js'
 import { VisitorDetailRow } from './admin/VisitorDetailRow.js'
+import { adminFetch } from './admin/admin-fetch.js'
 import {
   validTab,
   type DsStatus,
@@ -19,8 +20,7 @@ import {
 } from './admin/admin-types.js'
 
 async function loadPageData(page: number, pageSize: number): Promise<PagedComments> {
-  const res = await fetch(`/api/admin/comments?page=${page}&pageSize=${pageSize}`, {
-    credentials: 'same-origin',
+  const res = await adminFetch(`/api/admin/comments?page=${page}&pageSize=${pageSize}`, {
     cache: 'no-store',
   })
   if (res.status === 401) throw new Error('unauthorized')
@@ -41,6 +41,8 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
   const projList = projects ?? PROJECTS
   const [ready, setReady] = useState(false)
   const [authed, setAuthed] = useState(false)
+  /** 首屏因网络错误/超时未能判定登录态:不误判为「未登录」,改为可重试的错误页 */
+  const [netError, setNetError] = useState(false)
   const [password, setPassword] = useState('')
   const [comments, setComments] = useState<CommentRow[]>([])
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
@@ -63,6 +65,10 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
   const [ocUrl, setOcUrl] = useState('')
   const [ocWs, setOcWs] = useState<OcWsItem[]>([])
   const [ocBusy, setOcBusy] = useState(false)
+  const [ocConsoleOrg, setOcConsoleOrg] = useState('')
+  const [ocConsoleRaw, setOcConsoleRaw] = useState('')
+  const [ocConsoleBusy, setOcConsoleBusy] = useState<'save' | 'sync' | 'clear' | null>(null)
+  const [ocConsoleMsg, setOcConsoleMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
   const [zp, setZp] = useState<ZhipuStatus | null>(null)
   const [zpUrl, setZpUrl] = useState('')
   const [zpKey, setZpKey] = useState('')
@@ -93,7 +99,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
   const loadStats = useCallback(async () => {
     setStatsLoading(true)
     try {
-      const res = await fetch('/api/admin/stats', { credentials: 'same-origin', cache: 'no-store' })
+      const res = await adminFetch('/api/admin/stats', { cache: 'no-store' })
       if (res.ok) setStats((await res.json()) as StatsResult)
     } catch {
       /* ignore */
@@ -105,8 +111,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
   const loadArchive = useCallback(async (p: number, size: number) => {
     setArchLoading(true)
     try {
-      const res = await fetch(`/api/admin/archive?page=${p}&pageSize=${size}`, {
-        credentials: 'same-origin',
+      const res = await adminFetch(`/api/admin/archive?page=${p}&pageSize=${size}`, {
         cache: 'no-store',
       })
       if (!res.ok) throw new Error('加载归档失败')
@@ -134,10 +139,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     setArchBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/archive', {
+      const res = await adminFetch('/api/admin/archive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ id, action }),
       })
       if (!res.ok) throw new Error('操作失败')
@@ -174,8 +178,16 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       setPageSize(d.pageSize ?? size)
       setTotalPages(d.totalPages ?? 1)
       setAuthed(true)
-    } catch {
-      setAuthed(false)
+      setNetError(false)
+    } catch (err) {
+      // 仅 401 视为「未登录」;网络错误/超时保留登录态,提示可重试(避免一次抖动就被登出)
+      if (err instanceof Error && err.message === 'unauthorized') {
+        setAuthed(false)
+        setNetError(false)
+      } else {
+        setNetError(true)
+        setMsg({ kind: 'err', text: '加载失败,请检查网络后重试' })
+      }
     } finally {
       setLoading(false)
       setReady(true)
@@ -186,44 +198,51 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     setOc(o)
     if (o.consoleUrl && o.consoleUrl !== 'https://opencode.ai/console') setOcUrl(o.consoleUrl)
     setOcWs((o.workspaces ?? []).map((w) => ({ id: w.id, name: w.name, key: '', hasKey: w.hasKey })))
+    setOcConsoleOrg((v) => v || o.console?.org || '')
   }, [])
 
   const loadSettings = useCallback(async () => {
-    const sres = await fetch('/api/admin/settings', { credentials: 'same-origin' })
-    if (sres.ok) {
-      const s = (await sres.json()) as {
+    // 逐请求容错 + 并行:任一接口失败/超时都不影响其余,也不产生未捕获异常
+    const getJson = async <T,>(url: string): Promise<T | null> => {
+      try {
+        const res = await adminFetch(url, { cache: 'no-store' })
+        return res.ok ? ((await res.json()) as T) : null
+      } catch {
+        return null
+      }
+    }
+    const [s, q, d, o, z] = await Promise.all([
+      getJson<{
         nick?: string
         contacts?: { email?: string; wechat?: string; phone?: string }
-      }
+      }>('/api/admin/settings'),
+      getJson<{ hasQr?: boolean; ver?: string | null }>('/api/admin/wechat-qr'),
+      getJson<DsStatus>('/api/admin/deepseek'),
+      getJson<OcStatus>('/api/admin/opencode'),
+      getJson<ZhipuStatus>('/api/admin/zhipu'),
+    ])
+    if (s) {
       setNick(s.nick ?? '')
       setCEmail(s.contacts?.email ?? '')
       setCWechat(s.contacts?.wechat ?? '')
       setCPhone(s.contacts?.phone ?? '')
     }
-    const qres = await fetch('/api/admin/wechat-qr', { credentials: 'same-origin' })
-    if (qres.ok) {
-      const q = (await qres.json()) as { hasQr?: boolean; ver?: string | null }
-      setQrUrl(q.hasQr ? `/api/contact/wechat-qr?v=${q.ver}` : '/wechat.png')
-    }
-    const dres = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
-    if (dres.ok) setDs((await dres.json()) as DsStatus)
-    const ores = await fetch('/api/admin/opencode', { credentials: 'same-origin' })
-    if (ores.ok) applyOc((await ores.json()) as OcStatus)
-    const zres = await fetch('/api/admin/zhipu', { credentials: 'same-origin' })
-    if (zres.ok) {
-      const z = (await zres.json()) as ZhipuStatus
+    if (q) setQrUrl(q.hasQr ? `/api/contact/wechat-qr?v=${q.ver}` : '/wechat.png')
+    if (d) setDs(d)
+    if (o) applyOc(o)
+    if (z) {
       setZp(z)
       if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
     }
   }, [applyOc])
 
   async function loadDeepseek() {
-    const res = await fetch('/api/admin/deepseek', { credentials: 'same-origin' })
+    const res = await adminFetch('/api/admin/deepseek', { cache: 'no-store' })
     if (res.ok) setDs((await res.json()) as DsStatus)
   }
 
   async function loadOpenCode() {
-    const res = await fetch('/api/admin/opencode', { credentials: 'same-origin' })
+    const res = await adminFetch('/api/admin/opencode', { cache: 'no-store' })
     if (res.ok) applyOc((await res.json()) as OcStatus)
   }
 
@@ -237,10 +256,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     try {
       // 保存时:已有项若未重新输入 key(hasKey 且 key 空)则用占位回填,
       // 由后端 normalizeWs 保留……不可行(拿不到原 key),故要求重新输入或保留 key 的情形前端标 sentinel
-      const res = await fetch('/api/admin/opencode', {
+      const res = await adminFetch('/api/admin/opencode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ action, workspaces: ocWs, consoleUrl: ocUrl || undefined }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number; captured?: number }
@@ -264,8 +282,70 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     }
   }
 
+  async function loadConsole(action: 'console-save' | 'console-sync' | 'console-clear') {
+    const which = action === 'console-save' ? 'save' : action === 'console-sync' ? 'sync' : 'clear'
+    if (action === 'console-save' && !ocConsoleRaw.trim()) {
+      setOcConsoleMsg({ kind: 'err', text: '请先把 Cookie 或 Copy as cURL 粘到右边输入框' })
+      return
+    }
+    if (action === 'console-sync' && !oc?.console?.configured) {
+      setOcConsoleMsg({ kind: 'err', text: '尚未配置:请先粘贴 Cookie 并「保存并校验」' })
+      return
+    }
+    setOcConsoleBusy(which)
+    setOcConsoleMsg(null)
+    try {
+      const res = await adminFetch('/api/admin/opencode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, org: ocConsoleOrg || undefined, raw: ocConsoleRaw || undefined }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(d.error || '操作失败')
+      if (action === 'console-save') setOcConsoleRaw('')
+      if (action === 'console-clear') {
+        await loadOpenCode()
+        setOcConsoleMsg({ kind: 'ok', text: '已清除控制台会话' })
+        return
+      }
+      // 后台同步:轮询进度直到结束(≤3 分钟)
+      setOcConsoleMsg({ kind: 'ok', text: '已开始拉取推理日志(枚举 workspace + 分页),请稍候…' })
+      const t0 = Date.now()
+      let st: OcStatus | null = null
+      while (Date.now() - t0 < 180_000) {
+        await new Promise((r) => setTimeout(r, 2000))
+        const g = await adminFetch('/api/admin/opencode', { cache: 'no-store' })
+        if (!g.ok) continue
+        st = (await g.json()) as OcStatus
+        setOc(st)
+        const sync = st.console?.sync
+        if (sync) {
+          setOcConsoleMsg({
+            kind: 'ok',
+            text: sync.running
+              ? `拉取中…(已完成 ${sync.hours ?? 0} 个小时 / ${sync.orgs ?? 0} 个 workspace)`
+              : '处理完成',
+          })
+          if (!sync.running) break
+        }
+      }
+      await loadOpenCode()
+      const sync = st?.console?.sync
+      if (sync?.error) setOcConsoleMsg({ kind: 'err', text: sync.error })
+      else
+        setOcConsoleMsg({
+          kind: 'ok',
+          text: `完成 · 采集 ${sync?.hours ?? 0} 个小时(覆盖 ${sync?.orgs ?? 0} 个 workspace)`,
+        })
+    } catch (err) {
+      setOcConsoleMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
+    } finally {
+      setOcConsoleBusy(null)
+    }
+  }
+
   async function loadZhipu() {
-    const res = await fetch('/api/admin/zhipu', { credentials: 'same-origin' })
+    const res = await adminFetch('/api/admin/zhipu', { cache: 'no-store' })
     if (res.ok) {
       const z = (await res.json()) as ZhipuStatus
       setZp(z)
@@ -281,10 +361,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     setZpBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/zhipu', {
+      const res = await adminFetch('/api/admin/zhipu', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ action, key, baseUrl: url }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
@@ -315,10 +394,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     setDsBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/deepseek', {
+      const res = await adminFetch('/api/admin/deepseek', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ action, token }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
@@ -388,10 +466,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
         r.onerror = () => reject(new Error('读取文件失败'))
         r.readAsDataURL(file)
       })
-      const res = await fetch('/api/admin/wechat-qr', {
+      const res = await adminFetch('/api/admin/wechat-qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ dataUrl }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string; url?: string }
@@ -409,10 +486,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     setNickBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/settings', {
+      const res = await adminFetch('/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ nick }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string }
@@ -429,10 +505,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     setContactBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/settings', {
+      const res = await adminFetch('/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ contacts: { email: cEmail, wechat: cWechat, phone: cPhone } }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string }
@@ -445,12 +520,15 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     }
   }
 
-  useEffect(() => {
-    void (async () => {
-      await loadPage(1, 5)
-      await loadSettings()
-    })()
+  const reload = useCallback(async () => {
+    await loadPage(1, 5)
+    await loadSettings()
   }, [loadPage, loadSettings])
+
+  useEffect(() => {
+    // 兜底 catch:避免任一环节异常变成未捕获拒绝(此前是 Sentry 噪音来源)
+    void reload().catch(() => {})
+  }, [reload])
 
   useEffect(() => {
     try {
@@ -471,10 +549,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     setPwBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/password', {
+      const res = await adminFetch('/api/admin/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ current: curPw, next: newPw }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string }
@@ -495,10 +572,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     setBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await adminFetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ password }),
       })
       if (!res.ok) throw new Error('密码错误')
@@ -514,7 +590,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
   }
 
   async function logout() {
-    await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' })
+    await adminFetch('/api/admin/logout', { method: 'POST' })
     setAuthed(false)
     setComments([])
     setMsg({ kind: 'ok', text: '已退出站长登录' })
@@ -523,10 +599,9 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
   async function onDelete(id: number) {
     if (!confirm(`删除留言 #${id}(含其回复)?`)) return
     try {
-      const res = await fetch('/api/admin/delete', {
+      const res = await adminFetch('/api/admin/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ id }),
       })
       if (!res.ok) throw new Error('删除失败')
@@ -541,6 +616,27 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
     return (
       <div className="zx-container" style={{ paddingBlock: '4rem' }}>
         <p className="zx-muted zx-mono">loading…</p>
+      </div>
+    )
+  }
+
+  if (netError && !authed) {
+    return (
+      <div className="zx-container" style={{ maxWidth: 460, paddingBlock: '4rem' }}>
+        <h1 className="zx-mono" style={{ fontSize: '1.4rem', marginBottom: '1rem' }}>
+          ⚠️ 加载失败
+        </h1>
+        <p className="zx-muted" style={{ marginBottom: '1rem' }}>
+          网络连接不稳定,未能加载后台数据(并非未登录)。请检查网络后重试。
+        </p>
+        <button className="zx-btn zx-btn-primary" onClick={() => void reload()} disabled={loading}>
+          {loading ? '重试中…' : '重试'}
+        </button>
+        {msg && (
+          <div className={`zx-msg ${msg.kind}`} style={{ marginTop: '1rem' }}>
+            {msg.text}
+          </div>
+        )}
       </div>
     )
   }
@@ -810,7 +906,7 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
       {tab === 'token' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
-          OpenCode 用量 <span>官方 Console v2(天级)+ 自建小时数据</span>
+          OpenCode 用量 <span>官方 Console v2(天级)+ 推理日志 / 自建小时</span>
         </h3>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
           状态:{oc?.configured ? `已配置 ${ocWs.length} 个 workspace` : '未配置'}
@@ -937,6 +1033,76 @@ export function AdminPanel({ projects }: { projects?: Project[] }) {
             )}
           </div>
         )}
+
+        <div style={{ marginTop: '0.8rem', paddingTop: '0.7rem', borderTop: '1px dashed var(--border, #333)' }}>
+          <p className="zx-muted zx-mono" style={{ fontSize: '0.7rem', margin: '0 0 0.5rem' }}>
+            控制台推理日志(可选,用于**精确小时数据**):
+            {oc?.console?.configured ? (
+              <span className="zx-accent">
+                {' '}
+                已配置{oc.console.at ? ` · 上次同步 ${new Date(oc.console.at).toLocaleString()}` : ''}
+              </span>
+            ) : (
+              ' 未配置'
+            )}
+          </p>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              className="zx-input"
+              style={{ maxWidth: 230, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+              placeholder="org id(或从 cURL 自动提取)"
+              value={ocConsoleOrg}
+              onChange={(e) => setOcConsoleOrg(e.target.value)}
+            />
+            <input
+              className="zx-input"
+              style={{ flex: '1 1 320px', minWidth: 240, fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}
+              placeholder="粘贴 Cookie 或 Copy as cURL"
+              value={ocConsoleRaw}
+              onChange={(e) => setOcConsoleRaw(e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.5rem' }}>
+            <button
+              className="zx-btn zx-btn-sm"
+              disabled={!!ocConsoleBusy}
+              onClick={() => void loadConsole('console-save')}
+            >
+              {ocConsoleBusy === 'save' ? '校验中…' : '保存并校验'}
+            </button>
+            <button
+              className="zx-btn zx-btn-sm zx-btn-ghost"
+              disabled={!!ocConsoleBusy}
+              onClick={() => void loadConsole('console-sync')}
+              title={oc?.console?.configured ? '立即拉取推理日志(枚举账号下全部 workspace)' : '需先「保存并校验」'}
+            >
+              {ocConsoleBusy === 'sync' ? '同步中…' : '立即同步'}
+            </button>
+            <button
+              className="zx-btn zx-btn-sm zx-btn-ghost"
+              disabled={!!ocConsoleBusy || !oc?.console?.configured}
+              onClick={() => void loadConsole('console-clear')}
+            >
+              {ocConsoleBusy === 'clear' ? '清除中…' : '清除'}
+            </button>
+            {ocConsoleBusy && <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>枚举 workspace 并拉取推理日志…</span>}
+          </div>
+          {ocConsoleMsg && (
+            <div className={`zx-msg ${ocConsoleMsg.kind}`} style={{ marginTop: '0.5rem' }}>
+              {ocConsoleMsg.text}
+            </div>
+          )}
+          {oc?.console?.error && <div className="zx-msg err" style={{ marginTop: '0.5rem' }}>{oc.console.error}</div>}
+          <p className="zx-muted zx-mono" style={{ fontSize: '0.64rem', marginTop: '0.5rem', lineHeight: 1.6 }}>
+            用控制台「Logs → <span className="zx-accent">Inference</span>」的同款接口
+            <span className="zx-mono"> /api/request-logs?category=inference</span>(逐条,带 token/cost 与时间戳)
+            出**精确到小时**的用量。它**只认网页登录态**:在控制台开 DevTools → Network → 选一条
+            <span className="zx-mono"> request-logs</span> 请求 → <span className="zx-accent">Copy as cURL</span>
+            → 粘到上面即可。保存后会**自动枚举该账号下的所有 workspace**(`/api/orgs`)分别拉取,
+            并按 service account 归到对应 workspace。该 Cookie 等同**控制台全权限**,仅存服务器、不下发前端;
+            失效后重新粘贴。配置后「今天/昨天」用精确数据,未配置/失效则回退每小时采样。
+          </p>
+        </div>
       </div>
       )}
 

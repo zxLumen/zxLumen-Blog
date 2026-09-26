@@ -6,6 +6,8 @@
 
 ### 新增
 
+- **OpenCode「今天/昨天」精确小时数据(可选:控制台「推理日志」)**:控制台 Logs → Inference 的接口 `GET /api/request-logs?category=inference&since&until&limit&cursor`(带逐条 `startedAt` + token/cost)可精确出小时;它只认**网页登录态 Cookie**(httpOnly,`oc_sk_` 会 403)。admin「Token用量」新增块:粘贴一次 `Copy as cURL`(兼容 bash/cmd/fetch,自动提取 org id),保存后**自动用 `/api/orgs` 枚举账号下所有 workspace** 分别拉取,并用 `/api/service-accounts` 把每条归属到对应 workspace(按 service account 匹配本地 key)。同步窗口=**北京今天**(首次从 00:00 补齐,稳态只拉当前整点),「昨天」只读已落库存储、不额外打接口(保留 3 天);**对访客完全无感**——`/api/usage` 只后台触发(2 分钟节流)绝不 await,立即返回现有数据,否则秒回退采样。配置后分时提示标注「逐条日志 · 精确」,未配置/失效回退**每小时自动采样**(标注「采样估算」);进程内另有后台定时器(启动补跑 + 每 10 分钟)自动同步,**无需手动点「立即同步」**
+- **首页悬浮件交互升级**:①访客统计(PV/UV)悬浮件改为**只显示今日**数值(折叠态与展开格都不再显示总数),展开后点「今日访问(PV)」/「今日访客(UV)」切换近 7 天柱状图(此前固定显示 PV 柱);②服务器状态悬浮件展开后,点 **CPU / 内存 / 磁盘 / 负载** 任一指标即显示该指标**近 24 小时折线**(15 分钟/点,约 96 点,带 hover 时间+数值提示),替换原「近 7 天 CPU 日均」柱状图;新增通用 `Sparkline` 组件;`GET /api/status` 相应把 `trend`(7 天 CPU 日均)改为 `series`(4 指标 24h 序列)
 - **AI 问答机器人「Lumen · 子祥的分身」**:右下角漂浮聊天组件,访客可用自己写过的文字向"分身"提问。
   - **人格 / 知识库**:`persona.md`(第一人称人设,每问都注入)+ `faq.json`(引导问答)+ `knowledge/*.md`(站点知识)+ `corpus/`(蒸馏原料);服务端 mtime 热加载,改文件即生效。
   - **多 provider**:DeepSeek / OpenAI / 智谱 GLM / 百炼 / Moonshot / 硅基流动 / OpenRouter / OpenCode Zen / 本地 Ollama / 自定义(OpenAI 兼容),配置存 `meta.chatbot_config`,密钥单独存 meta 且支持环境变量回退。
@@ -19,6 +21,11 @@
 - **邮件服务器运维文档 `docs/MAIL.md`**:邮件服务(PostE.io)单独跑在服务器 `~/mail/`,配置**不入库**,此前完全没有文档。现记录现状速览、端口与 `nftables` 收窄规则(含"别改成 ufw default deny"的原因:Caddy 回源走 `br-*` 而非 loopback、`xray` 是 host 网络)、compose 的 `entrypoint` 包装(残留 pid 与 DKIM 软链两个故障的来龙去脉)、认证链路真相(**签名由 Haraka 的 `mailauth/dkim_sign` 完成,`rspamd` 的 `enabled=false` 属正常;出站经 Resend 中继,外链看到的是 Resend 那把钥匙**)与 DNS 对照表、重建后必查清单与"别做的事"
 
 ### 修复
+
+- **admin 面板抗网络抖动(「一直加载 / 加载不出来」)**:此前 admin 的 fetch **无超时**,且 `loadPage` 把**任何**错误都当作「未登录」,`loadSettings` 无 try/catch(未捕获拒绝上报 Sentry)。跨境链路偶发「连接建立后卡住」时,表现为后台长时间转圈、且一次抖动就像被登出。现:①新增统一封装 `adminFetch`(同源凭证 + 15s 超时,`packages/shared/src/ui/admin/admin-fetch.ts`),AdminPanel / 项目 / 外观 / 机器人面板全部改用它;②`loadSettings` 改为逐请求容错 + `Promise.all` 并行,单接口失败不影响其余;③仅 **401** 才判「未登录」,网络错误/超时保留登录态并显示「加载失败」+ **重试**按钮;④首屏网络失败不再显示登录框,而是可重试的错误页;⑤`useEffect` 补 `.catch()` 兜底。
+- **聊天窗口「卡死」**:`ChatWidget` 发送改为带 `AbortController` 客户端超时(120s),连接中断/超时后重置为可重试,不再永久停在「正在输入…」。
+- **Caddy 开启访问日志**:`{$DOMAIN}` 站点写 JSON 访问日志到 `caddy-data` 卷(`/data/access.log`,10MiB×5 轮转),便于下次区分「请求没到 / 到了但上游没回 / 超时」;不外发第三方(访客 IP 不出服务器)。
+- **监控文档补充告警规则**:`docs/MONITORING.md` 给出可直接照抄的 Grafana 告警(站点不可达 `probe_success<1`、**实例重启** `changes(node_boot_time_seconds[10m])>0`、app 容器不可用/重启、磁盘/内存)与 `for` 时长。
 
 - **「Token用量」里 OpenCode 整块消失(官方接口 v1→v2 迁移)**:2026-09-26 官方把用量导出从
   `GET /api/v1/usage/export?scope=organization&range=30d` 迁到 **`GET /api/v2/usage/export?range=30d`**;

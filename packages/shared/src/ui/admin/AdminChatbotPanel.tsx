@@ -3,6 +3,7 @@
 // 机器人后台面板:对话/provider 配置 + 检索(embedding)配置 + 灵魂蒸馏 + 对话日志。
 import { useCallback, useEffect, useState } from 'react'
 import { MantineBridge } from './mantine-bridge.js'
+import { adminFetch } from './admin-fetch.js'
 import type { NotifyMsg } from './admin-types.js'
 
 interface ProviderOption {
@@ -144,7 +145,7 @@ export function AdminChatbotPanel({
       const q = new URLSearchParams({ kind })
       if (opts?.provider) q.set('provider', opts.provider)
       if (opts?.baseUrl) q.set('baseUrl', opts.baseUrl)
-      const r = await fetch(`/api/admin/chatbot/models?${q.toString()}`, { credentials: 'same-origin', cache: 'no-store' })
+      const r = await adminFetch(`/api/admin/chatbot/models?${q.toString()}`, { cache: 'no-store' })
       const d = (await r.json().catch(() => ({}))) as { ok?: boolean; models?: string[]; error?: string }
       if (!r.ok || !d.ok) throw new Error(d.error || '模型列表加载失败')
       const list = d.models ?? []
@@ -165,7 +166,7 @@ export function AdminChatbotPanel({
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/admin/chatbot', { credentials: 'same-origin', cache: 'no-store' })
+      const r = await adminFetch('/api/admin/chatbot', { cache: 'no-store' })
       if (!r.ok) throw new Error('加载失败')
       const d = (await r.json()) as Payload
       setCfg(d.config)
@@ -183,7 +184,7 @@ export function AdminChatbotPanel({
 
   const loadDistill = useCallback(async () => {
     try {
-      const r = await fetch('/api/admin/chatbot/distill', { credentials: 'same-origin', cache: 'no-store' })
+      const r = await adminFetch('/api/admin/chatbot/distill', { cache: 'no-store' })
       if (r.ok) setDistill((await r.json()) as DistillStatus)
     } catch {
       /* 忽略 */
@@ -193,8 +194,7 @@ export function AdminChatbotPanel({
   const loadLogs = useCallback(async () => {
     setLogsBusy(true)
     try {
-      const r = await fetch('/api/admin/chatbot/logs?limit=30&days=14', {
-        credentials: 'same-origin',
+      const r = await adminFetch('/api/admin/chatbot/logs?limit=30&days=14', {
         cache: 'no-store',
       })
       if (r.ok) {
@@ -249,10 +249,9 @@ export function AdminChatbotPanel({
       delete body.embedApiKey
       if (chatKey.trim()) body.chatApiKey = chatKey.trim()
       if (embedKey.trim()) body.embedApiKey = embedKey.trim()
-      const r = await fetch('/api/admin/chatbot', {
+      const r = await adminFetch('/api/admin/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify(body),
       })
       const d = (await r.json().catch(() => ({}))) as { error?: string; status?: Payload }
@@ -276,10 +275,9 @@ export function AdminChatbotPanel({
   const distillAction = async (action: 'process' | 'persona' | 'clear') => {
     setDBusy(action)
     try {
-      const r = await fetch('/api/admin/chatbot/distill', {
+      const r = await adminFetch('/api/admin/chatbot/distill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ action, force: action === 'process' ? force : undefined }),
       })
       const d = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean; action?: string; items?: CorpusItem[] }
@@ -296,10 +294,9 @@ export function AdminChatbotPanel({
   const setKind = async (source: string, kind: 'persona' | 'knowledge' | 'auto') => {
     setDBusy('kind')
     try {
-      const r = await fetch('/api/admin/chatbot/distill', {
+      const r = await adminFetch('/api/admin/chatbot/distill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ action: 'set-kind', source, kind }),
       })
       const d = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean }
@@ -315,7 +312,7 @@ export function AdminChatbotPanel({
 
   const clearLogs = async () => {
     if (!confirm('清空全部对话日志?')) return
-    const r = await fetch('/api/admin/chatbot/logs', { method: 'DELETE', credentials: 'same-origin' })
+    const r = await adminFetch('/api/admin/chatbot/logs', { method: 'DELETE' })
     if (r.ok) {
       setLogs([])
       notify('ok', '日志已清空')

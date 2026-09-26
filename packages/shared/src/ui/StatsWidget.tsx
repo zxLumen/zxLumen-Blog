@@ -11,18 +11,10 @@ const POS_KEY = 'zx-stats-pos'
 const POP_W = 232
 const POP_H = 230
 
-function Cell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="zx-statswidget-cell">
-      <div className="zx-statswidget-val">{value}</div>
-      <div className="zx-statswidget-lbl">{label}</div>
-    </div>
-  )
-}
-
-/** 右上角悬浮访客统计:可拖动,点击展开浮层(仅访客维度) */
+/** 右上角悬浮访客统计:可拖动,点击展开浮层(显示今日数值 + 近 7 天 PV/UV 可切换柱图) */
 export function StatsWidget({ stats }: { stats?: StatsResult }) {
   const [open, setOpen] = useState(false)
+  const [series, setSeries] = useState<'pv' | 'uv'>('pv')
   const [mounted, setMounted] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [popPos, setPopPos] = useState<{ left: number; top: number } | null>(null)
@@ -147,8 +139,11 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   if (!stats) return null
 
   const { visits } = stats
+  const today = visits.today
   const days = visits.days.slice(-7)
-  const maxPv = Math.max(1, ...days.map((d) => d.pv))
+  const val = (d: (typeof days)[number]) => (series === 'pv' ? d.pv : d.uv)
+  const maxV = Math.max(1, ...days.map(val))
+  const seriesName = series === 'pv' ? '访问量(PV)' : '独立访客(UV)'
 
   const btnStyle = pos ? { left: pos.x, top: pos.y, right: 'auto' } : undefined
 
@@ -169,8 +164,24 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
               </button>
             </div>
             <div className="zx-statswidget-grid">
-              <Cell label="访问量(PV)" value={fmtCompact(visits.pv)} />
-              <Cell label="访客(UV)" value={fmtCompact(visits.uv)} />
+              <button
+                type="button"
+                className={`zx-statswidget-cell${series === 'pv' ? ' is-active' : ''}`}
+                aria-pressed={series === 'pv'}
+                onClick={() => setSeries('pv')}
+              >
+                <div className="zx-statswidget-val">{fmtCompact(today.pv)}</div>
+                <div className="zx-statswidget-lbl">今日访问(PV)</div>
+              </button>
+              <button
+                type="button"
+                className={`zx-statswidget-cell${series === 'uv' ? ' is-active' : ''}`}
+                aria-pressed={series === 'uv'}
+                onClick={() => setSeries('uv')}
+              >
+                <div className="zx-statswidget-val">{fmtCompact(today.uv)}</div>
+                <div className="zx-statswidget-lbl">今日访客(UV)</div>
+              </button>
             </div>
             <div
               className="zx-statswidget-trend"
@@ -180,14 +191,14 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
               {days.map((d) => (
                 <div
                   key={d.day}
-                  className={`zx-bar${d.pv === 0 ? ' is-zero' : ''}`}
+                  className={`zx-bar${val(d) === 0 ? ' is-zero' : ''}`}
                   data-label={`${d.day.slice(5)} · PV ${d.pv} / UV ${d.uv}`}
-                  style={{ height: `${Math.max(3, (d.pv / maxPv) * 100)}%` }}
+                  style={{ height: `${Math.max(3, (val(d) / maxV) * 100)}%` }}
                 />
               ))}
             </div>
             {barTip.node}
-            <div className="zx-statswidget-foot zx-muted zx-mono">近 7 天 · 访问量(PV)</div>
+            <div className="zx-statswidget-foot zx-muted zx-mono">近 7 天 · {seriesName}</div>
           </div>,
           document.body,
         )
@@ -214,9 +225,9 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
         title="访客统计(可拖动)"
       >
         <span className="zx-envdot" />
-        <span className="zx-mono">访问 {fmtCompact(visits.pv)}</span>
+        <span className="zx-mono">今日 {fmtCompact(today.pv)}</span>
         <span className="zx-statswidget-sep">·</span>
-        <span className="zx-mono zx-muted">访客 {fmtCompact(visits.uv)}</span>
+        <span className="zx-mono zx-muted">访客 {fmtCompact(today.uv)}</span>
       </button>
       {popover}
     </>

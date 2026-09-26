@@ -8,6 +8,7 @@ import {
   getLastError as ocLastError,
   type SourceFailure,
 } from './opencode'
+import { ensureLogsScheduler } from './opencode-logs'
 import {
   getApiKey,
   fetchUsageZhipu,
@@ -117,6 +118,8 @@ async function collectErrors(): Promise<NonNullable<SourceAvailability['errors']
 export async function getSourceAvailability(): Promise<SourceAvailability> {
   // 顺带确保自建小时采样在跑(幂等;首页有访问即可,不依赖 admin 操作)
   ensureHourlyScheduler()
+  // 顺带确保控制台推理日志的后台自动同步在跑(未配置 Cookie 时为空操作)
+  ensureLogsScheduler()
   const hit = availCache.get(AVAIL_KEY)
   if (hit) return hit
   const [deepseek, opencode, zhipu, errors] = await Promise.all([

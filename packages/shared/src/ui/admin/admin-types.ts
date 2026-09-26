@@ -43,6 +43,14 @@ export interface OcStatus {
   workspaces?: Array<{ id: string; name: string; hasKey?: boolean }>
   lastError?: string | null
   lastData?: { at?: number; count?: number; since?: string } | null
+  /** 控制台推理日志(精确小时)凭据状态 */
+  console?: {
+    configured?: boolean
+    org?: string
+    at?: string
+    error?: string
+    sync?: { running?: boolean; startedAt?: number; at?: number; hours?: number; orgs?: number; error?: string }
+  }
 }
 
 export interface ZhipuStatus {

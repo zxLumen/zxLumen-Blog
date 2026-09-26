@@ -2,7 +2,7 @@
 
 「Token 用量」面板的 **OpenCode 数据源**读取 **OpenCode 官方 Console** 的用量
 (service-account key 所属 workspace/组织的数据),在本地聚合展示:
-**7 天 / 30 天 / 本月 / 上月按天**;**今天 / 昨天按小时**(小时数据由本站自己采样,见下)。
+**7 天 / 30 天 / 本月 / 上月按天**;**今天 / 昨天按小时**(优先用控制台推理日志精确聚合,未配置时由本站自采样,见下)。
 
 ## 数据从哪来
 
@@ -37,12 +37,47 @@ v2 只有天级,**无法**还原每个小时。因此本站自己采样:每个�
 按北京整点写入数据库(`meta.opencode_hourly.<wsId>`):
 
 - 触发:进程内定时器(随首次访问/`/api/usage` 启动)+ 启动时若距上次采样超过 55 分钟则补抓一次;
-  admin「采样小时数据」按钮可手动补一次;
+  访问今天/昨天数据时若距上次 >5 分钟也会**惰性补采样**(不阻塞响应);admin「采样小时数据」按钮可手动补一次;
 - 存储:`meta.opencode_cum.<wsId>` 记上次累计读数(按 workspace 分键,保留最近 3 天);
   `meta.opencode_hourly.<wsId>` 记小时行(保留最近 35 天 / 最多 8000 行);跨天自动从 0 起算;
 - 首次采样只建立基线(不产出),之后每个整点产生一小时增量;
 - **局限**:进程跨过整点未运行会丢那一小时(增量并入下一小时),且**无法补历史**——只能从现在开始积累;
   今天/昨天若还没有小时数据,则回退天级单柱。
+
+## 精确小时数据(可选:控制台「推理日志」)
+
+控制台 **Logs → Inference** 页用的接口
+`GET {consoleUrl}/api/request-logs?since=<ms>&until=<ms>&limit=100&category=inference[&cursor=]`
+会返回**每条推理请求**(`startedAt`、`inputTokens/outputTokens/cacheReadTokens/cacheWriteTokens/
+reasoningTokens`、`cost` 美元、`model/provider/serviceAccountID`),据此可精确聚合成小时 —— 比自建采样更准。
+
+要点(实测):
+
+- **必须带 `category=inference`**;不带会拿到控制台自身的 `category:"api"` **API 审计日志**(没有 token 字段)。
+- **必须带 `x-org-id: wrk_…`**(workspace id),各 workspace 分开拉;`nextCursor` 是字符串,原样回传翻页。
+- 只认**网页登录态 Cookie**(httpOnly;`oc_sk_` 打它会 403),需人工粘贴一次。
+
+配置位置:admin →「Token用量」→ OpenCode 区块 →「控制台推理日志」:
+
+1. 在控制台开 DevTools → Network,筛 `request-logs`,随便点开一条 → **Copy as cURL**(bash/cmd 均可);
+2. 粘进输入框(org id 自动从 `x-org-id`/URL 提取,也可手填)→「保存并校验」→ 后台拉取、面板**轮询进度**。
+
+**同步模型(按 workspace 滚动)**
+
+- 保存后自动用 Cookie 调 `/api/orgs` **枚举账号下所有 workspace**,逐个拉取;
+- 拉取窗口 = **北京时间今天**:首次/缺小时时从今天 00:00 补齐,稳态只拉当前整点(约 1 页);
+- 「昨天」**只读已落库的存储、不额外打接口** —— 它在昨天当时已采到(存储保留 3 天,跨过日界);
+  因此首次配置当天看不到更早的"昨天",自然滚到第二天后就有了;
+- 用每个 admin Key 调 `/api/service-accounts` 得到 **org ↔ 本地 workspace** 映射与 svcacct 名称,
+  据此把日志行归到对应 workspace(面板按选中的 workspace 过滤)。
+
+**对访客完全无感**:`/api/usage` 只在「今天」触发一次**后台**同步(2 分钟节流),**绝不 await**,
+立即返回存储里的现有数据(没有则秒回退采样/天级);同步慢(几十页)也只发生在后台。
+此外进程内还有一个**后台定时器**(启动补跑一次 + 每 10 分钟一次,未配置 Cookie 时为空操作),
+所以即便长时间零访问也不会丢小时,**无需手动点「立即同步」**(admin 里点一次「保存并校验」完成首次配置即可)。
+
+Cookie **仅存服务器** `meta.opencode_console_cookie`,不下发前端;失效(401/403)后重贴即可。
+配置后分时提示标注「逐条日志 · 精确」,未配置/失效则回退「采样估算」。
 
 ## 鉴权(必须用 service-account Key)
 
@@ -82,7 +117,8 @@ v2 只有天级,**无法**还原每个小时。因此本站自己采样:每个�
 
 `GET /api/usage?source=opencode&range=<range>`
 
-- 响应与 deepseek 同形状,`granularity`:今天/昨天**有自建小时数据时为 `"hour"`**,否则(以及其余区间)为 `"day"`;
+- 响应与 deepseek 同形状,`granularity`:今天/昨天**有小时数据时为 `"hour"`**,否则(以及其余区间)为 `"day"`;
+  `hourlySource`:今天/昨天小时数据的来源 —— `"logs"`(控制台逐条日志,精确) / `"sampled"`(自建采样估算);
   `platformLimit` 标记超出官方覆盖;`currency` 恒为 `"USD"`;
   `rows[].apiKey` 即 provider 目录键(opencode / opencode-go …);
 - `source`: `opencode`(实时) / `stale`(上次成功快照,官方故障时回退) /

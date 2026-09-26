@@ -4,6 +4,7 @@ import { Badge, Button, Checkbox, Group, Paper, Stack, Text, Title } from '@mant
 import { useCallback, useEffect, useState } from 'react'
 import type { AppearanceConfig } from '../../theme.js'
 import { MantineBridge } from './mantine-bridge.js'
+import { adminFetch } from './admin-fetch.js'
 import type { NotifyMsg } from './admin-types.js'
 
 interface ThemeOption {
@@ -77,7 +78,7 @@ export function AdminThemePanel({
   const load = useCallback(async () => {
     setBusy(true)
     try {
-      const r = await fetch('/api/admin/theme-config', { credentials: 'same-origin', cache: 'no-store' })
+      const r = await adminFetch('/api/admin/theme-config', { cache: 'no-store' })
       const d = (await r.json()) as Payload
       setData(d)
       setConfig(d.config)
@@ -114,10 +115,9 @@ export function AdminThemePanel({
     if (!config) return
     setSaving(true)
     try {
-      const r = await fetch('/api/admin/theme-config', {
+      const r = await adminFetch('/api/admin/theme-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify(config),
       })
       const d = (await r.json().catch(() => ({}))) as { error?: string; config?: AppearanceConfig }

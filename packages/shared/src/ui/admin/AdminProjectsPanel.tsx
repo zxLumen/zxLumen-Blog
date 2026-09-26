@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import type { StoredProject } from '../../schema.js'
 import { MantineBridge } from './mantine-bridge.js'
+import { adminFetch } from './admin-fetch.js'
 import type { NotifyMsg } from './admin-types.js'
 
 /** 覆盖面门控:项目管理在 Tab 模式下仅对应 Tab 显 */
@@ -175,7 +176,7 @@ export function AdminProjectsPanel({
   const load = useCallback(async () => {
     setBusy(true)
     try {
-      const r = await fetch('/api/admin/projects', { credentials: 'same-origin', cache: 'no-store' })
+      const r = await adminFetch('/api/admin/projects', { cache: 'no-store' })
       const data = (await r.json()) as { projects?: StoredProject[] }
       setProjects(data.projects ?? [])
       setDirty(false)
@@ -229,10 +230,9 @@ export function AdminProjectsPanel({
   const save = async () => {
     setSaving(true)
     try {
-      const r = await fetch('/api/admin/projects', {
+      const r = await adminFetch('/api/admin/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ projects }),
       })
       const d = (await r.json().catch(() => ({}))) as { error?: string; projects?: StoredProject[] }
@@ -251,7 +251,7 @@ export function AdminProjectsPanel({
     if (!confirm('恢复为 content.local.ts 的静态默认项目?当前所有增删改将丢失。')) return
     setSaving(true)
     try {
-      const r = await fetch('/api/admin/projects', { method: 'DELETE', credentials: 'same-origin' })
+      const r = await adminFetch('/api/admin/projects', { method: 'DELETE' })
       const d = (await r.json().catch(() => ({}))) as { projects?: StoredProject[] }
       if (!r.ok) throw new Error('恢复失败')
       if (d.projects) setProjects(d.projects)

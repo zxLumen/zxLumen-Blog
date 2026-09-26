@@ -220,12 +220,16 @@ export function ChatWidget() {
     setMessages(next)
     setInput('')
     setBusy(true)
+    // 客户端超时:连接建立后卡住时,避免界面永久停在「正在输入…」
+    const ac = new AbortController()
+    const timeout = setTimeout(() => ac.abort(), 120_000)
     try {
       const history = messages.slice(-8).map((m) => ({ role: m.role, content: m.content }))
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
+        signal: ac.signal,
         body: JSON.stringify({ message: q, history, session_id: sessionRef.current }),
       })
       if (!res.ok) {
@@ -260,9 +264,11 @@ export function ChatWidget() {
         return copy
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : '出错了')
+      const aborted = e instanceof DOMException && e.name === 'AbortError'
+      setError(aborted ? '响应超时,请重试' : e instanceof Error ? e.message : '出错了')
       scrollToBottom()
     } finally {
+      clearTimeout(timeout)
       setBusy(false)
     }
   }

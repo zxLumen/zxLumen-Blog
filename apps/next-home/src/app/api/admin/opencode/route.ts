@@ -15,6 +15,19 @@ import {
   ensureHourlyScheduler,
   type OcWorkspace,
 } from '@/lib/opencode'
+import {
+  getConsoleOrg,
+  getConsoleCookie,
+  getConsoleAt,
+  getConsoleError,
+  getConsoleSyncState,
+  getConsoleWsMap,
+  setConsoleCreds,
+  clearConsoleCreds,
+  syncConsoleLogs,
+  extractCookie,
+  extractOrg,
+} from '@/lib/opencode-logs'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +39,13 @@ async function status() {
     workspaces: ws.map((w) => ({ id: w.id, name: w.name, hasKey: !!w.key })),
     lastData: (await getSnapshotStatus()) || null,
     lastError: (await getLastError()) || null,
+    console: {
+      configured: !!(await getConsoleCookie()),
+      org: (await getConsoleOrg()) || '',
+      at: (await getConsoleAt()) || '',
+      error: (await getConsoleError()) || '',
+      sync: await getConsoleSyncState(),
+    },
   }
 }
 
@@ -36,7 +56,14 @@ export async function GET() {
 
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const data = await readJson<{ action?: string; consoleUrl?: string; workspaces?: unknown; wsId?: string }>(req)
+  const data = await readJson<{
+    action?: string
+    consoleUrl?: string
+    workspaces?: unknown
+    wsId?: string
+    org?: string
+    raw?: string
+  }>(req)
   const action = data?.action
 
   if (action === 'save') {
@@ -104,6 +131,33 @@ export async function POST(req: Request) {
     ensureHourlyScheduler()
     const r = await captureHourlyOpenCode()
     return Response.json({ ok: true, captured: r.captured, bucket: r.bucket, ...(await status()) })
+  }
+
+  if (action === 'console-save') {
+    const raw = typeof data?.raw === 'string' ? data.raw : ''
+    const org = (typeof data?.org === 'string' ? data.org : '').trim() || extractOrg(raw)
+    const cookie = extractCookie(raw)
+    if (!cookie) return Response.json({ error: '缺少 Cookie(粘贴整段 Cookie 或 Copy as cURL)' }, { status: 400 })
+    await setConsoleCreds(org, cookie)
+    // 后台枚举 workspace + 拉推理日志;接口立即返回,前端轮询进度
+    void syncConsoleLogs({ force: true })
+    return Response.json({ ok: true, started: true, ...(await status()) })
+  }
+
+  if (action === 'console-sync') {
+    void syncConsoleLogs({ force: true })
+    return Response.json({ ok: true, started: true, ...(await status()) })
+  }
+
+  if (action === 'console-map') {
+    // 触发一次 org↔本地 workspace 映射刷新(调试用)
+    const orgs = await getConsoleWsMap()
+    return Response.json({ ok: true, orgs, ...(await status()) })
+  }
+
+  if (action === 'console-clear') {
+    await clearConsoleCreds()
+    return Response.json({ ok: true, ...(await status()) })
   }
 
   if (action === 'clear') {

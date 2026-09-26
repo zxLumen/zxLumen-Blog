@@ -3330,8 +3330,73 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   word-break: break-all;
 }
 
-/* ============ 对话机器人 ChatWidget ============ */
-.zxchat {
+/* ============ 悬浮件指标格(可点)+ 24h 折线 ============ */
+
+/* 指标格做成可点切换(访客 PV/UV、监控 CPU/内存/磁盘/负载) */
+.zx-statswidget-cell,
+.zx-statuswidget-cell {
+  cursor: pointer;
+  border: 0;
+  background: none;
+  padding: 0.2rem 0.15rem;
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.zx-statswidget-cell:hover,
+.zx-statuswidget-cell:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.zx-statswidget-cell.is-active,
+.zx-statuswidget-cell.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.zx-statswidget-cell.is-active .zx-statswidget-val,
+.zx-statuswidget-cell.is-active .zx-statuswidget-val {
+  color: var(--accent);
+}
+
+/* 迷你折线图(Sparkline) */
+.zx-spark {
+  position: relative;
+  margin: 0.4rem 0 0.25rem;
+}
+
+.zx-spark-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.zx-spark-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+
+.zx-spark-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: #0d1117;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 0.66rem;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+/* ============ 对话机器人 ChatWidget ============ */.zxchat {
   position: fixed;
   right: 20px;
   bottom: 20px;

@@ -437,6 +437,8 @@ const HOURLY_MAX_ROWS = 8000
 const HOURLY_KEEP_DAYS = 35
 /** 距上次采样超过该时长则视为需要补抓 */
 const STALE_MS = 55 * 60_000
+/** 访问时惰性补采样阈值 */
+const LAZY_MS = 5 * 60_000
 
 interface OcCum {
   day: string
@@ -629,17 +631,7 @@ export function ensureHourlyScheduler(): void {
   if (g.__ocHourlyInit) return
   g.__ocHourlyInit = true
 
-  const run = async () => {
-    if (g.__ocHourlyBusy) return
-    g.__ocHourlyBusy = true
-    try {
-      await captureHourlyOpenCode()
-    } catch {
-      /* 采样失败不影响面板 */
-    } finally {
-      g.__ocHourlyBusy = false
-    }
-  }
+  const run = runCaptureGuarded
 
   const schedule = () => {
     const now = Date.now()
@@ -655,6 +647,27 @@ export function ensureHourlyScheduler(): void {
   // 启动补抓:上次采样已过期(或从未采样)时立即跑一次
   void hourlyAt().then((at) => {
     if (Date.now() - at > STALE_MS) void run()
+  })
+}
+
+/** 带并发保护的采样(定时器与惰性补采样共用) */
+function runCaptureGuarded(): Promise<void> {
+  const g = globalThis as unknown as { __ocHourlyBusy?: boolean }
+  if (g.__ocHourlyBusy) return Promise.resolve()
+  g.__ocHourlyBusy = true
+  return captureHourlyOpenCode()
+    .then(() => {})
+    .catch(() => {})
+    .finally(() => {
+      g.__ocHourlyBusy = false
+    })
+}
+
+/** 页面/接口访问时惰性补采样:距上次 >5 分钟才跑,且不阻塞本次响应 */
+export function maybeCaptureHourly(): void {
+  ensureHourlyScheduler()
+  void hourlyAt().then((at) => {
+    if (Date.now() - at > LAZY_MS) void runCaptureGuarded()
   })
 }
 
@@ -730,6 +743,8 @@ export async function fetchUsageOpenCodeWs(
   range: UsageRange,
   filter?: { start?: string; end?: string },
 ): Promise<PlatformUsageOpenCode> {
+  // 今天/昨天:顺带惰性补采样(不阻塞本次响应),让当前小时尽快出现
+  if (range === 'today' || range === 'yesterday') maybeCaptureHourly()
   const { rows, grain } = await fetchRows30(ws)
   const hourly = range === 'today' || range === 'yesterday' ? await getHourlyRows(ws.id) : undefined
   return filterUsageOpenCode(rows, range, filter, { grain, hourly })

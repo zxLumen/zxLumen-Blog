@@ -25,6 +25,14 @@ import {
   getLastRows as zhipuLastRows,
   getLastError as zhipuLastError,
 } from '@/lib/zhipu'
+import {
+  isConsoleConfigured,
+  syncConsoleLogs,
+  getConsoleHourlyRows,
+  getConsoleWsMap,
+  ensureLogsScheduler,
+  getConsoleError,
+} from '@/lib/opencode-logs'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +99,8 @@ const isIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
 async function opencodeUsage(range: UsageRange, start?: string, end?: string, wsParam?: string) {
   // 启动自建小时采样(仅注册一次;不影响本次请求)
   ensureHourlyScheduler()
+  // 启动控制台推理日志后台同步(仅注册一次;未配置 Cookie 时为空操作)
+  ensureLogsScheduler()
 
   const filter =
     range === 'custom'
@@ -120,7 +130,11 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
     },
     source: string,
     at: number,
-    opts?: { lastError?: string; goQuotas?: { name: string; quota: GoQuota | null }[] },
+    opts?: {
+      lastError?: string
+      goQuotas?: { name: string; quota: GoQuota | null }[]
+      hourlySource?: 'logs' | 'sampled'
+    },
   ) =>
     Response.json(
       {
@@ -135,6 +149,7 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
         end: d.end,
         at,
         workspaces: all.map((w) => ({ id: w.id, name: w.name })),
+        ...(opts?.hourlySource ? { hourlySource: opts.hourlySource } : {}),
         ...(opts?.goQuotas ? { goQuotas: opts.goQuotas } : {}),
         ...(opts?.lastError ? { lastError: opts.lastError } : {}),
       },
@@ -155,6 +170,37 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
       },
       { headers: noStore },
     )
+  }
+
+  // 今天/昨天:优先用控制台「推理日志」(request-logs?category=inference,精确到小时);未配置/失效则回退采样/天级
+  if (range === 'today' || range === 'yesterday') {
+    if (await isConsoleConfigured()) {
+      // 只在「今天」触发一次后台同步(2 分钟节流);**绝不 await**,访客请求永远秒回。
+      // 「昨天」直接读已落库的滚动存储,不额外打接口。
+      if (range === 'today') void syncConsoleLogs()
+
+      // 选中 workspace → 其对应的控制台 org id(映射拿不到则不按 org 过滤)
+      const wsMap = await getConsoleWsMap()
+      const hasMap = Object.keys(wsMap).length > 0
+      const selectedIds = new Set(selected.map((w) => w.id))
+      const orgFilter = hasMap
+        ? Object.entries(wsMap)
+            .filter(([, m]) => selectedIds.has(m.wsId))
+            .map(([orgId]) => orgId)
+        : undefined
+
+      const logsRows = await getConsoleHourlyRows(range, filter, hasMap ? orgFilter : undefined)
+      if (logsRows.length) {
+        const data = filterUsageOpenCode(logsRows, range, filter, { grain: 'hour' })
+        const list = await Promise.all(selected.map(async (ws) => ({ name: ws.name, quota: await fetchGoQuotaWs(ws) })))
+        const goq = list.filter((q) => q.quota)
+        return send(data, 'opencode', Date.now(), {
+          goQuotas: goq.length ? goq : undefined,
+          hourlySource: 'logs',
+          lastError: (await getConsoleError()) || undefined,
+        })
+      }
+    }
   }
 
   const [parts, quotas] = await Promise.all([
@@ -182,7 +228,11 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
       merged,
       live.length === selected.length ? 'opencode' : 'stale',
       Date.now(),
-      { lastError: errs.length ? errs.join('; ') : undefined, goQuotas: goQuotas.length ? goQuotas : undefined },
+      {
+        lastError: errs.length ? errs.join('; ') : undefined,
+        goQuotas: goQuotas.length ? goQuotas : undefined,
+        hourlySource: merged.granularity === 'hour' ? 'sampled' : undefined,
+      },
     )
   }
 
@@ -220,6 +270,7 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
     return send(merged, 'stale', Date.now(), {
       lastError: error + orphanNote,
       goQuotas: goQuotas.length ? goQuotas : undefined,
+      hourlySource: merged.granularity === 'hour' ? 'sampled' : undefined,
     })
   }
 

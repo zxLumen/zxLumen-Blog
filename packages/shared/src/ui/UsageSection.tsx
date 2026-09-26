@@ -89,6 +89,7 @@ export function UsageSection({
   const [currency, setCurrency] = useState<'CNY' | 'USD'>('CNY')
   const [at, setAt] = useState<number | undefined>()
   const [lastError, setLastError] = useState<string | undefined>()
+  const [hourlySource, setHourlySource] = useState<'logs' | 'sampled' | undefined>()
   const [zhipuQuota, setZhipuQuota] = useState<ZhipuQuota | null>(null)
   const [win, setWin] = useState<{ start?: string; end?: string }>(ssrWin ?? {})
   const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [] })
@@ -148,11 +149,12 @@ export function UsageSection({
     void wsKey
     fetch(url, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; goQuotas?: { name: string; quota: GoQuota | null }[]; zhipuQuota?: ZhipuQuota | null; workspaces?: { id: string; name: string }[] }) => {
+      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; hourlySource?: 'logs' | 'sampled'; goQuotas?: { name: string; quota: GoQuota | null }[]; zhipuQuota?: ZhipuQuota | null; workspaces?: { id: string; name: string }[] }) => {
         if (!alive) return
         const s = (d.source as typeof source) || 'none'
         setSource(s)
         setGranularity(d.granularity === 'hour' ? 'hour' : 'day')
+        setHourlySource(d.hourlySource)
         setPlatformLimit(!!d.platformLimit)
         setCurrency(d.currency === 'USD' ? 'USD' : 'CNY')
         setAt(d.at)
@@ -443,8 +445,10 @@ export function UsageSection({
     }
     if (dataSrc === 'zhipu')
       return `// 实时数据 · 智谱 monitor API(区间内按模型 token 总量)${rangeWin ? ` · ${rangeWin}` : ''} · 更新于 ${fmtAt(at)}`
-    if (hourMode)
-      return `// 实时数据 · ${srcName} 分时(UTC+8,按小时)${rangeWin ? ` · ${rangeWin}` : ''} · 更新于 ${fmtAt(at)}`
+    if (hourMode) {
+      const src2 = dataSrc === 'opencode' ? (hourlySource === 'logs' ? '逐条日志 · 精确' : hourlySource === 'sampled' ? '采样估算' : '') : ''
+      return `// 实时数据 · ${srcName} 分时(UTC+8,按小时)${src2 ? ` · ${src2}` : ''}${rangeWin ? ` · ${rangeWin}` : ''} · 更新于 ${fmtAt(at)}`
+    }
     return `// 实时数据 · 来自 ${srcName}${rangeWin ? ` · ${rangeWin}` : ''} · 更新于 ${fmtAt(at)}`
   })()
 
