@@ -16,9 +16,14 @@
 
 - **首页服务器状态悬浮件 + 导航「监控」入口**:右上角新增**可拖动**的状态浮件(CPU / 内存 / 磁盘 / 负载 / 运行时长 / 站点在线 + **近 7 天 CPU 日均趋势**),悬停展开、移出收起(与访客统计一致);数据由新接口 `GET /api/status` 只读查询 Grafana Cloud(60s 缓存,失败时显示降级「状态异常」气泡、可展开看错误,不再自动隐藏);**所有悬浮件(访客统计 + 服务器状态)拖动后靠近视口边缘自动吸附**;顶栏导航在「留言板」下新增「监控」外链,直达 Node Exporter Full 面板
 - **悬浮件失败态可见**:服务器状态浮件在数据源不可用(token 缺失 / 网络失败等)时**不再整体消失**,改为显示红色降级气泡(「状态异常」,悬停可查看 `error` 文案),每 60s 自动重试;本地 dev 通过 `apps/next-home/.env.local`(已 gitignore)固定 `GRAFANA_READ_TOKEN`,避免裸 `npm run dev` 丢失 token
+- **邮件服务器运维文档 `docs/MAIL.md`**:邮件服务(PostE.io)单独跑在服务器 `~/mail/`,配置**不入库**,此前完全没有文档。现记录现状速览、端口与 `nftables` 收窄规则(含"别改成 ufw default deny"的原因:Caddy 回源走 `br-*` 而非 loopback、`xray` 是 host 网络)、compose 的 `entrypoint` 包装(残留 pid 与 DKIM 软链两个故障的来龙去脉)、认证链路真相(**签名由 Haraka 的 `mailauth/dkim_sign` 完成,`rspamd` 的 `enabled=false` 属正常;出站经 Resend 中继,外链看到的是 Resend 那把钥匙**)与 DNS 对照表、重建后必查清单与"别做的事"
 
 ### 修复
 
+- **邮件服务器 Dovecot 起不来 / 收信断**(服务器 `~/mail/`,配置不入库,见 `docs/MAIL.md`):`restart: unless-stopped` 走的是 `docker restart`、**保留容器文件系统**,上次残留的 `/run/dovecot/master.pid` 让 s6 判定"Dovecot 已在运行"而拒绝启动 —— 不只是没有 IMAP,**收信投递(LMTP)也断**、容器 `unhealthy`、`mail.log` 停止写入,且**每次重启必复发**。现给 compose 加 `entrypoint` 包装:启动前清掉 `dovecot`/`rsyslog` 残留 pid 与 socket 再 `exec /init`;同一包装还会在启动时重建各域 DKIM 软链(`/opt/haraka-*/config/dkim/<域>`,原先由后台页面按需创建,**容器重建即丢,会让出站邮件静默不签名**)
+- **邮件服务器公网暴露收窄**:`nftables` 定向拒绝 `110`/`143`/`8080`/`8443` 的公网直连(仅保留本机与 docker 网桥),只放行 `25`/`465`/`587`/`993`;不动 forward 链与 `22`/`2096`,因此不影响 Docker 端口映射、SSH 与 VLESS。踩坑记录:Caddy 上游是 `host.docker.internal:8443`(从 `br-*` 进来而非 loopback),漏放行会让 `mail.<DOMAIN>` 整个 000
+- **容器监控失效**:cAdvisor 旧版(v0.49.1)不支持 Docker 29 默认的 **containerd 镜像存储(snapshotter)**,导致容器指标全空(只剩主机总量);且 Alloy 侧还丢弃了容器 `name` 标签。现升级 **cAdvisor v0.60.6**(`ghcr.io/google/cadvisor`,v0.54+ 支持 containerd snapshotter)、**保留 `name`/`service` 标签**、**开启容器磁盘 IO**、**容器日志改为采集全部容器**(mailserver 几乎不写 stdout,无噪声);本地 Grafana 的 cAdvisor 面板(uid `pMEd7m0Mz`)随之可用
+- **服务器侧配置同步**:`ci-run.sh` 自动同步清单加入 `docker/observability/`(Alloy 配置 + Grafana provisioning/面板),改完 push 即生效,无需手动 `scp`
 - **admin 统计里项目点击显示成 id**:`/admin` 统计页此前用**静态项目列表**解析埋点 `target`(项目 id),导致 admin 里新增/改过的项目(如 RAG)`id → 名称` 解析失败、直接显示原始 id。现改用 **DB 合并后的项目列表(含已删除)**,admin「项目点击」与「访客明细」均正确显示项目名称
 - **项目卡片布局**:卡片改为纵向 flex,**亮点以下的内容(技术标签 + 操作按钮)贴卡片底部**,同排卡片底对齐,不再因简介长短参差
 - **项目简介换行**:admin 项目简介里手动换行(`\n`)在前端卡片上原样显示(项目简介段落加 `white-space: pre-line`)

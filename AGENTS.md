@@ -7,7 +7,7 @@
 - `apps/next-home`:Next.js 16 应用(端口 3000)
 - `packages/shared`:设计系统(主题/布局)+ 共享 React 组件 + 类型 + SQLite 数据层(`@zx/shared`)
 - `docker/`:Dockerfile / compose / Caddyfile / 备份脚本
-- `docs/`:部署、上报等文档
+- `docs/`:部署、上报、邮件等文档(邮件服务器在服务器 `~/mail/` 单独跑,见 `docs/MAIL.md`)
 - `TODO.md`:待办清单 / Roadmap(新需求先记这里)
 
 ## 常用命令
@@ -127,8 +127,8 @@ cd apps/next-home && npm run lint && npm run build
 3. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
    改了邮箱/联系方式要**同时更新线上库**(线上 `/admin → 个人信息`,或直接改 `meta`)。
 
-> `docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` / `docker/ci-run.sh` **无需手动传**:
-> 服务器 `ci-run.sh` 会在部署前从公开仓库自动 `git fetch` 同步(见上)。
+> `docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` / `docker/ci-run.sh` /
+> `docker/observability/` **无需手动传**:服务器 `ci-run.sh` 会在部署前从公开仓库自动 `git fetch` 同步(见上)。
 >
 > 一句话:**源码改了 `content.local.ts` / 简历 / 二维码 / 联系方式 → 上线时把
 > `docker/site-content/*` 传服务器即可,镜像与配置都不用动**。
