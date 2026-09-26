@@ -40,20 +40,24 @@ prometheus.scrape "node" {
   scrape_interval = "30s"
 }
 
-// ---------- 容器指标(cAdvisor,已筛选) ----------
-// cAdvisor 侧用 --disable_metrics 精简;此处再按指标名白名单 + 去高基数标签
+// ---------- 容器指标(cAdvisor;白名单 + 保留 name/service,去高基数标签) ----------
 
 prometheus.relabel "cadvisor" {
   forward_to = [prometheus.remote_write.cloud.receiver]
 
   rule {
     source_labels = ["__name__"]
-    regex         = "container_(cpu_usage_seconds_total|memory_working_set_bytes|memory_usage_bytes|network_receive_bytes_total|network_transmit_bytes_total|start_time_seconds|oom_events_total)"
+    regex         = "container_(cpu_usage_seconds_total|memory_working_set_bytes|memory_usage_bytes|memory_rss|memory_cache|network_receive_bytes_total|network_transmit_bytes_total|network_receive_errors_total|network_transmit_errors_total|start_time_seconds|oom_events_total|fs_reads_bytes_total|fs_writes_bytes_total|fs_usage_bytes)"
     action        = "keep"
   }
-  // 去掉容器 id / 镜像等长标签(避免每次 redeploy 产生新 series);保留 compose service 标签
+  // compose service → service 标签(先复制,再在下面连同其它 container_label_* 一起删)
   rule {
-    regex  = "^(id|name|image|container_label_com_docker_compose_project|container_label_com_docker_compose_version|container_label_com_docker_compose_config_hash)$"
+    source_labels = ["container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  // 去掉容器 id、镜像名与全部 docker 标签(避免高基数);保留 name(容器名)与 service
+  rule {
+    regex  = "^(id|image|container_label_.*)$"
     action = "labeldrop"
   }
 }
@@ -78,7 +82,7 @@ prometheus.scrape "app" {
   }
 }
 
-// ---------- 容器日志(app / caddy)→ Loki ----------
+// ---------- 容器日志(全部容器,按 container/service 标签) → Loki ----------
 
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
@@ -87,11 +91,7 @@ discovery.docker "containers" {
 discovery.relabel "docker_logs" {
   targets = discovery.docker.containers.targets
 
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-    regex         = "(app|caddy)"
-    action        = "keep"
-  }
+  // 采集本机全部容器日志(mailserver 等几乎不写 stdout,无噪声)
   rule {
     source_labels = ["__meta_docker_container_name"]
     regex         = "/?(.*)"

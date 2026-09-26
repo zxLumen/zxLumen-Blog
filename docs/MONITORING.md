@@ -8,7 +8,7 @@
 ```
 VPS(仅出站;UFW 仍只有 22/80/443)
 ├─ node-exporter   主机指标(CPU/内存/磁盘/网络)
-├─ cadvisor        容器指标(已筛选)
+├─ cadvisor        容器指标(需 v0.54+;按容器 name/service)
 ├─ alloy           抓取上述 + app /api/metrics,采集 app/caddy 日志
 │                     │ remote_write(metrics)/ push(logs)
 │                     ▼
@@ -48,7 +48,10 @@ GRAFANA_LOGS_TOKEN=glc_...
 SENTRY_DSN=            # 可选
 ```
 
-### 2) 上传监控相关文件(这些不入库/不经 CI)
+### 2) 上传监控相关文件
+`docker/docker-compose.yml` 与 `docker/observability/`(`alloy.alloy` + Grafana provisioning/面板)由服务器
+`ci-run.sh` 在**每次 CI 部署前自动从公开仓库 `git fetch` 同步**,无需手动 `scp`。
+仅当不走 CI 时才需手动上传:
 ```bash
 scp docker/docker-compose.yml zx@SERVER:~/zxLumen-Blog/docker/
 scp -r docker/observability    zx@SERVER:~/zxLumen-Blog/docker/
@@ -111,13 +114,24 @@ Grafana Cloud → Explore / Metrics / Logs 应能看到数据。
 全部通知到 **邮件**。
 
 ## 六、资源 / 安全
-- `cadvisor` 需 `privileged` + 宿主挂载;已用 `--disable_metrics` 与 relabel 限制指标基数(去掉容器 id/镜像标签)。
+- `cadvisor` 需 `privileged` + 宿主挂载;**必须用 v0.54+**(如 `ghcr.io/google/cadvisor:v0.60.6`):
+  Docker 29 默认启用 **containerd 镜像存储(snapshotter)**,旧版(v0.49.x)会 `failed to identify the read-write layer ID` → 容器指标全空。新镜像发布在 `ghcr.io/google/cadvisor`(不再是 `gcr.io/cadvisor/cadvisor`)。
+- **容器指标**:由 `alloy` 侧白名单保留(CPU / 内存 working_set·usage·rss·cache / 网络 / 启动时间 / OOM / 磁盘读写与用量),
+  **保留 `name`(容器名)与 `service`(compose 服务)** 标签,去掉 `id` / `image` 与全部 `container_label_*`(降基数)。
+  可按容器名 / 服务筛选;开源版 cAdvisor 面板(uid `pMEd7m0Mz`)依赖 `name` 标签。
+- **容器日志**:`loki.source.docker` 采集**全部容器**的 stdout/stderr(不再只限 app/caddy)。
+  注意:容器日志只看 **stdout**;`mailserver`(poste.io)几乎不写 stdout(24h 0 行),其真正邮件日志在容器内
+  `data/log/*.log`,如需采集要另行处理(非本方案默认)。
 - `alloy` 挂 `docker.sock:ro`(读取容器日志),不发布端口。
 - `.env` 含机密:`chmod 600`,不入库、不进 CI。
 
 ## 七、排障 / 回滚
 - Alloy 配置错误:`docker logs docker-alloy-1`。
-- cAdvisor 无数据:确认 `privileged` 与挂载;确认 `--profile monitoring` 已启动。
+- cAdvisor 无数据:
+  - 确认 `--profile monitoring` 已启动;
+  - 确认镜像是 **v0.54+**(Docker 29 containerd-snapshotter 兼容);
+  - `docker exec docker-cadvisor-1 wget -qO- http://localhost:8080/metrics | grep -c 'name="'` 应 > 0;
+  - 若仍为 0,尝试去掉 `--docker_only=true` 再 `up -d cadvisor`。
 - 指标基数超限:Grafana Cloud 会限流;检查是否有高基数标签(勿把容器 id、完整 URL 作标签)。
 - **回滚/停用**:`docker compose --profile monitoring down`(主站不受影响)。
 - 轮换 token:Grafana Cloud → Access Policies 新建 → 更新 `.env` → 重启 `app` 与 `alloy`。

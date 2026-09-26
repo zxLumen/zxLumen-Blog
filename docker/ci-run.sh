@@ -7,6 +7,7 @@
 #   - docker/Caddyfile
 #   - docker/docker-compose.yml
 #   - docker/deploy.sh(以及本脚本自身)
+#   - docker/observability/(Alloy / Grafana provisioning 与面板)
 # 公开仓库 → 匿名 HTTPS 拉取,服务器无需任何 git 凭据。
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -18,7 +19,7 @@ REPO_URL="${REPO_URL:-https://github.com/zxLumen/zxLumen-Blog.git}"
 
 echo "==> CI 触发部署 IMAGE_TAG=${IMAGE_TAG}"
 
-# 同步服务器侧配置(仅这几个文件;用 sparse 拉取避免整仓 clone 到服务器)
+# 同步服务器侧配置(仅这几个文件/目录;用 sparse 拉取避免整仓 clone 到服务器)
 if [ "${IMAGE_TAG}" != "latest" ]; then
   TMP="$(mktemp -d)"
   trap 'rm -rf "${TMP}"' EXIT
@@ -26,11 +27,14 @@ if [ "${IMAGE_TAG}" != "latest" ]; then
   git -C "${TMP}" init -q
   git -C "${TMP}" remote add origin "${REPO_URL}"
   git -C "${TMP}" fetch -q --depth 1 origin "${REF}"
-  git -C "${TMP}" checkout -q FETCH_HEAD -- docker/Caddyfile docker/docker-compose.yml docker/deploy.sh docker/ci-run.sh
+  git -C "${TMP}" checkout -q FETCH_HEAD -- \
+    docker/Caddyfile docker/docker-compose.yml docker/deploy.sh docker/ci-run.sh docker/observability
   cp "${TMP}/docker/Caddyfile"          ./Caddyfile
   cp "${TMP}/docker/docker-compose.yml" ./docker-compose.yml
   cp "${TMP}/docker/deploy.sh"          ./deploy.sh          && chmod +x ./deploy.sh
   cp "${TMP}/docker/ci-run.sh"          ./ci-run.sh          && chmod +x ./ci-run.sh
+  rm -rf ./observability
+  cp -r "${TMP}/docker/observability"   ./observability
   echo "==> 配置已更新"
 fi
 

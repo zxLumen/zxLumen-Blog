@@ -88,7 +88,8 @@ services:
       - web
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    # v0.54+ 支持 Docker 29 的 containerd-snapshotter(否则容器指标为空);新镜像发布在 ghcr.io
+    image: ghcr.io/google/cadvisor:v0.60.6
     profiles: ["monitoring"]
     restart: unless-stopped
     privileged: true
@@ -96,7 +97,9 @@ services:
       - --docker_only=true
       - --housekeeping_interval=30s
       - --max_housekeeping_interval=60s
-      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp,percpu,disk,diskIO
+      - --store_container_labels=true
+      # 保留 disk/diskIO(容器磁盘 IO);其余高开销/高基数指标仍关闭
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp,percpu
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
