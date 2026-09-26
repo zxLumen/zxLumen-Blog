@@ -2,7 +2,7 @@
 
 // 右下角漂浮的问答机器人。配置走 /api/chat/config(公开,不含密钥);
 // 流式读取 /api/chat 返回的 text/plain。浮标可拖动、窗口可八向缩放、回复按 Markdown 渲染。
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { MessageIcon } from './icons.js'
@@ -38,10 +38,13 @@ interface Rect {
 const SESSION_KEY = 'zx.chat.session'
 const FAB_KEY = 'zx.chat.fab.v2'
 const RECT_KEY = 'zx.chat.rect'
+const AUTOOPEN_KEY = 'zx.chat.autoOpened'
 const FAB_SIZE = 52
 const MARGIN = 16
 const MIN_W = 320
 const MIN_H = 360
+const TEASER_DELAY = 1200
+const TEASER_DURATION = 7000
 
 function loadSession(): string {
   try {
@@ -131,12 +134,14 @@ export function ChatWidget() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [greeting, setGreeting] = useState('')
+  const [teaser, setTeaser] = useState(false)
   const [pos, setPos] = useState<Pos | null>(null)
   const [rect, setRect] = useState<Rect | null>(null)
 
   const sessionRef = useRef<string>('')
   const listRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const teaserShownRef = useRef(false)
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; rx: number; ry: number; moved: boolean } | null>(null)
   const resizeRef = useRef<{ dir: string; sx: number; sy: number; r0: Rect } | null>(null)
 
@@ -167,17 +172,51 @@ export function ChatWidget() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // 配置就绪后随机取一条问候语(本页固定)
+  // 问候语:优先用服务端组装好的 cfg.greeting;为空才回退静态 greetings 随机
   useEffect(() => {
     if (!cfg) return
-    const list = (cfg.greetings?.length ? cfg.greetings : cfg.greeting ? [cfg.greeting] : []).filter(Boolean)
-    if (list.length) setGreeting(list[Math.floor(Math.random() * list.length)])
+    const composed = (cfg.greeting ?? '').trim()
+    const list = (cfg.greetings ?? []).filter((s) => s.trim())
+    const text = composed || (list.length ? list[Math.floor(Math.random() * list.length)] : '')
+    setGreeting(text)
   }, [cfg])
 
-  // 进入页面自动弹出
+  // 进入页面提示:首访自动开窗;之后每次刷新只弹气泡(与窗口互斥)
   useEffect(() => {
-    if (cfg?.enabled && cfg.autoOpen) setOpen(true)
-  }, [cfg])
+    if (!cfg?.enabled || !cfg.autoOpen) return
+    let seen = false
+    try {
+      seen = !!localStorage.getItem(AUTOOPEN_KEY)
+    } catch {
+      /* ignore */
+    }
+    if (!seen) {
+      setOpen(true)
+      try {
+        localStorage.setItem(AUTOOPEN_KEY, '1')
+      } catch {
+        /* ignore */
+      }
+      return
+    }
+    // 已访问过:延迟弹气泡;若用户先开了窗(open)或本页已弹过则不再弹
+    if (open || teaserShownRef.current) return
+    teaserShownRef.current = true
+    const t = setTimeout(() => setTeaser(true), TEASER_DELAY)
+    return () => clearTimeout(t)
+  }, [cfg, open])
+
+  // 窗口与气泡互斥:窗口一开,气泡立即消失
+  useEffect(() => {
+    if (open) setTeaser(false)
+  }, [open])
+
+  // 气泡停留数秒后自动消失
+  useEffect(() => {
+    if (!teaser) return
+    const t = setTimeout(() => setTeaser(false), TEASER_DURATION)
+    return () => clearTimeout(t)
+  }, [teaser])
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -275,6 +314,7 @@ export function ChatWidget() {
 
   /* ---------- 浮标拖动 ---------- */
   const onDragStart = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    setTeaser(false)
     const p = pos ?? defaultPos()
     const r = rect ?? null
     dragRef.current = { sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y, rx: r?.x ?? 0, ry: r?.y ?? 0, moved: false }
@@ -383,6 +423,14 @@ export function ChatWidget() {
     ? { left: rect.x, top: rect.y, width: rect.w, height: rect.h, right: 'auto' as const, bottom: 'auto' as const }
     : undefined
 
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 0
+  const teaserLeft = !!pos && pos.x + FAB_SIZE / 2 > vw / 2
+  const teaserStyle: CSSProperties | undefined = pos
+    ? teaserLeft
+      ? { top: pos.y + FAB_SIZE / 2, right: vw - pos.x + 12 }
+      : { top: pos.y + FAB_SIZE / 2, left: pos.x + FAB_SIZE + 12 }
+    : undefined
+
   return (
     <>
       {open && (
@@ -464,6 +512,19 @@ export function ChatWidget() {
               {busy ? '…' : '↑'}
             </button>
           </form>
+        </div>
+      )}
+      {teaser && !open && pos && (
+        <div
+          className={`zxchat-teaser${teaserLeft ? '' : ' zxchat-teaser-right'}`}
+          style={teaserStyle}
+          role="status"
+          onClick={() => {
+            setTeaser(false)
+            setOpen(true)
+          }}
+        >
+          {greeting || '想了解子祥点什么?点我聊聊。'}
         </div>
       )}
       <button

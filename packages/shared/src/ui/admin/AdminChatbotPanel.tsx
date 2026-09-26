@@ -20,6 +20,8 @@ interface BotConfig {
   greeting: string
   greetings: string[]
   autoOpen: boolean
+  smartGreeting: boolean
+  greetBirthday: string
   suggestions: string[]
   chatProvider: string
   chatBaseUrl: string
@@ -348,6 +350,10 @@ export function AdminChatbotPanel({
             <input type="checkbox" checked={cfg.autoOpen} onChange={(e) => set('autoOpen', e.target.checked)} />
             <span>进入页面自动弹出</span>
           </label>
+          <label className="zx-check" title="按 日期/天气/节日 用 AI 生成问候(缓存复用;失败或未配模型时回退到下面的语气样本)">
+            <input type="checkbox" checked={cfg.smartGreeting} onChange={(e) => set('smartGreeting', e.target.checked)} />
+            <span>智能问候</span>
+          </label>
           <input className="zx-input" style={{ maxWidth: 200 }} placeholder="名字(Lumen · 子祥的分身)" value={cfg.name} onChange={(e) => set('name', e.target.value)} />
           <input className="zx-input" style={{ maxWidth: 120 }} placeholder="每日上限" value={cfg.dailyCap} onChange={(e) => set('dailyCap', num(e.target.value, 0))} />
           <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>每日/每人提问,0=不限</span>
@@ -398,7 +404,11 @@ export function AdminChatbotPanel({
             placeholder={cfg.chatApiKey ? `已配置 ${cfg.chatApiKey}(留空不改)` : '聊天 API Key'} value={chatKey} onChange={(e) => setChatKey(e.target.value)} autoComplete="off" />
           <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>回退环境变量 CHATBOT_API_KEY;Key 仅存服务器</span>
         </div>
-        <textarea className="zx-input zx-textarea" style={{ marginTop: '0.6rem' }} rows={4} placeholder="问候语(每行一条,进入页面随机取一条)" value={(cfg.greetings ?? []).join('\n')} onChange={(e) => set('greetings', e.target.value.split(/[\n、]/).map((s) => s.trim()).filter(Boolean))} />
+        <textarea className="zx-input zx-textarea" style={{ marginTop: '0.6rem' }} rows={4} placeholder="语气样本(每行一条;供 AI 生成问候时参考口吻,不直接展示)" value={(cfg.greetings ?? []).join('\n')} onChange={(e) => set('greetings', e.target.value.split(/[\n、]/).map((s) => s.trim()).filter(Boolean))} />
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.4rem' }}>
+          <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>生日/纪念日</span>
+          <input className="zx-input" style={{ maxWidth: 200 }} placeholder="YYYY-MM-DD 或 MM-DD(留空忽略)" value={cfg.greetBirthday} onChange={(e) => set('greetBirthday', e.target.value)} />
+        </div>
         <textarea className="zx-input zx-textarea" style={{ marginTop: '0.4rem' }} rows={2} placeholder="建议问题(逗号/换行分隔)" value={(cfg.suggestions ?? []).join('、')} onChange={(e) => set('suggestions', e.target.value.split(/[、\n]/).map((s) => s.trim()).filter(Boolean))} />
         <textarea className="zx-input zx-textarea" style={{ marginTop: '0.4rem' }} rows={2} placeholder="额外人格指令(可选,追加到 system prompt)" value={cfg.promptExtra} onChange={(e) => set('promptExtra', e.target.value)} />
       </div>

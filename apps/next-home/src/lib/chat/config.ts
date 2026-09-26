@@ -23,6 +23,10 @@ export interface ChatBotConfig {
   greeting: string
   /** 多条问候语,进入页面随机取一条 */
   greetings: string[]
+  /** 智能问候:节日/节气/时段/北京天气 参与组装;关则纯静态问候语 */
+  smartGreeting: boolean
+  /** 生日/纪念日(YYYY-MM-DD 或 MM-DD;留空忽略) */
+  greetBirthday: string
   /** 进入页面自动弹出问候语 */
   autoOpen: boolean
   suggestions: string[]
@@ -61,6 +65,8 @@ export const DEFAULT_CONFIG: ChatBotConfig = {
     '来了?我是子祥的 AI 分身,他的事我基本都知道。',
   ],
   autoOpen: true,
+  smartGreeting: true,
+  greetBirthday: '',
   suggestions: ['介绍一下你自己', '他都做过哪些项目？', '这个网站的 Token 用量怎么看？'],
   chatProvider: 'deepseek',
   chatBaseUrl: '',
@@ -93,6 +99,8 @@ function normalize(cfg: ChatBotConfig): ChatBotConfig {
     greeting: greetings[0] ?? '',
     suggestions: cleanList(cfg.suggestions),
     autoOpen: typeof cfg.autoOpen === 'boolean' ? cfg.autoOpen : DEFAULT_CONFIG.autoOpen,
+    smartGreeting: typeof cfg.smartGreeting === 'boolean' ? cfg.smartGreeting : DEFAULT_CONFIG.smartGreeting,
+    greetBirthday: typeof cfg.greetBirthday === 'string' ? cfg.greetBirthday : '',
   }
 }
 
