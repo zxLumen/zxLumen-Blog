@@ -22,6 +22,9 @@ const MOBILE_H = 672
 const PC_W = 740
 const PC_H = Math.round((9 * PC_W) / 16 + 35)
 
+/** 竖屏卡片宽度上限(与 CSS `.zx-vlog-carousel` 的 --card-w 保持一致) */
+const PORTRAIT_CARD_W = 450
+
 /** 抖音官方内嵌播放器:免权限、无需 API key */
 function douyinPlayerSrc(vid: string): string {
   return `https://open.douyin.com/player/video?vid=${encodeURIComponent(vid)}&autoplay=0`
@@ -87,7 +90,7 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
 
   const landscape = isLandscape(video)
   const activeAspect = landscape ? PC_W / PC_H : MOBILE_W / MOBILE_H
-  const activeCardW = cw > 0 ? (landscape ? cw : Math.min(300, cw * 0.78)) : landscape ? PC_W : 300
+  const activeCardW = cw > 0 ? (landscape ? cw : Math.min(PORTRAIT_CARD_W, cw * 0.78)) : landscape ? PC_W : PORTRAIT_CARD_W
   const viewportH = activeCardW / activeAspect
   const step = activeCardW * 0.62
 

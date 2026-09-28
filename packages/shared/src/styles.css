@@ -955,7 +955,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   overflow: hidden;
   touch-action: pan-y;
   cursor: grab;
-  --card-w: min(300px, 78%);
+  --card-w: min(450px, 78%);
   --card-aspect: 0.4821;
 }
 
@@ -963,9 +963,9 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   cursor: grabbing;
 }
 
-.zx-vlog-carousel.is-landscape {
+/* 横屏:视口占满右栏、16:9(与 PC 播放器原生 740×451 一致) */
+.zx-vlog.is-landscape .zx-vlog-carousel {
   --card-w: 100%;
-  /* 与 PC 播放器原生 740×451 一致 */
   --card-aspect: 1.6408;
 }
 
@@ -1181,6 +1181,34 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 [data-layout='centered'] .zx-hero .zx-vlog {
   display: none;
+}
+
+/* 有视频时加宽 Hero:右栏拉宽以容纳放大后的播放器
+   (横版占满右栏 ≈2×,竖版卡片 450px ≈1.5×) */
+.zx-hero-grid--vlog {
+  max-width: 1440px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, clamp(320px, 62vw, 884px));
+  gap: 3rem;
+}
+
+/* 窄屏:回到单栏,视频占满可用宽度 */
+@media (max-width: 900px) {
+  .zx-hero-grid--vlog {
+    max-width: 1120px;
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+}
+
+/* centered 布局不显示视频,保持原宽度 */
+[data-layout='centered'] .zx-hero-grid--vlog {
+  max-width: 1120px;
+}
+
+/* fullbleed 布局整页满宽,保持自身比例 */
+[data-layout='fullbleed'] .zx-hero-grid--vlog {
+  max-width: none;
+  grid-template-columns: 1.15fr 0.85fr;
 }
 
 /* ---------- 按钮 ---------- */

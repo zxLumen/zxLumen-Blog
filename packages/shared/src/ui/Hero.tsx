@@ -55,7 +55,7 @@ export function Hero({
 
   return (
     <section className="zx-hero">
-      <div className="zx-container zx-hero-grid">
+      <div className={`zx-container zx-hero-grid${hasVlog ? ' zx-hero-grid--vlog' : ''}`}>
         <div className="zx-rise">
           <div className="zx-kicker">{p.title}</div>
           <h1 onClick={onMotifClick}>{p.name}</h1>
