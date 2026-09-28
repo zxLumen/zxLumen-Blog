@@ -27,7 +27,8 @@ function isDuplicate(key: string): boolean {
 }
 
 /**
- * 埋点上报:访问 / 项目点击 / 简历下载。站长、MOCK、爬虫不计入。
+ * 埋点上报:访问 / 离开 / 区块浏览 / 项目点击 / 简历下载 / 联系点击 / 视频播放。
+ * 站长、MOCK、爬虫不计入(开启 MOCK 时按 mock 身份计入)。
  * 说明:采集**始终开启**(匿名聚合),是否对外展示由功能门控 `visitor-stats` 决定
  * (见 StatsSection)。这样放行前也能积累历史数据。
  */
@@ -63,7 +64,11 @@ export async function POST(req: Request) {
     if (isNew) dup.headers.append('Set-Cookie', cidCookie(cid))
     return dup
   }
-  ;(await getDb()).addEvent({ type, target, cid, ua: ua.slice(0, 200), referrer, dwell })
+  const payload = { type, target, cid, ua: ua.slice(0, 200), referrer, dwell }
+  const db = await getDb()
+  // 视频播放:同一访客每天同一集只记一次(服务端按 cid+day+type+target 原子去重)
+  if (type === 'vlog_play' && target !== '') db.addEventOnce(payload)
+  else db.addEvent(payload)
 
   const res = empty()
   if (isNew) res.headers.append('Set-Cookie', cidCookie(cid))

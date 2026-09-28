@@ -67,6 +67,8 @@ export interface Db {
   addUsage(input: NewUsageInput): UsageRow
   /** 记录埋点事件(访问/项目点击/简历下载) */
   addEvent(input: NewEventInput): void
+  /** 同上但按 (cid, day, type, target) 去重(同一人同一天同一目标只记一次),返回是否真的写入 */
+  addEventOnce(input: NewEventInput): boolean
   /** 首页统计聚合(PV/UV/趋势/留言/事件;visitors 仅在 opts.visitors=true 时计算) */
   stats(opts?: { trendDays?: number; onlineMinutes?: number; visitors?: boolean }): StatsResult
   countComments(): number
@@ -137,7 +139,7 @@ export type CommentStore = Pick<
 >
 
 export type UsageStore = Pick<Db, 'listUsage' | 'allUsage' | 'addUsage'>
-export type EventStore = Pick<Db, 'addEvent'>
+export type EventStore = Pick<Db, 'addEvent' | 'addEventOnce'>
 export type StatsStore = Pick<Db, 'stats'>
 export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta' | 'listMetaKeys'>
 export type ChatStore = Pick<Db, 'addChatLog' | 'listChatLogs' | 'countChatByCidDay' | 'chatDayCounts' | 'deleteAllChatLogs'>

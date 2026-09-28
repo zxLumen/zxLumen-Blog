@@ -853,6 +853,11 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   text-shadow: var(--title-shadow);
 }
 
+/* 隐藏入口:首屏姓名可单击进 admin(只给指针提示,不做任何视觉标记) */
+.zx-hero-name {
+  cursor: pointer;
+}
+
 .zx-hero-sub {
   font-family: var(--font-mono);
   color: var(--fg-dim);
@@ -1754,6 +1759,23 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 .zx-table th.num {
   text-align: right;
   font-family: var(--font-mono);
+}
+
+/* 首列过长的两列表(视频播放等):列宽固定,首列省略号截断,保证右侧数值列不被挤出面板 */
+.zx-table.is-clamped {
+  table-layout: fixed;
+}
+
+.zx-table.is-clamped th:first-child,
+.zx-table.is-clamped td:first-child {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zx-table.is-clamped th.num,
+.zx-table.is-clamped td.num {
+  width: 5rem;
 }
 
 /* ---------- 表单 ---------- */

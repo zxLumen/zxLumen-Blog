@@ -38,6 +38,8 @@ export function openDb(path: string): Db {
   )
   if (!ecols.has('referrer')) db.exec("ALTER TABLE events ADD COLUMN referrer TEXT DEFAULT ''")
   if (!ecols.has('dwell')) db.exec('ALTER TABLE events ADD COLUMN dwell INTEGER DEFAULT 0')
+  // addEventOnce 的去重查重走这个索引
+  db.exec('CREATE INDEX IF NOT EXISTS idx_events_dedup ON events(type, cid, day, target)')
 
   return {
     ...commentStore(db),

@@ -1395,12 +1395,12 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
 
           <div className="zx-panel">
             <h3>
-              视频播放 <span>按次数</span>
+              视频播放 <span>每访客每天每集 1 次</span>
             </h3>
             {Object.keys(stats.events.playsByVid ?? {}).length === 0 ? (
               <div className="zx-c-empty">暂无播放</div>
             ) : (
-              <table className="zx-table">
+              <table className="zx-table is-clamped">
                 <thead>
                   <tr>
                     <th>视频</th>
@@ -1410,15 +1410,23 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
                 <tbody>
                   {Object.entries(stats.events.playsByVid ?? {})
                     .sort((a, b) => b[1] - a[1])
-                    .map(([vid, count]) => (
-                      <tr key={vid}>
-                        <td>{vlogLabel(vid)}</td>
-                        <td className="num">{fmtInt(count)}</td>
-                      </tr>
-                    ))}
+                    .map(([vid, count]) => {
+                      const label = vlogLabel(vid)
+                      return (
+                        <tr key={vid}>
+                          {/* 集标题可能很长:单元格省略号截断(title 悬停看全名) */}
+                          <td title={label}>{label}</td>
+                          <td className="num">{fmtInt(count)}</td>
+                        </tr>
+                      )
+                    })}
                 </tbody>
               </table>
             )}
+            <p className="zx-muted zx-mono" style={{ fontSize: '0.7rem', margin: '0.7rem 0 0', lineHeight: 1.6 }}>
+              口径:访客在播放器里点一下(播放/暂停/进度条/全屏等)才计 1 次,同一访客每天同一集只计 1 次。
+              2026-09-28 之前的历史数据是旧口径(每次进首页即计 1 次),数字偏高,仅作参考。
+            </p>
           </div>
 
           <div className="zx-panel">

@@ -1,6 +1,5 @@
 'use client'
 
-import { useRef } from 'react'
 import { PROFILE, type Profile } from '../content.js'
 import type { VlogSeries, VlogStart } from '../schema.js'
 import { usePrefs } from './theme-context.js'
@@ -23,9 +22,10 @@ interface HeroProps {
   tertiaryLabel?: string
 }
 
-/** 隐藏彩蛋:快速连点名字/ASCII 框 4 次进入 admin */
-const SECRET_CLICKS = 4
-const SECRET_WINDOW = 1200
+/** 隐藏入口:单击首屏姓名进 admin(/admin 本身有密码保护) */
+function enterAdmin() {
+  window.location.assign('/admin')
+}
 
 export function Hero({
   profile,
@@ -40,16 +40,6 @@ export function Hero({
 }: HeroProps) {
   const p = profile ?? PROFILE
   const { themeMeta: meta } = usePrefs()
-  const clicks = useRef<number[]>([])
-
-  function onMotifClick() {
-    const now = Date.now()
-    clicks.current = [...clicks.current.filter((t) => now - t < SECRET_WINDOW), now]
-    if (clicks.current.length >= SECRET_CLICKS) {
-      clicks.current = []
-      window.location.assign('/admin')
-    }
-  }
 
   const hasVlog = !!vlogSeries && vlogSeries.length > 0
 
@@ -58,7 +48,12 @@ export function Hero({
       <div className={`zx-container zx-hero-grid${hasVlog ? ' zx-hero-grid--vlog' : ''}`}>
         <div className="zx-rise">
           <div className="zx-kicker">{p.title}</div>
-          <h1 onClick={onMotifClick}>{p.name}</h1>
+          {/* 隐藏入口:只让「名字本身」可点(span 无背景,不影响 h1 的渐变文字) */}
+          <h1>
+            <span className="zx-hero-name" onClick={enterAdmin}>
+              {p.name}
+            </span>
+          </h1>
           <div className="zx-hero-sub">
             <Typewriter text={meta.heroLine} />
           </div>
@@ -85,7 +80,6 @@ export function Hero({
           <pre
             className="zx-ascii zx-rise"
             aria-hidden="true"
-            onClick={onMotifClick}
             title=""
           >
             {meta.motif}

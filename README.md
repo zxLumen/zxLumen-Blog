@@ -53,7 +53,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 
 - **主题**:**18 套**全部放行(GITHUB · NORD · SYNTHWAVE · DRACULA · ROSE PINE · MINIMAL · TERMINAL · NEON · AMBER · CYBERPUNK · TOKYO NIGHT · GRUVBOX · SOLARIZED · MONOKAI · CATPPUCCIN · PAPER · SOLARIZED LT · NORD LIGHT)。右上角 `THEME ▾` 选择器,`[`/`]` 循环,偏好存 localStorage,无闪烁
 - **布局**:**10 套**全部放行(选择器「布局」Tab 或 `Shift+数字`)
-- **Hero**:终端打字机 + 随主题变化的 ASCII;隐藏彩蛋(连点 ASCII 四次进 admin)
+- **Hero**:终端打字机 + 随主题变化的 ASCII;隐藏入口(单击姓名进 admin)
 - **项目展示**:卡片 + 状态/时间区间 + 技术栈 + 跳转 demo
 - **DeepSeek 用量面板**:总览 / 日趋势 / 模型占比 / 最近调用;无真实数据时显示 demo 曲线
 - **关于 / 简历**:bio、技能、时间线;**下载简历**

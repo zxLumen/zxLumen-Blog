@@ -42,11 +42,11 @@ CREATE TABLE IF NOT EXISTS events (
   ts       TEXT NOT NULL,            -- UTC 'YYYY-MM-DD HH:MM:SS'
   day      TEXT NOT NULL,            -- 北京时 YYYY-MM-DD
   cid      TEXT DEFAULT '',          -- 访客匿名 ID(UV 依据)
-  type     TEXT NOT NULL,            -- 'visit' | 'project_click' | 'resume_download' | 'leave'
-  target   TEXT DEFAULT '',          -- 路径 / 项目 id / 文件名
+  type     TEXT NOT NULL,            -- 'visit' | 'leave' | 'section_view' | 'project_click' | 'resume_download' | 'contact_click' | 'vlog_play'
+  target   TEXT DEFAULT '',          -- 路径 / 区块 / 项目 id / 文件名 / 联系方式 / 抖音 vid
   ua       TEXT DEFAULT '',
   referrer TEXT DEFAULT '',          -- 落地来源(访客 document.referrer,仅 admin 可见)
-  dwell    INTEGER DEFAULT 0         -- 前台停留秒数(仅 leave 事件)
+  dwell    INTEGER DEFAULT 0         -- 前台停留秒数(leave = 整页;section_view = 该区块可见时长)
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_day_type ON events(day, type);
@@ -174,7 +174,7 @@ export interface UsageRow {
 
 export type Visibility = 'public' | 'private'
 
-/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击;vlog_play = 抖音视频播放) */
+/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击;vlog_play = 点进抖音播放器) */
 export type EventType =
   | 'visit'
   | 'project_click'
@@ -194,7 +194,7 @@ export interface NewEventInput {
   ua?: string
   /** 落地来源(referrer) */
   referrer?: string
-  /** 前台停留秒数(仅 leave 事件) */
+  /** 前台停留秒数(leave = 整页,section_view = 该区块可见时长) */
   dwell?: number
 }
 
@@ -271,9 +271,9 @@ export interface StatsResult {
     contactClicks: number
     /** 各联系方式点击次数(email/wechat/phone/github/guestbook → count) */
     contactsByTarget: Record<string, number>
-    /** 抖音视频播放总次数 */
+    /** 视频「点进播放器」总次数(每访客每天每集只计 1 次) */
     vlogPlays: number
-    /** 各视频播放次数(videoId → count) */
+    /** 各视频被点开播放的次数(videoId → count) */
     playsByVid: Record<string, number>
   }
   /** 访客访问详情(按最近活跃,仅站长接口) */

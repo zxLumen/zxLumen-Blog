@@ -11,6 +11,7 @@
   - 其余(外部 demo/repo)项目:N = **链接点击次数**(点「试用/repo」按钮 `project_click` 累计)。
 - **admin「统计」Tab**:`/admin` → 统计,展示 **留言**(总/今日/公开/仅站长可见/留言者)、
   **简历下载**、**项目点击**(按项目列出)、**联系点击**(按方式列出:邮件/微信/电话/GitHub/留言)、
+  **视频播放**(按视频列出:访客点进播放器的次数,每访客每天每集只计 1 次)、
   **访客**(PV/UV/今日/在线)、
   **访客明细**(最近活跃的 30 位访客:昵称/匿名 ID、访问/留言/简历/项目点击、最近活跃;
   **新客/回头客**徽标直接显示在折叠行昵称旁;
@@ -25,6 +26,15 @@
 - 项目「试用/repo」链接、简历「下载」按钮点击时上报 `project_click`(target=项目 id)/ `resume_download`。
 - **联系方式**点击上报 `contact_click`(target=`email` / `wechat` / `phone` / `github` / `guestbook`):
   邮件、微信、电话(页脚 compact 与关于页 full 两处)、GitHub、留言按钮。
+- **视频播放**上报 `vlog_play`(target=抖音 vid),**只在访客真的点进播放器时**才上报
+  —— 打开首页、切换系列/集数、左右箭头、滑动切换都**不**计。抖音 iframe 跨域,收不到它内部的
+  点击,也不发播放事件(播放器 3 个 bundle 的 `postMessage` 全是埋点/调试内部用途),因此改为
+  监听**父窗口失焦 + `document.activeElement` 变成当前集的 `<iframe>`** 来反推「用户点了播放」
+  (播放/暂停/进度条/全屏等都算「点了一下」)。纯被动监听,不拦截事件 → 播放交互零变化。
+  - **去重**:服务端按 `cid + day + type + target` **原子去重**(每人每天同一集只记 1 次,
+    `Db.addEventOnce`,单条 `INSERT … WHERE NOT EXISTS` 抗并发),前端另加本页级去重。
+  - 已知限制:**iOS Safari / 微信内置浏览器等若不触发 iframe 获焦,这些平台会记 0**(漏记,非虚高)。
+  - 2026-09-28 之前的历史数据是旧口径(每次进首页即计 1 次),偏高,admin 已标注。
 - **防抖**:同一访客对同一 `type+target` 在 **2 秒内**重复上报只记一次(防手抖双击 / beacon 重试);
   `visit` / `leave` 不防抖。
 - **停留时长**:页面**前台可见**时计时(切后台/隐藏暂停,回来继续累加),在离开
@@ -51,8 +61,8 @@
 | ts | UTC `YYYY-MM-DD HH:MM:SS` |
 | day | 北京时 `YYYY-MM-DD`(UV/PV 按此聚合) |
 | cid | 访客匿名 ID(UV 依据) |
-| type | `visit` / `project_click` / `resume_download` / `leave` / `section_view` |
-| target | 路径 / 项目 id / 文件名 / 区块(`/#usage`) |
+| type | `visit` / `leave` / `section_view` / `project_click` / `resume_download` / `contact_click` / `vlog_play` |
+| target | 路径 / 区块(`/#usage`)/ 项目 id / 文件名 / 联系方式 / 抖音 vid |
 | ua | User-Agent(仅用于过滤,不展示) |
 | referrer | 落地来源(document.referrer,仅 admin 可见) |
 | dwell | 停留秒数(`leave` = 整页前台停留;`section_view` = 该区块可见时长) |
@@ -71,6 +81,8 @@
 ## 口径
 
 - **PV** = `type='visit'` 行数(`leave` 不计入 PV);**UV** = 按 `(day, cid)` 去重;**在线** = 近 N 分钟(默认 5)内出现过的 cid 数(粗略估算)。
+- **视频播放** = `type='vlog_play'` 行数,已按「同一访客 · 同一北京日 · 同一 vid」原子去重,
+  所以数字 ≈ **「访客-视频」对数**(同一集同一人一天反复点只算 1 次;换一天可再计)。
 - **会话**:同一 cid 相邻事件间隔 > 30 分钟切一次。
 - **平均会话时长**:优先用会话内 `leave` 事件的 `dwell` 求和(真实前台停留);若该会话无 `dwell`(老数据 / 未触发离开上报),回退为「会话内首末事件间隔」估算。
 - **admin 访客明细**:展开后显示「看过区块」(按区块聚合计数,用中文名)与「最近操作」(访问/点击/下载,`leave`/`section_view` 不重复列流水);区块目标形如 `/#usage`,显示为友好名(见 `SECTION_LABELS`)。

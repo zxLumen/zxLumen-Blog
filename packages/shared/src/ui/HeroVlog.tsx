@@ -79,11 +79,34 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
     if (si >= series.length) setSi(Math.max(0, series.length - 1))
   }, [series.length, si])
 
-  // 播放统计:每当某个视频成为当前播放(展示)项时上报一次
-  // (抖音 iframe 跨域,无法探测内部点击播放,以后者作为「播放量」口径)
+  // 播放统计:抖音 iframe 跨域,既收不到它内部的点击,也不发 postMessage 播放事件
+  // (已核对播放器 3 个 bundle,postMessage 全是埋点/调试内部用途),无法直接探测「点了播放」。
+  // 这里用浏览器行为反推:用户点进 iframe 时父窗口会收到 blur,且 document.activeElement
+  // 变成那个 iframe 元素 —— 说明用户确实在播放器里点了(播放/暂停/进度条/全屏等)。
+  // 纯被动监听,不拦截事件 → 点击照常落到播放器,交互零变化。
+  // 服务端再按「同一访客每天同一集只记一次」去重(见 /api/track 的 addEventOnce)。
   const currentVid = video?.vid
+  /** 本次页面访问内已上报过的集(避免重复发 beacon;跨次访问的日去重由服务端负责) */
+  const reportedRef = useRef<Set<string>>(new Set())
   useEffect(() => {
-    if (currentVid) trackEvent('vlog_play', currentVid)
+    if (!currentVid) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const onWindowBlur = () => {
+      if (reportedRef.current.has(currentVid)) return
+      // 延后一拍再判定:若这期间页面转入后台(切标签页 / 开新窗口)则是「切走」而非「点进播放器」
+      timer = setTimeout(() => {
+        if (document.visibilityState !== 'visible') return
+        const el = document.activeElement
+        if (!(el instanceof HTMLIFrameElement) || el.dataset.vid !== currentVid) return
+        reportedRef.current.add(currentVid)
+        trackEvent('vlog_play', currentVid)
+      }, 200)
+    }
+    window.addEventListener('blur', onWindowBlur)
+    return () => {
+      window.removeEventListener('blur', onWindowBlur)
+      if (timer) clearTimeout(timer)
+    }
   }, [currentVid])
 
   if (!current || !video) return null
@@ -218,7 +241,9 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
                     allowFullScreen
                     scrolling="no"
                     loading={active ? undefined : 'lazy'}
-                    tabIndex={active ? undefined : -1}
+                    // data-vid:播放统计用它判断「用户点进的正是当前集」(见上方 blur 监听)
+                    data-vid={v.vid}
+                    tabIndex={active ? 0 : -1}
                   />
                 ) : (
                   <div className="zx-vlog-ghost">
