@@ -38,6 +38,13 @@
 		file_server
 	}
 
+	# 视频横屏封面:cover:vlog 生成的 /vlog/<vid>.jpg(640x360,来自抖音 origin_cover)
+	# 与本地 dev 同路径(本地由 apps/next-home/public/vlog 软链提供)
+	handle /vlog/* {
+		root * /srv/site
+		file_server
+	}
+
 	# 内部指标端点绝不对外暴露(仅 Alloy 经容器内网抓取;纵深防御)
 	handle /api/metrics* {
 		respond 404

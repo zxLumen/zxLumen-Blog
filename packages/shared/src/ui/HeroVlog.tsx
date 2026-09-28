@@ -26,8 +26,8 @@ const PC_H = Math.round((9 * PC_W) / 16 + 35)
 const PORTRAIT_CARD_W = 450
 
 /** 抖音官方内嵌播放器:免权限、无需 API key */
-function douyinPlayerSrc(vid: string): string {
-  return `https://open.douyin.com/player/video?vid=${encodeURIComponent(vid)}&autoplay=0`
+function douyinPlayerSrc(vid: string, autoplay = false): string {
+  return `https://open.douyin.com/player/video?vid=${encodeURIComponent(vid)}&autoplay=${autoplay ? '1' : '0'}`
 }
 
 function douyinWatchUrl(vid: string): string {
@@ -48,6 +48,26 @@ function isLandscape(v: VlogVideo): boolean {
 }
 
 /**
+ * 卡片是否用我们自己的封面(而不是抖音播放器自带的封面层):
+ *  - 横屏:必须用。抖音的 xgplayer-poster 是被裁成 3:4 的 `video.cover` 竖图,
+ *    `object-fit: fill` 塞进 16:9 视频区 → 严重压扁。
+ *  - 竖屏:站长自己上传了封面(`coverSrc==='user'`)就用,否则维持播放器自带封面。
+ * 封面按 vid 推导为 `/vlog/<vid>.jpg`(可用 `cover` 覆盖),线上无需改库
+ * ——线上库与本地库是两份,写进 DB 的路径不会自动同步,只要把图片目录传上去即可。
+ * 封面 404 / 加载失败 → 一律回退 iframe 现状。
+ */
+function coverUrl(v: VlogVideo): string {
+  const base = v.cover || `/vlog/${v.vid}.jpg`
+  // 带 coverAt 版本戳:换封面后 URL 变化,不会吃到浏览器/代理的旧图缓存
+  return v.coverAt ? `${base}${base.includes('?') ? '&' : '?'}v=${encodeURIComponent(v.coverAt)}` : base
+}
+
+function usePoster(v: VlogVideo, broken: Set<string>): boolean {
+  if (broken.has(v.vid)) return false
+  return isLandscape(v) || v.coverSrc === 'user'
+}
+
+/**
  * 主页 Hero 右侧:抖音旅行短视频轮播(多卡重叠 + 左右滑动切换 + 左右箭头)。
  * 仅渲染当前集与左右相邻集(邻居为暂停帧预览),且只有当前集可播放(切换即重挂载,旧视频停止)。
  */
@@ -57,6 +77,14 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
   const [drag, setDrag] = useState(0)
   const [dragging, setDragging] = useState(false)
   const [cw, setCw] = useState(0)
+  /** 已点开播放的集(封面已让位给播放器) */
+  const [playing, setPlaying] = useState<Set<string>>(() => new Set())
+  /** 封面加载失败的集(403 / 文件没上传)→ 回退 iframe,避免出现空白卡 */
+  const [broken, setBroken] = useState<Set<string>>(() => new Set())
+  /** 封面图已加载完的集 → 此时才把播放器挂上暖机(不跟首屏大图抢带宽) */
+  const [coverLoaded, setCoverLoaded] = useState<Set<string>>(() => new Set())
+  /** 播放器 iframe 已 onLoad 的集 → 封面开始点击穿透,一次点击直接落进播放器 */
+  const [ready, setReady] = useState<Set<string>>(() => new Set())
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const movedRef = useRef(false)
 
@@ -109,6 +137,24 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
     }
   }, [currentVid])
 
+  // 封面让位:实测点击落在跨域 iframe 上时,父页面收不到 click / pointerdown / focusin /
+  // blur 中的任何一个(Chrome 里这些事件都不跨文档边界),**只有 document.activeElement
+  // 会变成那个 iframe**。所以封面穿透后轮询它 —— 一旦用户点了播放器就让封面退场。
+  // 只在「有我们封面 + 播放器已就绪 + 还没开始」的窗口里轮询,开销可忽略。
+  const coverThrough =
+    !!video && usePoster(video, broken) && ready.has(video.vid) && !playing.has(video.vid)
+  useEffect(() => {
+    if (!coverThrough || !video) return
+    const vid = video.vid
+    const t = window.setInterval(() => {
+      const el = document.activeElement
+      if (el instanceof HTMLIFrameElement && el.dataset.vid === vid) {
+        startPlaybackRef.current(vid)
+      }
+    }, 120)
+    return () => window.clearInterval(t)
+  }, [coverThrough, video, broken, ready, playing])
+
   if (!current || !video) return null
 
   const landscape = isLandscape(video)
@@ -120,6 +166,28 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
   const setIndex = (idx: number) => {
     setVi(Math.max(0, Math.min(videos.length - 1, idx)))
   }
+
+  /**
+   * 点一下就让位:封面消失 + 记一次播放。
+   *
+   * 关键点是**这次点击要真的落在播放器里** —— 跨域 iframe 的 autoplay 请求在点击
+   * 回调里发起并不可靠(浏览器策略 + 播放器只认自己的播放键),所以「挂 iframe +
+   * autoplay=1」必然变成点两次。有封面时改为:播放器提前挂在封面底下暖机,封面
+   * 在播放器就绪后变成 pointer-events:none,点击直接穿透进播放器由它自己起播。
+   */
+  const startPlayback = (vid: string) => {
+    if (!reportedRef.current.has(vid)) {
+      reportedRef.current.add(vid)
+      trackEvent('vlog_play', vid)
+    }
+    setPlaying((prev) => (prev.has(vid) ? prev : new Set(prev).add(vid)))
+  }
+  const startPlaybackRef = useRef(startPlayback)
+  startPlaybackRef.current = startPlayback
+
+  /** 封面图已就绪(onLoad 或 ref 自查 complete)→ 挂播放器暖机 */
+  const markCoverLoaded = (vid: string) =>
+    setCoverLoaded((prev) => (prev.has(vid) ? prev : new Set(prev).add(vid)))
 
   /** 指针拖动:跟手平移,松手越过阈值则切换上/下一集 */
   const onPointerDown = (e: React.PointerEvent) => {
@@ -215,6 +283,14 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
               width: `${cardWidth}px`,
               aspectRatio: String(aspect),
             } as CSSProperties
+            // 有自备封面的卡:封面盖在播放器之上,既避开播放器自带的 3:4 竖封面被压扁,
+            // 又让播放器提前暖机;封面点击穿透后一次点击即可起播(见 startPlayback 注释)
+            const poster = usePoster(v, broken)
+            const started = playing.has(v.vid)
+            // 有封面的当前卡:封面图一加载完就把播放器挂上暖机,封面盖在它上面
+            const showPlayer = useImage && (!poster || (active && coverLoaded.has(v.vid)))
+            // 播放器就绪 → 封面点击穿透,一次点击直接进播放器起播(见 startPlayback 注释)
+            const through = poster && ready.has(v.vid) && !started
             return (
               <div
                 key={`${v.vid}-${i}`}
@@ -223,17 +299,23 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
                 aria-hidden={!active}
                 onClick={
                   active
-                    ? undefined
+                    ? () => {
+                        // 拖动滑过去的手势结束时也会触发 click,用 movedRef 挡掉
+                        if (movedRef.current) return
+                        if (poster && !started) startPlayback(v.vid)
+                      }
                     : () => {
                         if (!movedRef.current) setIndex(i)
                       }
                 }
               >
-                {useImage ? (
+                {showPlayer && (
                   <iframe
                     // active 变化时重挂载 iframe → 旧视频立即停止(抖音跨域无法直接暂停)
                     key={`${v.vid}:${active ? 'play' : 'idle'}`}
                     className="zx-vlog-iframe"
+                    // 恒为 autoplay=0:autoplay 靠不上真手势(且 src 一变 iframe 就重新导航,
+                    // 正好把用户那一下点击冲掉),起播一律由点击进播放器本身触发
                     src={douyinPlayerSrc(v.vid)}
                     title={epLabel(i, v.title)}
                     referrerPolicy="unsafe-url"
@@ -244,12 +326,42 @@ export function HeroVlog({ series, start }: HeroVlogProps) {
                     // data-vid:播放统计用它判断「用户点进的正是当前集」(见上方 blur 监听)
                     data-vid={v.vid}
                     tabIndex={active ? 0 : -1}
+                    onLoad={() => setReady((prev) => (prev.has(v.vid) ? prev : new Set(prev).add(v.vid)))}
                   />
-                ) : (
+                )}
+                {/* 封面盖在播放器之上;播放器就绪后加 is-through → 点击穿透进去由播放器起播 */}
+                {poster && !started && (
+                  <img
+                    className={`zx-vlog-poster${through ? ' is-through' : ''}`}
+                    src={coverUrl(v)}
+                    alt={epLabel(i, v.title)}
+                    draggable={false}
+                    decoding="async"
+                    loading={active ? 'eager' : 'lazy'}
+                    // 封面加载完 → 挂播放器暖机(挪到首屏大图之后,避免抢带宽)。
+                    // 注意:SSR 出来的图往往在 hydration 前就已 complete,onLoad 不会再触发,
+                    // 所以用 ref 回调补一次 complete 自查,否则播放器永远挂不上。
+                    ref={(el) => {
+                      if (el?.complete && el.naturalWidth > 0) markCoverLoaded(v.vid)
+                    }}
+                    onLoad={() => markCoverLoaded(v.vid)}
+                    onError={() =>
+                      setBroken((prev) => (prev.has(v.vid) ? prev : new Set(prev).add(v.vid)))
+                    }
+                  />
+                )}
+                {!showPlayer && !poster && (
                   <div className="zx-vlog-ghost">
                     <span className="zx-vlog-ghost-n">{i + 1}</span>
                     <span className="zx-vlog-ghost-t">{epLabel(i, v.title)}</span>
                   </div>
+                )}
+                {poster && !started && (
+                  <span className="zx-vlog-poster-play" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
+                      <path d="M8 5.14v13.72L19 12 8 5.14Z" fill="currentColor" />
+                    </svg>
+                  </span>
                 )}
                 {!active && useImage && <span className="zx-vlog-card-badge">{i + 1}</span>}
               </div>

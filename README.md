@@ -38,6 +38,40 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 
 > 需要 Node 20+(推荐 22 LTS)。
 
+### 横屏视频封面(可选)
+
+抖音播放器自带的封面层用的是被裁成 3:4 的竖图,塞进 16:9 视频区会变形。所以封面来源分两层:
+
+- **你自己的封面(优先)** —— 在 `/admin`「视频」面板逐条**上传**,浏览器端会保持比例把
+  长边压到 1280 再转 JPEG(q0.85),存成 `docker/site-content/vlog/<vid>.user.jpg`
+  (非 JPEG 会原样存 `.user.png`/`.user.webp`)。上传**立即写库**(`coverSrc='user'`),
+  不用点面板的「保存」;新加的视频要先保存进列表才能上传。
+- **抖音兜底首帧** —— `npm run cover:vlog` 从官方播放器页自行签名的 `aweme/detail`
+  响应里取 `video.origin_cover`(640×360),存成 `<vid>.jpg`。**它就是视频第 0 帧**,
+  不是作者另设的封面(已实测 SSIM ≈ 0.99 与 t=0 帧一致),只是「至少不变形」的保底。
+
+两者互不覆盖:面板可随时「恢复兜底」删掉 `<vid>.user.*` 回落到 `<vid>.jpg`。
+
+```bash
+cd packages/shared
+npm run cover:vlog -- --list        # 清单:每条横屏视频当前封面来源/尺寸/大小(不联网)
+npm run cover:vlog                  # 抓抖音兜底首帧(需本机 Chrome,默认只补缺图的)
+npm run cover:vlog -- --force       # 连已存在的兜底图也重抓
+npm run cover:vlog -- --only <vid>  # 只处理指定视频(--only 可重复,也可裸写 vid)
+npm run cover:vlog -- --all        # 连竖屏也一起抓(默认只处理横屏)
+```
+
+- 脚本用无头浏览器打开官方播放器页,读页面**自己签名**的 `aweme/detail` 响应
+  (不硬编码 `X-Bogus`)。全流程幂等,重复跑不会重复抓;新增视频后再跑一次即可补齐。
+- 封面 URL 带签名约 14 天过期 → **必须落本地**,不能长期外链。
+- 封面与视频方向不一致(横图配竖屏 / 竖图配横屏)一律**等比缩放 + 纯黑补边**,
+  不裁剪(`object-fit: contain; background: #000`),上传时会提示补哪边。
+- 竖屏视频没有兜底图(不需要,竖封面塞进竖框不变形);缺图 / 404 时前端回退播放器封面。
+- 路径两端通用:本地由 `apps/next-home/public/vlog` 软链到 `docker/site-content/vlog/`,
+  生产由 Caddy 的 `/vlog/*` 静态服务。**上线时记得 `scp -r` 这个目录**。
+- 前端优先用 `v.cover`,没有就按 vid 推 `/vlog/<vid>.jpg`,所以生产库没写 `cover`
+  字段也能正常显示;`coverAt` 会作为 `?v=` 破缓存。
+
 ## ⚠️ 隐私:以下文件不入库(部署时需单独提供)
 
 | 文件 | 内容 | 说明 |
@@ -45,6 +79,7 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
 | `packages/shared/src/content.local.ts` | 你的真实资料(姓名/邮箱/经历) | 由 `content.local.example.ts` 复制后填写 |
 | `apps/next-home/public/resume.pdf` | 简历(含手机号) | 「下载简历」用 |
 | `apps/next-home/public/wechat.png` | 微信二维码 | 未在后台上传时的静态兜底 |
+| `docker/site-content/vlog/*` | 视频封面(`<vid>.jpg` 兜底首帧 / `<vid>.user.*` 面板上传) | `npm run cover:vlog` 生成兜底图、面板上传生成你的封面;不入库,部署时 `scp -r` |
 | `apps/next-home/resume/resume.md` 等 | 简历源文件/产物 | 仅保留 `resume.py`+`resume.css` 脚本 |
 
 > `content.local.ts` 缺失时,`npm run build`(shared)会用示例自动生成占位,保证可构建。

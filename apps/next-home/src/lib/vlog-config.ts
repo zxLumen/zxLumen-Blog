@@ -81,12 +81,26 @@ function normalizeVideo(raw: unknown): StoredVlogVideo | null {
     r.orientation === 'landscape' ? 'landscape' : r.orientation === 'portrait' ? 'portrait' : undefined
   const w = Number(r.w)
   const h = Number(r.h)
+  // 封面图路径:只接受 /vlog/ 下的固定形态(兜底 <vid>.jpg / 站长上传 <vid>.user.<ext>),
+  // 避免任意 URL 注入;缺省时前端按 vid 推导 /vlog/<vid>.jpg,故通常无需写这个字段
+  const cover =
+    typeof r.cover === 'string' && /^\/vlog\/\d{6,}(?:\.user)?\.(?:jpg|jpeg|png|webp)$/i.test(r.cover.trim())
+      ? r.cover.trim()
+      : undefined
+  // 封面来源:user=站长自己提供的(优先),douyin=抓抖音兜底(视频首帧)
+  const coverSrc = r.coverSrc === 'user' ? 'user' : r.coverSrc === 'douyin' ? 'douyin' : undefined
+  const coverAt = typeof r.coverAt === 'string' && Number.isFinite(Date.parse(r.coverAt))
+    ? r.coverAt
+    : undefined
   return {
     vid,
     title: title || undefined,
     orientation,
     ...(Number.isFinite(w) && w > 0 ? { w: Math.round(w) } : {}),
     ...(Number.isFinite(h) && h > 0 ? { h: Math.round(h) } : {}),
+    ...(cover ? { cover } : {}),
+    ...(coverSrc ? { coverSrc } : {}),
+    ...(coverAt ? { coverAt } : {}),
   }
 }
 
@@ -180,6 +194,46 @@ export function saveStoredVlogs(input: unknown): StoredVlogSeries[] {
 export function resetStoredVlogs(): StoredVlogSeries[] {
   getDb().delMeta(META_KEY)
   return []
+}
+
+/** 该视频是否横屏(与前端 HeroVlog.isLandscape 同口径) */
+export function isLandscapeVideo(v: StoredVlogVideo): boolean {
+  return (
+    v.orientation === 'landscape' ||
+    (v.orientation !== 'portrait' && Number(v.w) > 0 && Number(v.h) > 0 && Number(v.w) > Number(v.h))
+  )
+}
+
+/**
+ * 就地改某一条(或几条,同一 vid 可能被放进多个系列)的封面字段并整表写回。
+ * 只动 cover/coverSrc/coverAt,标题/宽高/顺序一律不碰 —— 面板上传封面走这里,
+ * 不经过「整表保存」那条路,避免和编辑中的列表互相覆盖。
+ * vid 不在配置里返回 null。
+ */
+export function patchVideoCover(
+  vid: string,
+  patch: { cover?: string; coverSrc?: 'user' | 'douyin'; coverAt?: string },
+): StoredVlogSeries[] | null {
+  const list = getStoredVlogs()
+  let hits = 0
+  const next = list.map((s) => ({
+    ...s,
+    videos: s.videos.map((v) => {
+      if (v.vid !== vid) return v
+      hits++
+      const merged = { ...v }
+      // 字段值为 undefined = 清除该字段
+      if (patch.cover === undefined) delete merged.cover
+      else merged.cover = patch.cover
+      if (patch.coverSrc === undefined) delete merged.coverSrc
+      else merged.coverSrc = patch.coverSrc
+      if (patch.coverAt === undefined) delete merged.coverAt
+      else merged.coverAt = patch.coverAt
+      return merged
+    }),
+  }))
+  if (hits === 0) return null
+  return writeStoredVlogs(next)
 }
 
 /** 仅取首页要展示的系列(排除垃圾箱与空系列),转成展示形状 */

@@ -22,6 +22,9 @@ services:
       # 机器人目录需可写(蒸馏生成 persona.md/faq.json);更具体的挂载覆盖上面的 :ro
       # 注意:宿主机该目录须对容器内用户(uid 10001)可写,见 docs/CHATBOT.md「部署」
       - ./site-content/chatbot:/srv/site/chatbot
+      # 视频封面目录需可写(/admin 面板上传封面,存 <vid>.user.jpg);同样覆盖上面的 :ro
+      # 注意:宿主机该目录须对容器内用户(uid 10001)可写,见 AGENTS.md「部署」
+      - ./site-content/vlog:/srv/site/vlog
     expose:
       - "3000"
     networks:

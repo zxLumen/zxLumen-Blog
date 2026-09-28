@@ -372,6 +372,22 @@ export interface StoredVlogVideo {
   w?: number
   /** 视频原始高 */
   h?: number
+  /**
+   * 横屏封面图站内路径(形如 `/vlog/<vid>.jpg`)。
+   * 缺省时前端按 vid 推导 `/vlog/<vid>.jpg`,所以**不需要写库**也能生效
+   * (线上库与本地库是两份,写在这里不会自动同步到线上)。
+   * 仅当封面存放在别处时需要显式指定。
+   */
+  cover?: string
+  /**
+   * 封面来源:
+   * - `user`:站长自己提供的封面(优先,`--force` 不会覆盖)
+   * - `douyin`:抓抖音兜底(= 视频第 0 帧,只是至少不变形)
+   * 缺省视为 `douyin`。
+   */
+  coverSrc?: 'douyin' | 'user'
+  /** 封面文件最后写入时间(ISO);`--adopt` 靠它区分「脚本抓的兜底图」与「你后来替换的图」 */
+  coverAt?: string
 }
 
 /** 一个旅行系列(如「东北大环线」),内含按顺序播放的短视频 */

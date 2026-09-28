@@ -19,6 +19,12 @@ cd packages/shared && npm run build
 # 改了真实资料(content.local.ts)后导出运行时 JSON(热更新,无需重启)
 cd packages/shared && npm run export:content   # 生成 docker/site-content/content.json
 
+# 视频封面(两层:面板上传的 <vid>.user.* 优先,兜底为抖音首帧 <vid>.jpg)
+#   换自己的封面 → /admin「视频」面板逐条上传(浏览器端压缩 + 立即写库),不走脚本
+cd packages/shared && npm run cover:vlog -- --list    # 清单:每条横屏视频当前封面来源/尺寸/大小
+cd packages/shared && npm run cover:vlog              # 抓兜底首帧;需本机 Chrome,默认只补缺图的
+cd packages/shared && npm run cover:vlog -- --force   # 连已有的兜底图也重抓(不碰 <vid>.user.*)
+
 # 本地开发
 cd apps/next-home && npm run dev      # http://localhost:3000
 
@@ -124,7 +130,19 @@ cd apps/next-home && npm run lint && npm run build
    `scp docker/site-content/content.json 服务器:~/zxLumen-Blog/docker/site-content/content.json`。
    **热更新**:mtime 变化即生效,**无需重建 / 重启容器**(新旧流程的唯一差别:不再需要编译进镜像)。
 2. **`docker/site-content/resume.pdf` / `wechat.png`** —— 简历 / 二维码(由 Caddy 静态服务,替换即生效)。
-3. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
+3. **`docker/site-content/vlog/`** —— 视频封面目录,两种文件并存:
+   - `<vid>.jpg` = 脚本抓的抖音首帧**兜底图**(横屏才抓);`npm run cover:vlog` 补齐,
+     **新增视频后必须重跑一次**(只补缺的)。只 `scp -r` 图片即可,不用改线上库 ——
+     前端 `v.cover` 缺省时按 vid 推 `/vlog/<vid>.jpg`。
+   - `<vid>.user.jpg` = 站长在 `/admin`「视频」面板**上传**的封面(上传即写线上库,
+     文件直接落在服务器上,不需要 scp)。
+
+   ⚠️ 面板上传要求服务器上该目录对容器内 uid 10001 可写。`docker-compose.yml` 已加
+   `./site-content/vlog:/srv/site/vlog` 子挂载覆盖只读的 `/srv/site`,**首次上线前在服务器
+   手动执行一次**(之后换图不需要):
+   `sudo chown -R 10001:10001 ~/zxLumen-Blog/docker/site-content/vlog`
+   Caddy 经 `/vlog/*` 静态服务,替换即生效。
+4. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
    改了邮箱/联系方式要**同时更新线上库**(线上 `/admin → 个人信息`,或直接改 `meta`)。
 
 > `docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` / `docker/ci-run.sh` /

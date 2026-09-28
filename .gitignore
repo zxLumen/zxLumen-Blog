@@ -47,4 +47,8 @@ docker/site-content/
 # 微信二维码(个人联系方式,不入库,部署时手动上传)
 apps/next-home/public/wechat.png
 
+# 视频横屏封面(cover:vlog 生成到 docker/site-content/vlog/,不入库)
+# 这里是指向它的软链,让本地 dev 也能用同一个 /vlog/<vid>.jpg 路径
+apps/next-home/public/vlog
+
 docs/proxy.yaml
