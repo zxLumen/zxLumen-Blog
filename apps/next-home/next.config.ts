@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   },
   // 原生模块不要打包,运行时从 node_modules 加载
   serverExternalPackages: ["better-sqlite3"],
+  // 仅产出运行时所需文件(含被 trace 的最小 node_modules),镜像大幅瘦身;见 docker/Dockerfile
+  output: "standalone",
 };
 
 // Sentry 包装:未配置 DSN / 上传 token 时均为空操作(不影响构建)

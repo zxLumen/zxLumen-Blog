@@ -35,8 +35,9 @@ if ${SUDO:-} docker compose --profile monitoring ps --status running --services 
     || echo "[deploy] 监控容器重建失败,已跳过(可手动 docker compose --profile monitoring up -d --force-recreate alloy grafana)"
 fi
 
-# 清理不被任何容器引用的旧镜像(回收 CI 各 tag 镜像;在用镜像不受影响)
-${SUDO:-} docker image prune -af
+# 清理不被任何容器引用的旧镜像(回收 CI 各 tag 镜像;在用镜像不受影响)。
+# until=12h:只回收 12 小时前的,避免每次全盘扫描/误删刚推的上一版,略快且更稳。
+${SUDO:-} docker image prune -af --filter until=12h
 
 ${SUDO:-} docker compose ps
 echo "[deploy] 完成"
