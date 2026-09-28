@@ -45,6 +45,7 @@ function writeHint(e: unknown): string {
 //   POST   multipart: vid + file  → 写文件 + 立刻写库(不用点面板「保存」)
 //   DELETE { vid }                → 删文件,回落到兜底首帧(有)或清空(竖屏无兜底图)
 // 同一路径两端通用:本地 public/vlog 软链,生产 Caddy /vlog/* 静态服务。
+// 兜底首帧 <vid>.jpg 不走这里 —— 由本地 `npm run cover:push` 生成后经 SSH 推送。
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
 

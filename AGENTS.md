@@ -21,8 +21,11 @@ cd packages/shared && npm run export:content   # 生成 docker/site-content/cont
 
 # 视频封面(两层:面板上传的 <vid>.user.* 优先,兜底为抖音首帧 <vid>.jpg)
 #   换自己的封面 → /admin「视频」面板逐条上传(浏览器端压缩 + 立即写库),不走脚本
-cd packages/shared && npm run cover:vlog -- --list    # 清单:每条横屏视频当前封面来源/尺寸/大小
-cd packages/shared && npm run cover:vlog              # 抓兜底首帧;需本机 Chrome,默认只补缺图的
+#   新增视频后补齐线上的兜底首帧 → 下面这条(读线上配置→缺的现场抓→经 SSH 推到服务器)
+cd packages/shared && npm run cover:push             # 生成 + 推送(需本机 Chrome;ZX_SSH 配在 packages/shared/.env.local)
+cd packages/shared && npm run cover:push -- --dry-run # 只看线上缺哪些
+cd packages/shared && npm run cover:vlog -- --list    # 本地清单(来源/尺寸/大小)
+cd packages/shared && npm run cover:vlog              # 只生成本地兜底首帧(不推线上)
 cd packages/shared && npm run cover:vlog -- --force   # 连已有的兜底图也重抓(不碰 <vid>.user.*)
 
 # 本地开发
@@ -131,11 +134,14 @@ cd apps/next-home && npm run lint && npm run build
    **热更新**:mtime 变化即生效,**无需重建 / 重启容器**(新旧流程的唯一差别:不再需要编译进镜像)。
 2. **`docker/site-content/resume.pdf` / `wechat.png`** —— 简历 / 二维码(由 Caddy 静态服务,替换即生效)。
 3. **`docker/site-content/vlog/`** —— 视频封面目录,两种文件并存:
-   - `<vid>.jpg` = 脚本抓的抖音首帧**兜底图**(横屏才抓);`npm run cover:vlog` 补齐,
-     **新增视频后必须重跑一次**(只补缺的)。只 `scp -r` 图片即可,不用改线上库 ——
-     前端 `v.cover` 缺省时按 vid 推 `/vlog/<vid>.jpg`。
+   - `<vid>.jpg` = 抖音首帧**兜底图**(横屏才抓)。新增视频后跑 **`npm run cover:push`**:
+     它读线上库算出缺哪些,本地用 Chrome 抓首帧,再经 SSH(scp + `sudo install`)推到
+     服务器(无需密码;`ZX_SSH` 配在 `packages/shared/.env.local`)。**不用改线上库** ——
+     前端 `v.cover` 缺省时按 vid 推 `/vlog/<vid>.jpg`。只生成本地:`npm run cover:vlog`。
    - `<vid>.user.jpg` = 站长在 `/admin`「视频」面板**上传**的封面(上传即写线上库,
      文件直接落在服务器上,不需要 scp)。
+   - 面板徽章按**文件实际能否加载**判断(不看库里的 `cover` 字段),所以线上库没有该
+     字段也不会误报"缺兜底封面"。
 
    ⚠️ 面板上传要求服务器上该目录对容器内 uid 10001 可写。`docker-compose.yml` 已加
    `./site-content/vlog:/srv/site/vlog` 子挂载覆盖只读的 `/srv/site`,**首次上线前在服务器

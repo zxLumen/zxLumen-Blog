@@ -44,7 +44,7 @@ const listOnly = argv.includes('--list')
 const force = argv.includes('--force')
 const all = argv.includes('--all')
 const FLAGS = new Set(['--list', '--force', '--all'])
-const VALUE_FLAGS = new Set(['--only', '--db'])
+const VALUE_FLAGS = new Set(['--only', '--db', '--vids'])
 const only = []
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i]
@@ -53,14 +53,22 @@ for (let i = 0; i < argv.length; i++) {
     if (!argv[i + 1]) throw new Error(`${a} 后面要跟值`)
     i++
   } else if (/^\d{6,}$/.test(a)) only.push(a) // 裸写 vid 也算
-  else if (!FLAGS.has(a)) throw new Error(`不认识的参数 ${a}(可用:--list --force --all --only <vid> --db <路径>)`)
+  else if (!FLAGS.has(a)) throw new Error(`不认识的参数 ${a}(可用:--list --force --all --only <vid> --vids <vid,vid> --db <路径>)`)
 }
 const dbArg = argv.indexOf('--db')
 const dbPath = dbArg >= 0 && argv[dbArg + 1]
   ? path.resolve(argv[dbArg + 1])
   : process.env.DB_PATH || path.join(repo, 'apps', 'next-home', 'data', 'zx.db')
 
-if (!existsSync(dbPath)) {
+// --vids:直接给一串 vid(逗号分隔),不读本地库 —— 供 cover:push 复用生成能力
+const vidsArg = (() => {
+  const i = argv.indexOf('--vids')
+  if (i < 0 || !argv[i + 1]) return null
+  const vids = argv[i + 1].split(',').map((s) => s.trim()).filter((s) => /^\d{6,}$/.test(s))
+  return vids.length ? vids : null
+})()
+
+if (!vidsArg && !existsSync(dbPath)) {
   console.error(`[cover:vlog] 找不到数据库 ${dbPath}(可用 --db 指定)`)
   process.exit(1)
 }
@@ -182,35 +190,43 @@ class Cdp {
 }
 
 // ---------------------------------------------------------------- 读配置
-const db = new Database(dbPath)
-const readMeta = db.prepare('SELECT value FROM meta WHERE key = ?')
-const writeMeta = db.prepare(
-  'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-)
-const row = readMeta.get(META_KEY)
-if (!row) {
-  console.error('[cover:vlog] meta.vlog_config 不存在,请先在 admin 里配置视频系列')
-  process.exit(1)
-}
-const list = JSON.parse(String(row.value))
-if (!Array.isArray(list)) {
-  console.error('[cover:vlog] meta.vlog_config 格式异常')
-  process.exit(1)
-}
+// --vids 模式不碰数据库:目标直接来自调用方(cover:push 拉的是线上配置)
+let targets = []
+/** 非 --vids 模式才有:整表 JSON 与回写语句 */
+let list = null
+let writeMeta = null
+if (vidsArg) {
+  targets = vidsArg.map((vid) => ({ series: '(vids)', video: { vid } }))
+} else {
+  const db = new Database(dbPath)
+  const readMeta = db.prepare('SELECT value FROM meta WHERE key = ?')
+  writeMeta = db.prepare(
+    'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+  )
+  const row = readMeta.get(META_KEY)
+  if (!row) {
+    console.error('[cover:vlog] meta.vlog_config 不存在,请先在 admin 里配置视频系列')
+    process.exit(1)
+  }
+  list = JSON.parse(String(row.value))
+  if (!Array.isArray(list)) {
+    console.error('[cover:vlog] meta.vlog_config 格式异常')
+    process.exit(1)
+  }
 
-/** 横屏判定,与前端 HeroVlog.isLandscape 保持一致 */
-const isLandscape = (v) =>
-  v.orientation === 'landscape' ||
-  (v.orientation !== 'portrait' && Number(v.w) > 0 && Number(v.h) > 0 && Number(v.w) > Number(v.h))
+  /** 横屏判定,与前端 HeroVlog.isLandscape 保持一致 */
+  const isLandscape = (v) =>
+    v.orientation === 'landscape' ||
+    (v.orientation !== 'portrait' && Number(v.w) > 0 && Number(v.h) > 0 && Number(v.w) > Number(v.h))
 
-/** vid → 该 vid 的全部出现位置(同一 vid 可能被放多个系列) */
-const targets = []
-for (const s of list) {
-  for (const v of s.videos ?? []) {
-    if (!/^\d{6,}$/.test(String(v.vid ?? ''))) continue
-    if (only.length && !only.includes(v.vid)) continue
-    if (!all && !isLandscape(v)) continue
-    targets.push({ series: s.name || s.id, video: v })
+  /** vid → 该 vid 的全部出现位置(同一 vid 可能被放多个系列) */
+  for (const s of list) {
+    for (const v of s.videos ?? []) {
+      if (!/^\d{6,}$/.test(String(v.vid ?? ''))) continue
+      if (only.length && !only.includes(v.vid)) continue
+      if (!all && !isLandscape(v)) continue
+      targets.push({ series: s.name || s.id, video: v })
+    }
   }
 }
 
@@ -435,7 +451,7 @@ for (const [idx, { series, video }] of todo.entries()) {
   }
 }
 
-if (ok > 0) {
+if (ok > 0 && writeMeta && list) {
   writeMeta.run(META_KEY, JSON.stringify(list))
   console.log('[cover:vlog] 提示:上面这些只是抖音兜底首帧图(视频第 0 帧),不是你上传的封面')
   console.log('[cover:vlog] 换成你自己的封面:在 /admin「视频」面板逐条上传,存 <vid>.user.jpg,优先于兜底图')
@@ -450,7 +466,7 @@ if (failed.length) {
   console.error(`  失败:${failed.join('; ')}`)
   process.exitCode = 1
 }
-if (ok > 0) {
-  console.log('[cover:vlog] 记得把 docker/site-content/vlog/ 一并 scp 到服务器(Caddy 直接静态服务 /vlog/*)')
+if (ok > 0 && !vidsArg) {
+  console.log('[cover:vlog] 本地已生成;要同步到线上用 npm run cover:push(自动生成+上传),或手动 scp 该目录')
 }
 process.exit(process.exitCode ?? 0)

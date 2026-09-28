@@ -101,6 +101,12 @@ export function AdminVlogPanel({
   const [coverBusy, setCoverBusy] = useState<Set<string>>(new Set())
   /** 上传后服务端给的「方向不一致会补黑边」提示,按 vid 记 */
   const [coverHints, setCoverHints] = useState<Record<string, string>>({})
+  /** 封面文件实际能不能加载:按 vid 记 'ok' / 'bad'。
+   *  徽章不能看库里的 cover 字段 —— 线上库通常没有该字段(前端按 vid 推导),
+   *  只有真去看这张图 load 没 load 出来,才能知道兜底封面到底在不在。 */
+  const [coverFile, setCoverFile] = useState<Record<string, 'ok' | 'bad'>>({})
+  const markCoverFile = (vid: string, s: 'ok' | 'bad') =>
+    setCoverFile((prev) => (prev[vid] === s ? prev : { ...prev, [vid]: s }))
 
   const gated = gate(showTabs, tab)
   useEffect(() => {
@@ -489,6 +495,8 @@ export function AdminVlogPanel({
                       src={thumb}
                       alt=""
                       style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                      onLoad={() => markCoverFile(v.vid, 'ok')}
+                      onError={() => markCoverFile(v.vid, 'bad')}
                     />
                   ) : (
                     <Text fz={10} c="dimmed">
@@ -501,18 +509,23 @@ export function AdminVlogPanel({
                     你的封面
                   </Badge>
                 ) : isLandscape(v) ? (
-                  v.cover ? (
-                    <Badge size="xs" color="gray" variant="light" title="本地跑 npm run cover:vlog 抓抖音首帧">
-                      兜底首帧
-                    </Badge>
-                  ) : (
+                  coverFile[v.vid] === 'bad' ? (
                     <Badge
                       size="xs"
                       color="red"
                       variant="light"
-                      title="本地跑 npm run cover:vlog 抓抖音首帧做保底"
+                      title="本地跑 npm run cover:push 抓抖音首帧并推到线上(或 npm run cover:vlog 只生成本地)"
                     >
                       缺兜底封面
+                    </Badge>
+                  ) : (
+                    <Badge
+                      size="xs"
+                      color="gray"
+                      variant="light"
+                      title="抖音首帧兜底图;要换成自己的封面请点「上传封面」"
+                    >
+                      兜底首帧
                     </Badge>
                   )
                 ) : (

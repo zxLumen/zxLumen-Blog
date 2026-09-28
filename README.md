@@ -46,31 +46,38 @@ cd apps/next-home && npm install && npm run dev      # http://localhost:3000
   长边压到 1280 再转 JPEG(q0.85),存成 `docker/site-content/vlog/<vid>.user.jpg`
   (非 JPEG 会原样存 `.user.png`/`.user.webp`)。上传**立即写库**(`coverSrc='user'`),
   不用点面板的「保存」;新加的视频要先保存进列表才能上传。
-- **抖音兜底首帧** —— `npm run cover:vlog` 从官方播放器页自行签名的 `aweme/detail`
-  响应里取 `video.origin_cover`(640×360),存成 `<vid>.jpg`。**它就是视频第 0 帧**,
-  不是作者另设的封面(已实测 SSIM ≈ 0.99 与 t=0 帧一致),只是「至少不变形」的保底。
+- **抖音兜底首帧** —— 本地跑 `npm run cover:push` 补齐:它读线上配置算出缺哪些,用本机
+  Chrome 打开官方播放器页、读页面**自己签名**的 `aweme/detail` 响应取 `video.origin_cover`
+  (640×360),存成 `<vid>.jpg`,再经 SSH 推到服务器封面目录。**它就是视频第 0 帧**,不是
+  作者另设的封面(已实测 SSIM ≈ 0.99 与 t=0 帧一致),只是「至少不变形」的保底。
 
 两者互不覆盖:面板可随时「恢复兜底」删掉 `<vid>.user.*` 回落到 `<vid>.jpg`。
 
 ```bash
 cd packages/shared
-npm run cover:vlog -- --list        # 清单:每条横屏视频当前封面来源/尺寸/大小(不联网)
-npm run cover:vlog                  # 抓抖音兜底首帧(需本机 Chrome,默认只补缺图的)
+npm run cover:push                  # 线上缺哪张就抓哪张并推上去(推荐;需本机 Chrome)
+npm run cover:push -- --dry-run     # 只看线上缺哪些,不生成/不推送
+npm run cover:vlog -- --list        # 本地清单:来源/尺寸/大小(不联网)
+npm run cover:vlog                  # 只生成本地兜底图(不推线上)
 npm run cover:vlog -- --force       # 连已存在的兜底图也重抓
 npm run cover:vlog -- --only <vid>  # 只处理指定视频(--only 可重复,也可裸写 vid)
-npm run cover:vlog -- --all        # 连竖屏也一起抓(默认只处理横屏)
 ```
 
-- 脚本用无头浏览器打开官方播放器页,读页面**自己签名**的 `aweme/detail` 响应
-  (不硬编码 `X-Bogus`)。全流程幂等,重复跑不会重复抓;新增视频后再跑一次即可补齐。
+`cover:push` 需要 SSH 到服务器,配置放 `packages/shared/.env.local`(已 gitignore):
+`ZX_SSH=ubuntu@<服务器IP>`,可选 `ZX_SITE` / `ZX_VLOG_DIR` / `ZX_DB_VOLUME`。
+
+- 兜底图必须由**真实浏览器**生成:抖音的封面在 `aweme/v1/web/aweme/detail/` 响应里,
+  该接口要 `a_bogus` 签名(JSVMP 混淆),普通 HTTP 直连一律空响应 —— 所以只能在有
+  Chrome 的机器上跑,服务器不装浏览器。
 - 封面 URL 带签名约 14 天过期 → **必须落本地**,不能长期外链。
 - 封面与视频方向不一致(横图配竖屏 / 竖图配横屏)一律**等比缩放 + 纯黑补边**,
   不裁剪(`object-fit: contain; background: #000`),上传时会提示补哪边。
 - 竖屏视频没有兜底图(不需要,竖封面塞进竖框不变形);缺图 / 404 时前端回退播放器封面。
 - 路径两端通用:本地由 `apps/next-home/public/vlog` 软链到 `docker/site-content/vlog/`,
-  生产由 Caddy 的 `/vlog/*` 静态服务。**上线时记得 `scp -r` 这个目录**。
+  生产由 Caddy 的 `/vlog/*` 静态服务。
 - 前端优先用 `v.cover`,没有就按 vid 推 `/vlog/<vid>.jpg`,所以生产库没写 `cover`
-  字段也能正常显示;`coverAt` 会作为 `?v=` 破缓存。
+  字段也能正常显示;`coverAt` 会作为 `?v=` 破缓存。面板徽章按**图片实际能否加载**判断,
+  不看库字段。
 
 ## ⚠️ 隐私:以下文件不入库(部署时需单独提供)
 
