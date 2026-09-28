@@ -94,7 +94,7 @@ export interface Db {
     title?: string
     size?: number
     sha?: string
-    status?: KbDocRow['status']
+    status?: KbDocRow['status'] | 'ignored'
     error?: string
   }): number
   listKbDocs(): KbDocRow[]

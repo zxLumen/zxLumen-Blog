@@ -32,12 +32,30 @@ cd packages/shared && npm run seed:chatbot
 3. docker compose 里把 `docker/site-content/chatbot` 挂进 `/srv/site/chatbot`(见下方「生产部署」)。
 4. `admin → 机器人`:选聊天 provider + 模型、`embedding`(可选)→ 保存。
 5. 「扫描并蒸馏」:自动分类 corpus(人格素材 vs 事实知识),知识类切块(500/75)入库,
-   人格类汇总 → 点「生成人格」产出 `persona.md + faq.json`。
-   - **类别判定优先级**:手动覆盖 > 文件头指令 > 文件名/目录规则 > LLM 自动分类。
-     - 文件头指令:前 500 字内 `<!-- kind: knowledge -->` 或独占一行 `kind: persona|knowledge`。
-     - 文件名规则:`site-content/content/knowledge/api/docs/faq/技术` → 知识;`about-me/resume/persona/self-intro/自述/随笔` → 人格;`corpus/knowledge/`→知识、`corpus/persona/`→人格。
-     - 蒸馏表「类别」列可下拉手动设为 人格/知识/自动(存 meta `chatbot_kind_overrides`)。
-   - **模型建议**:分类/抽取 JSON 用**非推理**轻量模型(如 `glm-5.3-flash`)更省更稳;推理模型(如 `deepseek-v4.1-flash`)会把思维链计入输出预算,预算不足会导致答案被截断(报「LLM 未返回 JSON」)。分类预算 1000、人格 3000、FAQ 1200。
+    人格类汇总 → 点「生成人格」产出 `persona.md + faq.json`。
+   - **也可直接在 admin「机器人 → 灵魂蒸馏」上传** `.md/.txt`(**可多选文件或整个文件夹**;单文件 ≤2MB):
+     上传成功即在**后台**执行「扫描并蒸馏」(分类+入库;人格仍只会「待生成」,由你单独点「生成人格」)。
+     重名/类型不支持会返回错误;corpus 列表可一键 ✕ 删除(同步移除其知识块)。
+     需服务器 `chatbot/` 目录可写(appuser 10001,见「生产部署」)。
+   - **敏感信息过滤**(上传/蒸馏自动执行):`lib/chat/sanitize.ts` 两档检测——
+     - **硬检测**(格式命中即脱敏,替换为 `×××`):身份证(18/15)、护照/通行证、银行卡(Luhn)、连续≥16 位数字、手机/座机/400、邮箱(本站公开联系方式自动豁免)、API 密钥( `sk-`/`ghp_`/`AKIA`/`AIza`/JWT 等)、数据库/带密码 URL、SSH 私钥块、内网 IP、GPS 坐标(需 经纬/坐标 语境)、车牌。
+     - **语境检测**(亲属称谓 + 号码、出生/生日、家庭住址、密码口令 等关键词+跟随值)脱敏并标注「(语境)」。
+     - 脱敏在**读取时生效,不改写磁盘原文件**;库存与送 LLM 的均为脱敏版(人格/知识出站另有 `sanitize` 兜底)。文件被命中时列表显示「⚠ 已脱敏:…」,**示例写法误报**(如 `138-0000-0000`、`192.168.1.1` 教程)可点「按原文放行」(存 `meta.chatbot_sensitive_allow`),恢复脱敏随时可切回;记录见 `meta.chatbot_sanitized`。
+     - 能力边界:纯中文**姓名**无可靠格式,不单独拦截;但「父母/家属+姓名+生日/住址/号码」的语境组合会命中。上传时若探测到敏感内容会一并提示。删除 corpus 会顺带清掉其放行/脱敏记录。
+   - **垃圾内容自动过滤**(蒸馏时自动执行,类比脱敏):`lib/chat/junk.ts` 判定备忘录碎屑——
+     - **自动跳过**(标记 `已忽略`,不入库、不算出错,留盘可恢复):**近空**(去掉 markdown 标题行/空行/分隔线后正文为空)、**无实词**(正文所有非空行都不含中/英文词,即纯数字/符号/乱码)。
+     - **仅提示**(不自动跳过,避免误伤简短备忘):正文 <10 字符但含中文词,如 `胃药`/`董师傅`;列表行内显示 `⚠ 疑似垃圾:太短`。
+     - 面板「已忽略」组内点「恢复入库」即豁免(存 meta `chatbot_junk_keep`)并重新摄取;已恢复的文件行尾有「恢复过滤」按钮可重新忽略。重新过滤时连带清掉其旧知识块,避免残留污染检索。删除 corpus 会顺带清掉其豁免记录。
+    - **类别判定优先级**:手动覆盖 > 文件头指令 > 文件名/目录规则 > LLM 自动分类。
+      - 文件头指令:前 500 字内 `<!-- kind: knowledge -->` 或独占一行 `kind: persona|knowledge`。
+      - 文件名规则:`site-content/content/knowledge/api/docs/faq/技术` → 知识;`about-me/resume/persona/self-intro/自述/随笔` → 人格;`corpus/knowledge/`→知识、`corpus/persona/`→人格。
+      - 蒸馏表「类别」列可下拉手动设为 人格/知识/自动(存 meta `chatbot_kind_overrides`)。
+    - **后台跑批 + 进度**(`processCorpus`):「扫描并蒸馏」现在是**后台任务**——`POST /api/admin/chatbot/distill` `{action:'process'}` **立即返回** `{started}`,服务端继续跑;进度写入 `meta.chatbot_distill_progress` 并随 `GET` 的 `progress` 返回(`running/done/total/ok/ignored/error/current`),前端每 1.5s 轮询显示 `done/total · 当前文件`,可安全离开页面。**同一时刻只允许一个任务**(并发启动会被拒 `{started:false,reason}`)。
+      - **批量分类**:需要 LLM 的素材**每 10 篇合并成一次调用**(每篇截断 1200 字)返回 JSON 数组,省去重复指令开销;解析失败自动加大预算重试,仍失败则**拆半递归**,最终退化为逐篇 `classifyText`(仍失败按 knowledge 兜底),不会留 error 死档。
+      - **并发**:多批分类(`4` 路)+ 多文件入库/embedding(`4` 路)并行,时间大幅缩短。
+      - **行内操作只重跑单文件**:改类别/放行/忽略/恢复入库走 `processFile(source)`,不再触发整库重跑。
+      - 「全量重跑」(`force`)会重分类并重建全部知识块,前端默认不勾、勾选后有二次确认。
+    - **模型建议**:分类/抽取 JSON 用**非推理**轻量模型(如 `glm-5.3-flash`)更省更稳;推理模型(如 `deepseek-v4.1-flash`)会把思维链计入输出预算,预算不足会导致答案被截断(报「LLM 未返回 JSON」)。单篇分类预算 1000、批量 2048/4096、人格 3000、FAQ 1200。
 6. 前台勾「启用机器人」保存,右下角出现 💬。<br>
    - 浮标默认在**右下角**(置于「// 快捷键」浮块上方),可**拖动**(位置记忆在 `localStorage:zx.chat.fab.v2`);点开后对话窗口**跟随浮标**就近展开。
    - 浮标**常驻**:点击开/合切换(图标不变,始终显示聊天图标);窗口为 **D1 清爽全宽**风(实色底、整行消息 + 头像「刘」/「你」、常驻输入条);**整窗统一等宽字体 `--font-mono`,正文 15px**。
@@ -86,7 +104,8 @@ docker compose 已为 `app` 服务配置:
 - `GET /api/chat/config`:公开,仅返回 `{ enabled, name, greeting, suggestions, ready }`,不含密钥。
 - `GET/POST /api/admin/chatbot`:完整配置 + 掩码密钥 + provider 列表(仅站长)。
 - `GET/POST/DELETE /api/admin/chatbot/logs`:对话日志 / 日统计 / 清空。
-- `GET/POST /api/admin/chatbot/distill`:`process`(扫描蒸馏,`force` 全量)、`persona`(生成人格)、`clear`(清库)。
+- `GET/POST /api/admin/chatbot/distill`:`process`(后台扫描蒸馏,`force` 全量;立即返回 `{started}`)、`persona`(生成人格)、`clear`(清库)、`set-kind`、`set-sensitive-allow`(按文件放行/恢复脱敏)、`set-ignored`(按文件恢复入库/恢复自动过滤);后三者**只重跑该单文件**。GET 返回 `sensitiveAllowed`/`sanitized`、每文件的 `junk`/`nokeep` 及 `progress`。
+- `GET/POST/DELETE /api/admin/chatbot/corpus`:上传(返回每文件命中敏感类别)/删除(顺带清知识块与放行记录)。
 
 ## 关键实现
 

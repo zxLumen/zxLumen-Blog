@@ -1,5 +1,6 @@
 // LLM / embedding 客户端:openai 兼容 + ollama 两种协议,纯 fetch 流式(无 SDK 依赖)。
 import { randomUUID } from 'node:crypto'
+import { sanitizeText } from './sanitize'
 
 const DEFAULT_TIMEOUT = 60_000
 const UA = 'zx-home-chatbot/1.0 (+https://zxlumen.cn)'
@@ -22,6 +23,8 @@ export interface StreamChatOpts {
   provider?: string
   /** 会话 id:OpenCode Go 需 `x-opencode-session` 做路由与 prompt 缓存 */
   sessionId?: string
+  /** 出站脱敏:发送前把每条消息里的敏感信息掩码(仅蒸馏等管理侧开启,访客问答不加开销) */
+  sanitize?: boolean
 }
 
 export interface StreamChatResult {
@@ -184,6 +187,12 @@ export async function streamChat(
   opts: StreamChatOpts,
   onToken: (d: string) => void,
 ): Promise<StreamChatResult> {
+  if (opts.sanitize) {
+    opts = {
+      ...opts,
+      messages: opts.messages.map((m) => ({ ...m, content: sanitizeText(m.content).text })),
+    }
+  }
   return opts.protocol === 'ollama' ? streamOllama(opts, onToken) : streamOpenAi(opts, onToken)
 }
 

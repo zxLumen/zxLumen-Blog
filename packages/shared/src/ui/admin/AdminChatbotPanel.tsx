@@ -56,6 +56,16 @@ interface CorpusItem {
   origin: 'override' | 'directive' | 'rule' | 'auto'
   status: string
   error: string
+  /** 垃圾检测(auto=自动跳过 / hint=仅提示),null=正常 */
+  junk?: { auto: boolean; reason: string } | null
+  /** true=已由站长恢复入库(豁免自动过滤) */
+  nokeep?: boolean
+}
+
+interface SanitizedInfo {
+  hard: Record<string, number>
+  ctx: Record<string, number>
+  at: string
 }
 
 interface KbDoc {
@@ -67,13 +77,29 @@ interface KbDoc {
   sha: string
 }
 
+interface DistillProgress {
+  running: boolean
+  force: boolean
+  total: number
+  done: number
+  ok: number
+  ignored: number
+  error: number
+  current: string
+  startedAt: string
+  finishedAt: string | null
+}
+
 interface DistillStatus {
   corpus: CorpusItem[]
   docs: KbDoc[]
   kindOverrides: Record<string, 'persona' | 'knowledge'>
+  sensitiveAllowed?: Record<string, boolean>
+  sanitized?: Record<string, SanitizedInfo>
   chunkCount: number
   hasPersona: boolean
   faqCount: number
+  progress?: DistillProgress | null
 }
 
 interface LogRow {
@@ -102,6 +128,357 @@ const num = (s: string, fallback: number) => {
   return Number.isFinite(n) ? n : fallback
 }
 
+/** Chrome/Edge 原生目录选择:递归收集 .md/.txt,并把相对路径挂到 File 上(兼容 webkitRelativePath 语义) */
+async function pickDirectoryFiles(): Promise<File[]> {
+  interface DirHandle extends AsyncIterable<[string, unknown]> {
+    kind: 'file' | 'directory'
+    getFile?: () => Promise<File>
+  }
+  const w = window as Window & { showDirectoryPicker?: (opts?: { mode?: string }) => Promise<DirHandle> }
+  if (!w.showDirectoryPicker) return []
+  const handle = await w.showDirectoryPicker({ mode: 'read' })
+  const out: File[] = []
+  const walk = async (dir: DirHandle, prefix: string) => {
+    for await (const [name, entry] of dir) {
+      const e = entry as DirHandle
+      if (e.kind === 'directory') await walk(e, prefix ? `${prefix}/${name}` : name)
+      else if (/\.(md|txt)$/i.test(name) && e.getFile) {
+        const f = await e.getFile()
+        Object.defineProperty(f, 'webkitRelativePath', { value: prefix ? `${prefix}/${name}` : name, configurable: true })
+        out.push(f)
+      }
+    }
+  }
+  await walk(handle, '')
+  if (!out.length) throw new Error('所选文件夹里没有 .md/.txt 文件')
+  return out
+}
+
+/** 按状态分组展示 corpus 文件:出错/待处理/已入库可折叠,行可点击查看原文 */
+function CorpusFileList({
+  items,
+  filter,
+  dBusy,
+  kindOverrides,
+  sanitized,
+  sensitiveAllowed,
+  collapse,
+  onToggleCollapse,
+  onSetKind,
+  onDelete,
+  onAllow,
+  onUnignore,
+  onIgnore,
+  onOpen,
+}: {
+  items: CorpusItem[]
+  filter: string
+  dBusy: string
+  kindOverrides?: Record<string, 'persona' | 'knowledge'>
+  sanitized?: Record<string, SanitizedInfo>
+  sensitiveAllowed?: Record<string, boolean>
+  collapse: string[]
+  onToggleCollapse: (k: string) => void
+  onSetKind: (source: string, kind: 'persona' | 'knowledge' | 'auto') => void
+  onDelete: (rel: string) => void
+  onAllow: (rel: string, allow: boolean) => void
+  onUnignore: (rel: string) => void
+  onIgnore: (rel: string) => void
+  onOpen: (rel: string) => void
+}) {
+  const kw = filter.trim().toLowerCase()
+  const shown = kw
+    ? items.filter((c) => c.rel.toLowerCase().includes(kw))
+    : items
+  const groups: Array<{ key: string; color: string; list: CorpusItem[] }> = [
+    { key: '出错', color: 'var(--zx-danger, #e5484d)', list: shown.filter((c) => c.status === 'error') },
+    { key: '已忽略', color: 'var(--zx-text-dim, #999)', list: shown.filter((c) => c.status === 'ignored' && !c.nokeep) },
+    { key: '待处理', color: 'var(--zx-text-dim, #999)', list: shown.filter((c) => c.status !== 'error' && c.status !== 'processed' && c.status !== 'ignored') },
+    { key: '已入库', color: 'var(--zx-ok, #2f9e44)', list: shown.filter((c) => c.status === 'processed') },
+  ].filter((g) => g.list.length > 0)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      {groups.map((g) => {
+        const open = !collapse.includes(g.key)
+        return (
+          <div key={g.key}>
+            <button
+              className="zx-btn zx-btn-sm zx-btn-ghost"
+              style={{ padding: '2px 6px', fontWeight: 600 }}
+              onClick={() => onToggleCollapse(g.key)}
+            >
+              {open ? '▾' : '▸'} <span style={{ color: g.color }}>{g.key}</span> ({g.list.length})
+            </button>
+            {open && (
+              <div style={{ marginTop: '0.3rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {g.list.map((c) => {
+                  const idx = `${g.key}-${c.rel}`
+                  const info = sanitized?.[c.rel]
+                  const allowed = !!sensitiveAllowed?.[c.rel]
+                  const parts: string[] = []
+                  for (const [k, v] of Object.entries(info?.hard ?? {})) parts.push(`脱敏${k}×${v}`)
+                  for (const [k, v] of Object.entries(info?.ctx ?? {})) parts.push(`脱敏${k}×${v}(语境)`)
+                  const junkHint = c.junk && !c.junk.auto ? c.junk.reason : ''
+                  return (
+                    <div
+                      key={idx}
+                      title={c.rel}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        padding: '2px 4px',
+                        borderRadius: 4,
+                        fontSize: '0.72rem',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--zx-bg-hover, rgba(0,0,0,0.04))')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      onClick={() => onOpen(c.rel)}
+                    >
+                      <button
+                        className="zx-mono"
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          padding: 0,
+                          textAlign: 'left',
+                          color: 'inherit',
+                          cursor: 'pointer',
+                          fontSize: '0.72rem',
+                          maxWidth: '42%',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          flex: '0 1 auto',
+                        }}
+                        title={`查看 ${c.rel}`}
+                      >
+                        {c.rel.replace(/^corpus\//, '')}
+                      </button>
+                      <span style={{ color: g.color, flexShrink: 0 }}>
+                        {c.status === 'processed' ? '✓' : c.status === 'error' ? '✕' : c.status === 'ignored' ? '⛔' : '…'}
+                      </span>
+                      <span className="zx-muted zx-mono" style={{ flexShrink: 0, fontSize: '0.62rem' }}>
+                        {c.status === 'ignored'
+                          ? (c.error || '已忽略')
+                          : c.kind === null
+                            ? '?'
+                            : c.kind === 'persona'
+                              ? '人格'
+                              : '知识'}
+                        {c.origin && c.status !== 'ignored' ? `·${ORIGIN_TEXT[c.origin] ?? c.origin}` : ''}
+                      </span>
+                      {(parts.length > 0 || allowed) && (
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            fontSize: '0.62rem',
+                            color: allowed ? 'var(--zx-text-dim, #888)' : '#b45309',
+                            maxWidth: '22%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={allowed ? '已按原文放行' : `检测时间 ${info?.at ?? ''};均脱敏后入库`}
+                        >
+                          {allowed ? '已放行' : `⚠ ${parts.join('、') || '…'}`}
+                        </span>
+                      )}
+                      {junkHint && (
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            fontSize: '0.62rem',
+                            color: '#b45309',
+                            maxWidth: '22%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={junkHint}
+                        >
+                          ⚠ 疑似垃圾:{junkHint}
+                        </span>
+                      )}
+                      <span style={{ marginLeft: 'auto', display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
+                        {c.status === 'ignored' && !c.nokeep ? (
+                          <button
+                            className="zx-btn zx-btn-sm zx-btn-ghost"
+                            style={{ padding: '0 0.3rem', minWidth: 0 }}
+                            disabled={!!dBusy}
+                            title="此文件因疑似垃圾被自动忽略;恢复后重新入库"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void onUnignore(c.rel)
+                            }}
+                          >
+                            恢复入库
+                          </button>
+                        ) : (
+                          <select
+                            className="zx-input"
+                            style={{ maxWidth: 92, fontSize: '0.68rem', padding: '1px 2px' }}
+                            disabled={!!dBusy}
+                            value={kindOverrides?.[c.rel] ?? 'auto'}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              e.stopPropagation()
+                              void onSetKind(c.rel, e.target.value as 'persona' | 'knowledge' | 'auto')
+                            }}
+                          >
+                            <option value="auto">自动</option>
+                            <option value="persona">人格</option>
+                            <option value="knowledge">知识</option>
+                          </select>
+                        )}
+                        {c.status !== 'ignored' && !allowed && parts.length > 0 && (
+                          <button
+                            className="zx-btn zx-btn-sm zx-btn-ghost"
+                            style={{ padding: '0 0.3rem', minWidth: 0 }}
+                            disabled={!!dBusy}
+                            title="示例数字/教程写法误报时,按原文蒸馏"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void onAllow(c.rel, true)
+                            }}
+                          >
+                            放行
+                          </button>
+                        )}
+                        {c.status !== 'ignored' && allowed && (
+                          <button
+                            className="zx-btn zx-btn-sm zx-btn-ghost"
+                            style={{ padding: '0 0.3rem', minWidth: 0 }}
+                            disabled={!!dBusy}
+                            title="恢复脱敏"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void onAllow(c.rel, false)
+                            }}
+                          >
+                            恢复
+                          </button>
+                        )}
+                        {c.status !== 'ignored' && c.nokeep && (
+                          <button
+                            className="zx-btn zx-btn-sm zx-btn-ghost"
+                            style={{ padding: '0 0.3rem', minWidth: 0 }}
+                            disabled={!!dBusy}
+                            title="此前已「恢复入库」,点此重新按自动过滤忽略"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void onIgnore(c.rel)
+                            }}
+                          >
+                            恢复过滤
+                          </button>
+                        )}
+                        <button
+                          className="zx-btn zx-btn-sm zx-btn-ghost"
+                          style={{ padding: '0 0.3rem', minWidth: 0 }}
+                          disabled={!!dBusy}
+                          title={`删除 ${c.rel}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void onDelete(c.rel)
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** 查看 corpus 文件的弹层:展示原文文本(顶栏显示文件名 + 操作) */
+function CorpusViewer({
+  rel,
+  name,
+  state,
+  text,
+  onClose,
+  onDelete,
+}: {
+  rel: string
+  name: string
+  state: 'idle' | 'loading' | 'error'
+  text: string
+  onClose: () => void
+  onDelete: (rel: string) => void
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.45)',
+        zIndex: 999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="zx-panel"
+        style={{ maxWidth: 860, width: '100%', maxHeight: '82vh', display: 'flex', flexDirection: 'column', marginBottom: 0 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+          <strong className="zx-mono" style={{ fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {name}
+          </strong>
+          <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>{rel} · {text.length} 字符</span>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem' }}>
+            <button
+              className="zx-btn zx-btn-sm zx-btn-ghost"
+              onClick={() => {
+                if (confirm(`删除 ${rel}?会同步移除其知识块。`)) onDelete(rel)
+              }}
+            >
+              删除
+            </button>
+            <button className="zx-btn zx-btn-sm zx-btn-primary" onClick={onClose}>关闭</button>
+          </span>
+        </div>
+        {state === 'loading' && <div className="zx-muted zx-mono" style={{ fontSize: '0.72rem' }}>加载中…</div>}
+        {state === 'error' && <div className="zx-msg err" style={{ fontSize: '0.72rem' }}>读取失败(文件可能已删除)</div>}
+        {state === 'idle' && (
+          <pre
+            className="zx-mono"
+            style={{
+              flex: 1,
+              overflow: 'auto',
+              margin: 0,
+              padding: '0.8rem',
+              background: 'var(--zx-bg, transparent)',
+              border: '1px solid var(--zx-border, #ddd)',
+              borderRadius: 6,
+              fontSize: '0.74rem',
+              lineHeight: 1.7,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {text}
+          </pre>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function AdminChatbotPanel({
   active,
   showTabs,
@@ -126,8 +503,14 @@ export function AdminChatbotPanel({
   const [saving, setSaving] = useState(false)
 
   const [distill, setDistill] = useState<DistillStatus | null>(null)
-  const [dBusy, setDBusy] = useState<'process' | 'persona' | 'clear' | 'kind' | ''>('')
+  const [dBusy, setDBusy] = useState<'process' | 'persona' | 'clear' | 'kind' | 'upload' | 'del' | ''>('')
   const [force, setForce] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [corpusFilter, setCorpusFilter] = useState('')
+  const [corpusCollapse, setCorpusCollapse] = useState<string[]>(['已入库'])
+  const [viewer, setViewer] = useState<{ rel: string; name: string } | null>(null)
+  const [viewState, setViewState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [viewText, setViewText] = useState('')
 
   const [logs, setLogs] = useState<LogRow[]>([])
   const [dayCounts, setDayCounts] = useState<Array<{ day: string; count: number }>>([])
@@ -219,6 +602,14 @@ export function AdminChatbotPanel({
     }
   }, [gated, active, load, loadDistill, loadLogs])
 
+  // 蒸馏在后台跑时,1.5s 轮询进度(任意标签页都能看到)
+  const distillRunning = !!distill?.progress?.running
+  useEffect(() => {
+    if (!gated || !active || !distillRunning) return
+    const t = setInterval(() => void loadDistill(), 1500)
+    return () => clearInterval(t)
+  }, [gated, active, distillRunning, loadDistill])
+
   const set = <K extends keyof BotConfig>(k: K, v: BotConfig[K]) =>
     setCfg((c) => (c ? { ...c, [k]: v } : c))
 
@@ -275,19 +666,26 @@ export function AdminChatbotPanel({
   }
 
   const distillAction = async (action: 'process' | 'persona' | 'clear') => {
+    if (action === 'process' && force && !window.confirm('全量重跑会重新分类并重建全部知识块(耗时且消耗较多 token),确认继续?')) return
     setDBusy(action)
+    const signal = AbortSignal.timeout(10 * 60_000)
     try {
       const r = await adminFetch('/api/admin/chatbot/distill', {
         method: 'POST',
+        signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, force: action === 'process' ? force : undefined }),
       })
-      const d = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean; action?: string; items?: CorpusItem[] }
-      if (!r.ok || !d.ok) throw new Error(d.error || '蒸馏失败')
+      const d = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean; action?: string; started?: boolean; reason?: string }
+      if (!r.ok || !d.ok) throw new Error(d.error || '操作失败')
       await loadDistill()
-      notify('ok', d.action === 'persona' ? '人格已生成(persona.md + faq.json)' : d.action === 'clear' ? '知识库已清空' : `蒸馏完成 · ${d.items?.length ?? 0} 个文件`)
+      if (action === 'process') {
+        notify(d.started ? 'ok' : 'err', d.started ? (force ? '已开始全量重跑(后台进行,进度见下方)' : '已开始蒸馏(后台进行,进度见下方)') : d.reason || '已有蒸馏任务在跑')
+      } else {
+        notify('ok', d.action === 'persona' ? '人格已生成(persona.md + faq.json)' : '知识库已清空')
+      }
     } catch (e) {
-      notify('err', e instanceof Error ? e.message : '蒸馏失败')
+      notify('err', e instanceof Error ? e.message : '操作失败')
     } finally {
       setDBusy('')
     }
@@ -298,6 +696,7 @@ export function AdminChatbotPanel({
     try {
       const r = await adminFetch('/api/admin/chatbot/distill', {
         method: 'POST',
+        signal: AbortSignal.timeout(10 * 60_000),
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'set-kind', source, kind }),
       })
@@ -312,12 +711,145 @@ export function AdminChatbotPanel({
     }
   }
 
+  const setSensitiveAllow = async (source: string, allow: boolean) => {
+    setDBusy('kind')
+    try {
+      const r = await adminFetch('/api/admin/chatbot/distill', {
+        method: 'POST',
+        signal: AbortSignal.timeout(10 * 60_000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-sensitive-allow', source, allow }),
+      })
+      const d = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean }
+      if (!r.ok || !d.ok) throw new Error(d.error || '设置失败')
+      await loadDistill()
+      notify('ok', allow ? '已按原文放行(误报时使用)' : '已恢复脱敏并重新入库')
+    } catch (e) {
+      notify('err', e instanceof Error ? e.message : '设置失败')
+    } finally {
+      setDBusy('')
+    }
+  }
+
+  const unignoreCorpus = async (source: string) => {
+    setDBusy('kind')
+    try {
+      const r = await adminFetch('/api/admin/chatbot/distill', {
+        method: 'POST',
+        signal: AbortSignal.timeout(10 * 60_000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-ignored', source, ignore: false }),
+      })
+      const d = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean }
+      if (!r.ok || !d.ok) throw new Error(d.error || '恢复失败')
+      await loadDistill()
+      notify('ok', '已豁免自动过滤并重新入库')
+    } catch (e) {
+      notify('err', e instanceof Error ? e.message : '恢复失败')
+    } finally {
+      setDBusy('')
+    }
+  }
+
+  const ignoreCorpus = async (source: string) => {
+    setDBusy('kind')
+    try {
+      const r = await adminFetch('/api/admin/chatbot/distill', {
+        method: 'POST',
+        signal: AbortSignal.timeout(10 * 60_000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-ignored', source, ignore: true }),
+      })
+      const d = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean }
+      if (!r.ok || !d.ok) throw new Error(d.error || '操作失败')
+      await loadDistill()
+      notify('ok', '已恢复自动过滤并移出知识库')
+    } catch (e) {
+      notify('err', e instanceof Error ? e.message : '操作失败')
+    } finally {
+      setDBusy('')
+    }
+  }
+
   const clearLogs = async () => {
     if (!confirm('清空全部对话日志?')) return
     const r = await adminFetch('/api/admin/chatbot/logs', { method: 'DELETE' })
     if (r.ok) {
       setLogs([])
       notify('ok', '日志已清空')
+    }
+  }
+
+  const uploadCorpus = async () => {
+    if (!pendingFiles.length) return
+    setDBusy('upload')
+    try {
+      const fd = new FormData()
+      for (const f of pendingFiles) fd.append('files', f, f.webkitRelativePath || f.name)
+      const r = await adminFetch('/api/admin/chatbot/corpus', {
+        method: 'POST',
+        signal: AbortSignal.timeout(10 * 60_000),
+        body: fd,
+      })
+      const d = (await r.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+        uploaded?: Array<{ name: string; size: number; sanitized?: Array<{ label: string; n: number }> }>
+        errors?: Array<{ name: string; error: string }>
+      }
+      if (!r.ok || !d.ok) throw new Error(d.error || '上传失败')
+      await loadDistill()
+      const n = d.uploaded?.length ?? 0
+      notify('ok', n ? `已上传 ${n} 个文件并自动蒸馏` : '上传为空')
+      if (d.errors?.length) notify('err', d.errors.map((e) => `${e.name}: ${e.error}`).join('; '))
+      const flagged = (d.uploaded ?? []).filter((u) => u.sanitized?.length)
+      if (flagged.length) {
+        notify(
+          'err',
+          flagged
+            .map((u) => `${u.name}: 检测到敏感信息(${(u.sanitized ?? []).map((s) => `${s.label}×${s.n}`).join('、')}),已脱敏后入库,可在下方「放行」`)
+            .join('; '),
+        )
+      }
+      setPendingFiles([])
+    } catch (e) {
+      notify('err', e instanceof Error ? e.message : '上传失败')
+    } finally {
+      setDBusy('')
+    }
+  }
+
+  const deleteCorpus = async (rel: string) => {
+    if (!confirm(`删除 ${rel}?会同步移除其知识块。`)) return
+    setDBusy('del')
+    try {
+      const r = await adminFetch(`/api/admin/chatbot/corpus?${new URLSearchParams({ name: rel })}`, { method: 'DELETE' })
+      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+      if (!r.ok || !d.ok) throw new Error(d.error || '删除失败')
+      setPendingFiles((pf) => pf.filter((f) => (f.webkitRelativePath || f.name) !== rel.replace(/^corpus\//, '')))
+      await loadDistill()
+      notify('ok', `已删除 ${rel}`)
+    } catch (e) {
+      notify('err', e instanceof Error ? e.message : '删除失败')
+    } finally {
+      setDBusy('')
+    }
+  }
+
+  const openViewer = async (rel: string) => {
+    setViewer({ rel, name: rel.replace(/^corpus\//, '') })
+    setViewState('loading')
+    setViewText('')
+    try {
+      const q = new URLSearchParams({ name: rel })
+      const r = await adminFetch(`/api/admin/chatbot/corpus?${q.toString()}`, { cache: 'no-store' })
+      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; text?: string; error?: string }
+      if (!r.ok || !d.ok) throw new Error(d.error || '读取失败')
+      setViewText(d.text ?? '')
+      setViewState('idle')
+    } catch {
+      setViewText('')
+      setViewState('error')
     }
   }
 
@@ -468,70 +1000,153 @@ export function AdminChatbotPanel({
 
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>灵魂蒸馏 <span>corpus → persona.md / faq.json + 知识块</span></h3>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.8rem' }}>
+          <label className="zx-btn zx-btn-sm" style={{ cursor: 'pointer' }}>
+            选择文件…
+            <input
+              type="file"
+              multiple
+              accept=".md,.txt,text/markdown,text/plain"
+              style={{ display: 'none' }}
+              disabled={!!dBusy}
+              onChange={(e) => {
+                setPendingFiles((pf) => [...pf, ...Array.from(e.target.files ?? [])])
+                e.target.value = ''
+              }}
+            />
+          </label>
+          {typeof window !== 'undefined' && 'showDirectoryPicker' in window ? (
+            <button
+              className="zx-btn zx-btn-sm"
+              type="button"
+              disabled={!!dBusy}
+              onClick={async () => {
+                try {
+                  const picked = await pickDirectoryFiles()
+                  setPendingFiles((pf) => [...pf, ...picked])
+                } catch (e) {
+                  if (!(e instanceof DOMException && e.name === 'AbortError')) notify('err', e instanceof Error ? e.message : '选择文件夹失败')
+                }
+              }}
+            >
+              选择文件夹…
+            </button>
+          ) : (
+            <label className="zx-btn zx-btn-sm" style={{ cursor: 'pointer' }}>
+              选择文件夹…
+              <input
+                type="file"
+                multiple
+                {...({ webkitdirectory: true } as React.InputHTMLAttributes<HTMLInputElement>)}
+                style={{ display: 'none' }}
+                disabled={!!dBusy}
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? []).filter((f) => /\.(md|txt)$/i.test(f.name))
+                  setPendingFiles((pf) => [...pf, ...picked])
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          )}
+          <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={!!dBusy || !pendingFiles.length} onClick={() => void uploadCorpus()}>
+            {dBusy === 'upload' ? '上传并蒸馏…' : `上传并蒸馏${pendingFiles.length ? `(${pendingFiles.length})` : ''}`}
+          </button>
+          {pendingFiles.length > 0 && (
+            <span className="zx-mono" style={{ fontSize: '0.68rem', maxWidth: '100%', display: 'flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
+              <span className="zx-muted">待上传:</span>
+              {pendingFiles.slice(0, 8).map((f) => (
+                <span key={f.webkitRelativePath || f.name} className="zx-stat" style={{ fontSize: '0.64rem', padding: '1px 6px' }} title={f.webkitRelativePath || f.name}>
+                  {(f.webkitRelativePath || f.name).split('/').pop()}
+                </span>
+              ))}
+              {pendingFiles.length > 8 && <span className="zx-muted">+{(pendingFiles.length - 8)}</span>}
+              <button className="zx-btn zx-btn-sm zx-btn-ghost" style={{ padding: '0 0.3rem', minWidth: 0, marginLeft: '0.3rem' }}
+                disabled={!!dBusy}
+                title="清空待上传列表"
+                onClick={() => setPendingFiles([])}
+              >
+                清空
+              </button>
+            </span>
+          )}
+          <span className="zx-muted zx-mono" style={{ fontSize: '0.68rem' }}>
+            .md/.txt · 可选文件或整个文件夹 · 无大小限制 · 重名/类型不支持会上传失败
+          </span>
+        </div>
         {distill && (
           <>
-            <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
-              persona:{distill.hasPersona ? '✓ 有' : '无'} · FAQ {distill.faqCount} 条 · 知识块 {distill.chunkCount} 条 · corpus {distill.corpus.length} 个
-            </p>
-            {distill.corpus.length > 0 && (
-              <table className="zx-table" style={{ fontSize: '0.72rem' }}>
-                <thead>
-                  <tr>
-                    <th>文件</th>
-                    <th>类别</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {distill.corpus.map((c) => (
-                    <tr key={c.rel}>
-                      <td className="zx-mono">{c.name}</td>
-                      <td>
-                        <select
-                          className="zx-input"
-                          style={{ maxWidth: 100, fontSize: '0.72rem' }}
-                          disabled={!!dBusy}
-                          value={distill.kindOverrides?.[c.rel] ?? 'auto'}
-                          onChange={(e) => void setKind(c.rel, e.target.value as 'persona' | 'knowledge' | 'auto')}
-                        >
-                          <option value="auto">自动</option>
-                          <option value="persona">人格</option>
-                          <option value="knowledge">知识</option>
-                        </select>
-                        <span className="zx-muted zx-mono" style={{ fontSize: '0.62rem', marginLeft: '0.35rem' }}>
-                          {c.kind === null ? '?' : c.kind === 'persona' ? '→ 人格' : '→ 知识'}
-                          {c.origin ? ` · ${ORIGIN_TEXT[c.origin] ?? c.origin}` : ''}
-                        </span>
-                      </td>
-                      <td>
-                        {c.status === 'processed' ? '✓' : c.status === 'error' ? <span className="zx-msg err">{c.error}</span> : '待处理'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', margin: '0 0 0.6rem' }}>
+              <span className="zx-muted zx-mono" style={{ fontSize: '0.72rem' }}>
+                persona:{distill.hasPersona ? '✓ 有' : '无'} · FAQ {distill.faqCount} 条 · 知识块 {distill.chunkCount} 条 · corpus {distill.corpus.length} 个
+              </span>
+              {distill.corpus.length > 0 && (
+                <input
+                  className="zx-input"
+                  style={{ maxWidth: 240, fontSize: '0.72rem', marginLeft: 'auto' }}
+                  placeholder="筛选文件名…"
+                  value={corpusFilter}
+                  onChange={(e) => setCorpusFilter(e.target.value)}
+                />
+              )}
+            </div>
+            {distill.corpus.length > 0 && <CorpusFileList
+              items={distill.corpus}
+              filter={corpusFilter}
+              dBusy={dBusy}
+              kindOverrides={distill.kindOverrides}
+              sanitized={distill.sanitized}
+              sensitiveAllowed={distill.sensitiveAllowed}
+              collapse={corpusCollapse}
+              onToggleCollapse={(k) =>
+                setCorpusCollapse((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]))
+              }
+              onSetKind={setKind}
+              onDelete={deleteCorpus}
+              onAllow={setSensitiveAllow}
+              onUnignore={unignoreCorpus}
+              onIgnore={ignoreCorpus}
+              onOpen={(rel) => void openViewer(rel)}
+            />}
           </>
         )}
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.6rem' }}>
-          <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={!!dBusy} onClick={() => void distillAction('process')}>
-            {dBusy === 'process' ? '蒸馏中…' : '扫描并蒸馏'}
+          <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={!!dBusy || distillRunning} onClick={() => void distillAction('process')}>
+            {distillRunning ? `蒸馏中 ${distill?.progress?.done ?? 0}/${distill?.progress?.total ?? 0}` : dBusy === 'process' ? '启动中…' : '扫描并蒸馏'}
           </button>
-          <label className="zx-check">
-            <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+          <label className="zx-check" title={distillRunning ? '有任务在跑,结束后再改' : ''}>
+            <input type="checkbox" checked={force} disabled={distillRunning} onChange={(e) => setForce(e.target.checked)} />
             <span>全量重跑</span>
           </label>
-          <button className="zx-btn zx-btn-sm" disabled={!!dBusy || !distill?.hasPersona} onClick={() => void distillAction('persona')}>
+          <button className="zx-btn zx-btn-sm" disabled={!!dBusy || distillRunning || !distill?.hasPersona} onClick={() => void distillAction('persona')}>
             {dBusy === 'persona' ? '生成中…' : '生成人格(persona+FAQ)'}
           </button>
-          <button className="zx-btn zx-btn-sm zx-btn-ghost" disabled={!!dBusy} onClick={() => void distillAction('clear')}>
+          <button className="zx-btn zx-btn-sm zx-btn-ghost" disabled={!!dBusy || distillRunning} onClick={() => void distillAction('clear')}>
             {dBusy === 'clear' ? '清空中…' : '清空知识库'}
           </button>
         </div>
-        <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
-          corpus 文件放 <span className="zx-accent">docker/site-content/chatbot/corpus/</span>(.md/.txt);蒸馏时自动分类:
-          人格类素材 → 生成 persona.md + faq.json;知识类 → 切块(500/75)入知识库。改文件后「全量重跑」或改 sha 再增量。
-        </p>
+        {distill?.progress && (distill.progress.running || distill.progress.finishedAt) && (
+          <div className="zx-muted zx-mono" style={{ fontSize: '0.7rem', marginTop: '0.4rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ color: distill.progress.running ? 'var(--zx-accent, #4c8)' : undefined }}>
+              {distill.progress.running
+                ? `蒸馏中 ${distill.progress.done}/${distill.progress.total}`
+                : `上次蒸馏 ${distill.progress.done}/${distill.progress.total}`}
+              {distill.progress.force ? '(全量)' : '(增量)'}
+            </span>
+            <span>✓{distill.progress.ok} ⛔{distill.progress.ignored} ✕{distill.progress.error}</span>
+            {distill.progress.running && distill.progress.current && <span>当前:{distill.progress.current}</span>}
+            {!distill.progress.running && distill.progress.finishedAt && <span>完成于 {distill.progress.finishedAt.slice(11, 19)}</span>}
+          </div>
+        )}
+<p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
+        可在此直接上传 corpus 文件(.md/.txt,可选整个文件夹,上传后在<b>后台</b>自动「扫描并蒸馏」);也可自行放
+        <span className="zx-accent"> docker/site-content/chatbot/corpus/</span>。蒸馏自动分类:
+        人格类素材 → 生成 persona.md + faq.json;知识类 → 切块(500/75)入知识库。改文件后「全量重跑」或改 sha 再增量。
+        蒸馏在<b>后台跑批</b>(多篇合并分类省 token、并发执行省时间),按钮下方实时显示 `done/total` 进度,可安全离开页面。
+        「全量重跑」会重分类并重建全部知识块(耗时耗 token),默认不勾、勾选后有二次确认。
+        蒸馏会自动<b>过滤垃圾内容</b>(近空 / 纯数字符号的碎屑)进入「已忽略」,留盘可恢复,「恢复入库」重新摄取;超短备忘仅在行内加⚠提示不自动跳过。
+        上传/蒸馏会<b>自动检测并脱敏</b>敏感信息(身份证/银行卡/手机号/密钥/连接串/亲属·住址·出生语境等),
+        命中显示「⚠ 已脱敏…」;示例写法等误报时点「按原文放行」。行内改类别/放行/忽略只重跑该文件,不再触发整库。
+      </p>
       </div>
 
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
@@ -572,6 +1187,19 @@ export function AdminChatbotPanel({
           保存后前台 Chatter 即时生效(会话上下文按访客 cid)
         </span>
       </div>
+      {viewer && (
+        <CorpusViewer
+          rel={viewer.rel}
+          name={viewer.name}
+          state={viewState}
+          text={viewText}
+          onClose={() => setViewer(null)}
+          onDelete={async (rel) => {
+            await deleteCorpus(rel)
+            setViewer(null)
+          }}
+        />
+      )}
     </MantineBridge>
   )
 }

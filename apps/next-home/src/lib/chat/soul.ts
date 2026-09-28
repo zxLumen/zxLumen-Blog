@@ -8,6 +8,7 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { sanitizeText } from './sanitize'
 
 export interface SoulFaq {
   q: string
@@ -121,6 +122,20 @@ export async function loadSoul(): Promise<SoulFiles> {
     }
   }
   const data: SoulFiles = { persona: personaRaw.trim(), faq, knowledge }
+  // 出站防线:persona/faq/knowledge 都可能被手工直改或未蒸馏直放,加载时就地脱敏
+  // (mtime 缓存的缓冲层,不逐请求;corpus 走蒸馏流程单独脱敏,这里不碰)
+  try {
+    const exempt = await publicContactExempt()
+    const maskOpts = exempt.length ? { exempt } : {}
+    const maskedPersona = sanitizeText(personaRaw.trim(), maskOpts).text
+    const maskedFaq = faq.map((x) => ({ q: sanitizeText(x.q, maskOpts).text, a: sanitizeText(x.a, maskOpts).text }))
+    const maskedKb = knowledge.map((k) => ({ source: k.source, text: sanitizeText(k.text, maskOpts).text }))
+    data.persona = maskedPersona
+    data.faq = maskedFaq
+    data.knowledge = maskedKb
+  } catch {
+    /* 脱敏失败不阻断读取 */
+  }
   cache = { dir: dir.root, persona: personaM, faq: faqM, data }
   return data
 }
@@ -160,4 +175,15 @@ export async function writeSoulFiles(persona: string, faq: SoulFaq[]): Promise<v
   if (persona) await writeFile(dir.persona, persona, 'utf8')
   await writeFile(path.join(dir.root, 'faq.json'), JSON.stringify(faq, null, 2), 'utf8')
   cache = null
+}
+
+/** 脱敏豁免清单:本站公开联系方式(出现在语料里不算泄露) */
+export async function publicContactExempt(): Promise<string[]> {
+  try {
+    const { getContactSettings } = await import('../settings')
+    const c = await getContactSettings()
+    return [c.email, c.phone, c.wechat].filter((v): v is string => !!v)
+  } catch {
+    return []
+  }
 }
