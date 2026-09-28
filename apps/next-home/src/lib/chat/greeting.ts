@@ -1,5 +1,6 @@
 // 智能问候(服务端):按 日期/星期/时段/节日/节气/北京天气 用 LLM 生成一组问候语,
-// 内存缓存(按 日期+时段+天气 分桶)全站复用;未命中时先返回兜底句并后台异步生成,不阻塞首页。
+// 结果落库 meta.chatbot_greet_cache(按 北京日期+时段 分桶)全站复用。
+// 生成由定时任务(instrumentation.ts)在启动及每个时段切换时触发,读路径只读缓存、绝不触发 LLM。
 // 任何失败都逐层降级,绝不抛错。用户的 greetings 作为"语气样本"喂给模型,不直接展示。
 import { Solar } from 'lunar-typescript'
 import crypto from 'node:crypto'
@@ -165,7 +166,6 @@ interface Ctx {
 }
 
 let cache: { key: string; lines: string[] } | null = null
-let cacheLoaded = false
 let inflightKey: string | null = null
 
 const GREET_META = 'chatbot_greet_cache'
@@ -245,6 +245,15 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       /* ignore */
     }
 
+    // 天气只在生成时取(读路径不再碰网络)
+    if (!ctx.wx) {
+      try {
+        ctx.wx = await beijingWeather()
+      } catch {
+        /* ignore */
+      }
+    }
+
     const facts = [
       `现在是 ${ctx.y}年${ctx.m}月${ctx.d}日 周${WEEK[ctx.w]},${bucketOf2(ctx.bucket)}。`,
       ctx.festival ? `今天是${ctx.festival}${FEST_EMOJI[ctx.festival] ?? ''}。` : '',
@@ -276,7 +285,8 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
     ].join('\n')
 
     let lines: string[] = []
-    for (let attempt = 0; attempt < 2 && lines.length === 0; attempt++) {
+    for (let attempt = 0; attempt < 3 && lines.length === 0; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 600))
       const text = await completeChat({
         protocol: chatProtocol(),
         baseUrl: cfg.chatBaseUrl,
@@ -284,7 +294,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
         model: cfg.chatModel,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.85,
-        maxTokens: 3000,
+        maxTokens: 4096,
         provider: cfg.chatProvider,
         // 会话头必须是 ASCII:对含中文的 key 取哈希
         sessionId: `greet:${crypto.createHash('sha1').update(ctx.key).digest('hex').slice(0, 16)}`,
@@ -297,7 +307,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       persist(cache)
       console.log(`[greeting] generated ${lines.length} 条 @ ${ctx.key}`)
     } else {
-      console.warn('[greeting] 生成失败:两次均为空')
+      console.warn('[greeting] 生成失败:三次均为空')
     }
   } catch (e) {
     console.warn('[greeting] generate failed:', e instanceof Error ? e.message : String(e))
@@ -318,40 +328,67 @@ export interface GreetingOpts {
   now?: Date
 }
 
+const DEFAULT_LINE = '你好,我是刘子祥的分身,想了解他什么都可以问我。'
+
+/** 内存缓存未命中目标 key 时,从 DB 取一次最新值(定时任务与请求可能在不同模块实例,需跨实例读) */
+function adoptPersisted(key: string): void {
+  if (cache && cache.key === key && cache.lines.length) return
+  const p = loadPersisted()
+  if (p) cache = p
+}
+
+/** 由某一时刻推导生成上下文(天气留空,生成时再取) */
+function buildCtx(now: Date, birthday?: string): Ctx {
+  const { y, m, d, w, h } = bj(now)
+  const bucket = bucketOf(h)
+  return {
+    key: `${y}-${pad(m)}-${pad(d)}|${bucket}`,
+    y,
+    m,
+    d,
+    w,
+    bucket,
+    festival: festivalOf(y, m, d),
+    jieqi: jieQiOf(y, m, d),
+    wx: null,
+    isBirthday: !!birthday && normalizeBirthday(birthday) === `${pad(m)}-${pad(d)}`,
+  }
+}
+
 /**
- * 返回一条问候语:
- * 命中缓存 → 随机取一条;未命中 → 立即返回兜底句并后台生成(后续请求即用生成版)。
+ * 定时任务入口:确保「当前时段」的问候语已生成并落库。
+ * 已是最新则 no-op;未配模型/未启用 key 时静默跳过。返回是否真的生成了。
  */
-export async function composeGreeting(pool: string[], opts: GreetingOpts = {}): Promise<string> {
+export async function refreshGreetings(now: Date = new Date()): Promise<boolean> {
+  let cfg
+  try {
+    cfg = getConfig()
+  } catch {
+    return false
+  }
+  const samples = (cfg.greetings ?? []).map((s) => s.trim()).filter(Boolean)
+  const ctx = buildCtx(now, cfg.greetBirthday)
+  adoptPersisted(ctx.key)
+  if (cache && cache.key === ctx.key && cache.lines.length) return false
+  const before = cache
+  await generate(ctx, samples)
+  return cache !== before
+}
+
+/**
+ * 返回一条问候语(只读,不再触发 LLM):
+ * 命中缓存 → 随机取一条;未命中 → 立即返回随机语气样本兜底(生成由定时任务负责)。
+ */
+export function composeGreeting(pool: string[], opts: GreetingOpts = {}): string {
   const bases = pool.map((s) => s.trim()).filter(Boolean)
   const pickBase = () => (bases.length ? bases[Math.floor(Math.random() * bases.length)] : '')
 
-  if (opts.smart === false) return pickBase() || '你好,我是刘子祥的分身,想了解他什么都可以问我。'
+  if (opts.smart === false) return pickBase() || DEFAULT_LINE
 
-  const now = opts.now ?? new Date()
-  const { y, m, d, w, h } = bj(now)
-  const bucket = bucketOf(h)
-  const festival = festivalOf(y, m, d)
-  const jieqi = jieQiOf(y, m, d)
-  const isBirthday = !!opts.birthday && normalizeBirthday(opts.birthday) === `${pad(m)}-${pad(d)}`
-  const wx = await beijingWeather()
-  // 缓存键只用 北京日期|时段(天气/节日等只在生成时写进文案,避免频繁失效)
-  const key = `${y}-${pad(m)}-${pad(d)}|${bucket}`
-
-  const ctx: Ctx = { key, y, m, d, w, bucket, festival, jieqi, wx, isBirthday }
-
-  // 首次使用时载入持久化缓存(重启/部署后不再露兜底)
-  if (!cacheLoaded) {
-    cache = loadPersisted()
-    cacheLoaded = true
-  }
-
-  // 命中缓存 → 随机取一条
-  if (cache && cache.key === key && cache.lines.length) {
+  const ctx = buildCtx(opts.now ?? new Date(), opts.birthday)
+  adoptPersisted(ctx.key)
+  if (cache && cache.key === ctx.key && cache.lines.length) {
     return cache.lines[Math.floor(Math.random() * cache.lines.length)]
   }
-
-  // 未命中:后台生成(不 await,秒开),本次先回兜底(随机语气样本)
-  void generate(ctx, bases)
-  return pickBase() || '你好,我是刘子祥的分身,想了解他什么都可以问我。'
+  return pickBase() || DEFAULT_LINE
 }

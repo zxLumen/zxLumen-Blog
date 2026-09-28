@@ -4,6 +4,13 @@ import type { Instrumentation } from 'next'
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     await import('../sentry.server.config')
+    // 问候语定时生成(启动预热 + 每 60s 检查时段切换);失败不影响启动
+    try {
+      const { startGreetingScheduler } = await import('./lib/chat/scheduler')
+      startGreetingScheduler()
+    } catch (e) {
+      console.warn('[greeting] scheduler start failed:', e instanceof Error ? e.message : String(e))
+    }
   }
   if (process.env.NEXT_RUNTIME === 'edge') {
     await import('../sentry.edge.config')

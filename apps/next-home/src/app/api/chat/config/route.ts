@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const status = getBotStatus()
   const greetings = (status.config.greetings ?? []).filter((s) => s.trim()).slice(0, 20)
-  const greeting = await composeGreeting(greetings, {
+  const greeting = composeGreeting(greetings, {
     smart: status.config.smartGreeting,
     birthday: status.config.greetBirthday,
   })

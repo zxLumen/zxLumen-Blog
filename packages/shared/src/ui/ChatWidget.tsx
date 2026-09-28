@@ -201,8 +201,10 @@ export function ChatWidget() {
     }
     // 已访问过:延迟弹气泡;若用户先开了窗(open)或本页已弹过则不再弹
     if (open || teaserShownRef.current) return
-    teaserShownRef.current = true
-    const t = setTimeout(() => setTeaser(true), TEASER_DELAY)
+    const t = setTimeout(() => {
+      teaserShownRef.current = true
+      setTeaser(true)
+    }, TEASER_DELAY)
     return () => clearTimeout(t)
   }, [cfg, open])
 
