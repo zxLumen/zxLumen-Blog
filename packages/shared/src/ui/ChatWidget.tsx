@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { MessageIcon } from './icons.js'
+import { maxX, rightGutter } from './floating.js'
 
 interface ChatConfig {
   enabled: boolean
@@ -155,7 +156,7 @@ function loadSession(): string {
 const clampNum = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max)
 
 function defaultPos(): Pos {
-  const x = window.innerWidth - FAB_SIZE - MARGIN
+  const x = window.innerWidth - FAB_SIZE - MARGIN - rightGutter()
   let y = window.innerHeight - FAB_SIZE - MARGIN
   const help = document.querySelector('.zx-help')
   if (help) {
@@ -166,9 +167,8 @@ function defaultPos(): Pos {
 }
 
 function clampPos(p: Pos): Pos {
-  const maxX = Math.max(MARGIN, window.innerWidth - FAB_SIZE - MARGIN)
   const maxY = Math.max(MARGIN, window.innerHeight - FAB_SIZE - MARGIN)
-  return { x: clampNum(p.x, MARGIN, maxX), y: clampNum(p.y, MARGIN, maxY) }
+  return { x: clampNum(p.x, MARGIN, maxX(FAB_SIZE, MARGIN)), y: clampNum(p.y, MARGIN, maxY) }
 }
 
 function loadPos(): Pos {
@@ -191,7 +191,7 @@ function clampRect(r: Rect): Rect {
   const maxH = Math.max(MIN_H, Math.min(860, vh - 24))
   const w = clampNum(r.w, MIN_W, maxW)
   const h = clampNum(r.h, MIN_H, maxH)
-  const x = clampNum(r.x, 12, Math.max(12, vw - w - 12))
+  const x = clampNum(r.x, 12, Math.max(12, vw - w - 12 - rightGutter()))
   const y = clampNum(r.y, 12, Math.max(12, vh - h - 12))
   return { x, y, w, h }
 }
