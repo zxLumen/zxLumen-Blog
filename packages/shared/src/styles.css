@@ -34,6 +34,16 @@
   --zx-dock-inset-r: 0px;
   --zx-dock-inset-t: 0px;
   --zx-dock-inset-b: 0px;
+
+  /* ---------- 版面尺寸(全站唯一的宽度来源) ----------
+     --zx-max       标准内容容器上限。原先散落 5 处硬编码 1120px,
+                    统一到变量后大屏分档只需改这一个值。
+     --zx-max-vlog  有视频时 hero 刻意加宽的上限(> --zx-max),窄屏回落到 --zx-max。
+     --zx-gutter    容器左右留白。基础值与原 1.25rem 一致,保持零视觉变更;
+                    大屏/小屏档在各自的 media query 里覆盖。 */
+  --zx-max: 1120px;
+  --zx-max-vlog: 1440px;
+  --zx-gutter: 1.25rem;
 }
 
 /* 兜底(未匹配到主题时) */
@@ -573,9 +583,9 @@ pre {
 /* ---------- 布局容器 ---------- */
 
 .zx-container {
-  max-width: 1120px;
+  max-width: var(--zx-max);
   margin-inline: auto;
-  padding-inline: 1.25rem;
+  padding-inline: var(--zx-gutter);
 }
 
 .zx-app {
@@ -622,7 +632,7 @@ pre {
 }
 
 .zx-topbar-in {
-  max-width: 1120px;
+  max-width: var(--zx-max);
   margin-inline: auto;
   width: 100%;
   display: flex;
@@ -1321,7 +1331,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 /* 有视频时加宽 Hero:右栏拉宽以容纳放大后的播放器
    (横版占满右栏 ≈2×,竖版卡片 450px ≈1.5×) */
 .zx-hero-grid--vlog {
-  max-width: 1440px;
+  max-width: var(--zx-max-vlog);
   grid-template-columns: minmax(0, 1fr) minmax(0, clamp(320px, 62vw, 884px));
   gap: 3rem;
 }
@@ -1329,7 +1339,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 /* 窄屏:回到单栏,视频占满可用宽度 */
 @media (max-width: 900px) {
   .zx-hero-grid--vlog {
-    max-width: 1120px;
+    max-width: var(--zx-max);
     grid-template-columns: 1fr;
     gap: 2.5rem;
   }
@@ -1337,7 +1347,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 /* centered 布局不显示视频,保持原宽度 */
 [data-layout='centered'] .zx-hero-grid--vlog {
-  max-width: 1120px;
+  max-width: var(--zx-max);
 }
 
 /* fullbleed 布局整页满宽,保持自身比例 */
@@ -2206,7 +2216,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 .zx-footer-in {
-  max-width: 1120px;
+  max-width: var(--zx-max);
   margin-inline: auto;
   display: flex;
   justify-content: space-between;
