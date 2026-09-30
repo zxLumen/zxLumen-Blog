@@ -5033,6 +5033,14 @@ html[data-apps='1'] .zxchat {
   /* 这三个悬浮件窄屏的 right 复位移到文件末尾(需压过上面的全局 dock 规则)。 */
 }
 
+/* 窄屏顶栏高度兜底:实际值由 Topbar 的 <script>(首帧前)与 measure() 写进
+   --zx-topbar-h;这里给一个不重叠的上界,禁用 JS 时悬浮件也不会压住顶栏。 */
+@media (max-width: 820px) {
+  :root {
+    --zx-topbar-h: 9.5rem;
+  }
+}
+
 /* 访客统计 / 服务器状态两个右上角悬浮件:宽窄都固定在右上角(顶栏之下)。
    窄屏应用栏是底部横条、不占右侧,而桌面有一条全局
    `html[data-apps='1'] .zx-{statswidget-btn,statswidget-pop,statuswidget}

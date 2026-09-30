@@ -18,7 +18,9 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   const [mounted, setMounted] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   /** 窄屏(≤820px):定位交给 CSS(固定在右上角顶栏之下),不套用桌面拖拽/存档坐标 */
-  const [narrow, setNarrow] = useState(false)
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(`(max-width: ${NARROW_MAX}px)`).matches,
+  )
   const [popPos, setPopPos] = useState<{ left: number; top: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)

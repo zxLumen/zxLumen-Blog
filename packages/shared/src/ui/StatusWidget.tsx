@@ -49,7 +49,9 @@ export function StatusWidget() {
   const [metric, setMetric] = useState<Metric>('cpu')
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   /** 窄屏(≤820px):定位交给 CSS(固定在右上角顶栏之下),不套用桌面拖拽/存档坐标 */
-  const [narrow, setNarrow] = useState(false)
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(`(max-width: ${NARROW_MAX}px)`).matches,
+  )
   const ref = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

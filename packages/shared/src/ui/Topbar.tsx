@@ -24,6 +24,20 @@ function navKey(href: string): string {
   return href.replace(/^\//, '').split('/')[0] || 'home'
 }
 
+/**
+ * 首帧前把顶栏下沿写进 `--zx-topbar-h`。
+ *
+ * 右上角悬浮件(访客统计 / 服务器状态)的 `top` 依赖这个变量。它本由组件内的
+ * `measure()` 维护,但那是被动 useEffect —— **首次绘制之后**才跑,于是首帧变量缺失、
+ * 悬浮件按回退值 `0` 出现在全局右上角,随后才「发现上方有菜单栏」跳到其下方
+ * (手机顶栏换行后 74~153px,最明显;桌面 ~58px 恰好与回退值相近,看不出来)。
+ *
+ * 这段 script 紧跟 `</header>` 渲染:HTML 解析到此即**同步执行**,早于首次绘制。
+ * 顶栏用系统字体,解析时高度已稳定。之后仍由 `measure()` 在 resize/滚动/换布局时维护。
+ * 判定「顶部横条」的方式与 `measure()` 保持一致(排除 sidebar 桌面的整列左栏)。
+ */
+const TOPBAR_H_INIT = `(function(){try{var b=document.querySelector('.zx-topbar');if(!b)return;var r=b.getBoundingClientRect();var t=r.width>=window.innerWidth*0.85;document.documentElement.style.setProperty('--zx-topbar-h',(t?Math.round(r.bottom):0)+'px');}catch(e){}})()`
+
 export function Topbar({
   nav,
   activeHref = '/',
@@ -199,33 +213,36 @@ export function Topbar({
   const linkExtra = link ? { scroll: false } : {}
 
   return (
-    <header className="zx-topbar" ref={barRef}>
-      <div className="zx-topbar-in">
-        <Comp className="zx-logo" href="/" onClick={(e) => onNavClick(e, '/')} {...linkExtra}>
-          <span className="z">❯</span> {shell ?? PROFILE.shell}
-        </Comp>
-        <nav className="zx-nav">
-          {nav.map((item) =>
-            /^https?:\/\//.test(item.href) ? (
-              <a key={item.href} href={item.href} target="_blank" rel="noreferrer">
-                {item.label}
-              </a>
-            ) : (
-              <Comp
-                key={item.href}
-                href={item.href}
-                data-nav={navKey(item.href)}
-                onClick={(e) => onNavClick(e, item.href)}
-                {...linkExtra}
-              >
-                {item.label}
-              </Comp>
-            ),
-          )}
-        </nav>
-        {extra}
-        <ThemePicker />
-      </div>
-    </header>
+    <>
+      <header className="zx-topbar" ref={barRef}>
+        <div className="zx-topbar-in">
+          <Comp className="zx-logo" href="/" onClick={(e) => onNavClick(e, '/')} {...linkExtra}>
+            <span className="z">❯</span> {shell ?? PROFILE.shell}
+          </Comp>
+          <nav className="zx-nav">
+            {nav.map((item) =>
+              /^https?:\/\//.test(item.href) ? (
+                <a key={item.href} href={item.href} target="_blank" rel="noreferrer">
+                  {item.label}
+                </a>
+              ) : (
+                <Comp
+                  key={item.href}
+                  href={item.href}
+                  data-nav={navKey(item.href)}
+                  onClick={(e) => onNavClick(e, item.href)}
+                  {...linkExtra}
+                >
+                  {item.label}
+                </Comp>
+              ),
+            )}
+          </nav>
+          {extra}
+          <ThemePicker />
+        </div>
+      </header>
+      <script dangerouslySetInnerHTML={{ __html: TOPBAR_H_INIT }} />
+    </>
   )
 }
