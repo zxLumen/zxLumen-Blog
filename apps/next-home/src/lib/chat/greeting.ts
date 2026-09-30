@@ -69,12 +69,13 @@ function bj(now: Date): BjDate {
   return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate(), h: t.getUTCHours(), min: t.getUTCMinutes(), w: t.getUTCDay() }
 }
 
-/** 4 档时段:早 / 午 / 晚 / 深夜 */
-type Bucket = '早' | '午' | '晚' | '深夜'
+/** 5 档时段:早 / 午 / 下午 / 晚 / 深夜 */
+type Bucket = '早' | '午' | '下午' | '晚' | '深夜'
 function bucketOf(h: number): Bucket {
   if (h >= 5 && h < 11) return '早'
   if (h >= 11 && h < 14) return '午'
-  if (h >= 14 && h < 22) return '晚'
+  if (h >= 14 && h < 18) return '下午'
+  if (h >= 18 && h < 22) return '晚'
   return '深夜'
 }
 function bucketHint(b: Bucket): string {
@@ -83,6 +84,8 @@ function bucketHint(b: Bucket): string {
       return '早上的问候,可以自然地说声“早安”'
     case '午':
       return '中午的问候,可以顺口问句吃了没'
+    case '下午':
+      return '下午的问候,可以说声“下午好”'
     case '晚':
       return '晚上的问候,可以用“晚上好”'
     default:
@@ -223,6 +226,46 @@ function parseLines(text: string): string[] {
   return out
 }
 
+/**
+ * 时间自审(第二次 LLM 调用):逐条检查问候语里的时间性表述是否与当前时段一致,
+ * 矛盾则改写或删除。通用做法,不依赖关键词表;任何失败都返回 [] 以保留原句。
+ */
+async function auditTime(
+  lines: string[],
+  facts: string,
+  cfg: ReturnType<typeof getConfig>,
+  key: string,
+): Promise<string[]> {
+  try {
+    const prompt = [
+      '你是文案校对。下面是个人网站“访客一进来看到的分身问候语”候选。',
+      `事实:${facts}`,
+      '逐条检查每句里的时间性表述(如“前夜/晚安/还没睡/昨晚/明早/早安/下午好”等)是否与「事实」中的当前时段一致:',
+      '- 与当前时段矛盾的时间表述:改写成与当前时段一致的表达,或直接删掉该句;',
+      '- 时间中性、与事实不冲突的:原样保留;',
+      '- 不要新增句子,不要编号,不要任何解释。',
+      '输出修正后的问候语列表,每行一条:',
+      ...lines,
+    ].join('\n')
+    const text = await completeChat({
+      protocol: chatProtocol(),
+      baseUrl: cfg.chatBaseUrl,
+      apiKey: key,
+      model: cfg.chatModel,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      maxTokens: 2048,
+      provider: cfg.chatProvider,
+      // 会话头必须是 ASCII:对唯一 key(时段+日期)取哈希
+      sessionId: `greet-audit:${crypto.createHash('sha1').update(facts).digest('hex').slice(0, 16)}`,
+    })
+    return parseLines(text)
+  } catch (e) {
+    console.warn('[greeting] audit failed:', e instanceof Error ? e.message : String(e))
+    return []
+  }
+}
+
 async function generate(ctx: Ctx, samples: string[]): Promise<void> {
   if (inflightKey === ctx.key) return
   inflightKey = ctx.key
@@ -271,6 +314,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       '要求:',
       '- 中文口语,自然、克制、偶尔一点俏皮;每条 1~2 句,30~70 字。',
       `- ${bucketHint(ctx.bucket)}。`,
+      '- 所有时间性表述必须与「事实」里的当前时段一致:不得使用与该时段矛盾的词,也不得引入事实之外的时间点(如白天不要出现“前夜/晚安/还没睡”这类词);拿不准就不写时间。',
       '- 有节日:必须先给一句应景的祝福;有天气:顺带贴合地提一句。',
       '- 结尾自然地带一句轻邀请(例如问问对方想了解站主的什么)。',
       '- 温度一律写成"19°C"这种形式(° 与 C 连写),不要用 ℃ 单字形或"19度"。',
@@ -302,6 +346,16 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       lines = parseLines(text)
       if (!lines.length) console.warn('[greeting] 解析为空,raw len=', text.length)
     }
+    // 时间自审:清掉与当前时段不符的时间表述(通用,不维护词表;失败则保留原句)
+    if (lines.length) {
+      const audited = await auditTime(lines, facts, cfg, key)
+      if (audited.length) {
+        console.log(`[greeting] audited ${lines.length} → ${audited.length} @ ${ctx.key}`)
+        lines = audited
+      } else {
+        console.warn('[greeting] audit empty, keep originals')
+      }
+    }
     if (lines.length) {
       cache = { key: ctx.key, lines }
       persist(cache)
@@ -317,7 +371,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
 }
 
 function bucketOf2(b: Bucket): string {
-  return b === '早' ? '早上' : b === '午' ? '中午' : b === '晚' ? '晚上' : '深夜'
+  return b === '早' ? '早上' : b === '午' ? '中午' : b === '下午' ? '下午' : b === '晚' ? '晚上' : '深夜'
 }
 
 export interface GreetingOpts {
