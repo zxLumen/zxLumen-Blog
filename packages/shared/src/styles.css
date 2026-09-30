@@ -5042,4 +5042,41 @@ html[data-apps='1'] .zxchat {
     bottom: calc(5.4rem + env(safe-area-inset-bottom));
     left: 1rem;
   }
+
+  /* admin 的 9 个 Tab(留言/归档/统计/个人信息/项目/视频/外观/机器人/Token用量)
+     用 clamp(1.4rem, 3vw, 2rem) 的大字号,总宽远超窄屏。.zx-tabs 是无换行的 flex,
+     默认 flex-shrink 把 9 个里的 8 个压到 27px(文字被裁、点不准),容器本身
+     414px 也越出 320px 视口;整页因 html/body 的 overflow-x: clip 不出现滚动条,
+     于是内容被静默裁掉、完全够不着。改为横向可滚动 + 不再被压缩。 */
+  .zx-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    /* 滚动条在桌面细窄手机上占位且不好看,只留手势滚动 */
+    scrollbar-width: none;
+  }
+
+  .zx-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .zx-tabs .zx-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* Tab 行与「// ADMIN」标签、「退出登录」按钮同处一个无换行 flex,
+     一起被压缩。允许换行,让 Tab 行独占一行。 */
+  .zx-sec-head {
+    flex-wrap: wrap;
+  }
+
+  .zx-sec-head .zx-tabs {
+    max-width: 100%;
+  }
+}
+
+/* MOCK 弹出面板:fixed 定位,原先固定 300px,在 320px 屏上占 94% 屏宽。 */
+.zx-mockpop {
+  width: min(300px, calc(100vw - 2rem));
 }
