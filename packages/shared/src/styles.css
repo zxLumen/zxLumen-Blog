@@ -2242,49 +2242,6 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   color: var(--fg-muted);
 }
 
-/* ---------- 快捷键提示 ---------- */
-
-.zx-help {
-  position: fixed;
-  right: 1.1rem;
-  bottom: 1.1rem;
-  z-index: 300;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--fg-muted);
-  background: var(--elev);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 0.5rem 0.8rem;
-  backdrop-filter: blur(var(--card-blur));
-  -webkit-backdrop-filter: blur(var(--card-blur));
-  display: grid;
-  gap: 0.2rem;
-  max-width: 260px;
-}
-
-.zx-help kbd {
-  font: inherit;
-}
-
-.zx-help .zoom {
-  transition: opacity 0.25s;
-}
-
-.zx-help:not(:hover) .zoom {
-  opacity: 0.55;
-}
-
-.zx-kbd {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  border: 1px solid var(--line-strong);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  padding: 0.05rem 0.35rem;
-  color: var(--fg-dim);
-}
-
 /* ---------- 画廊页 ---------- */
 
 .zx-gallery {
@@ -2739,11 +2696,6 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
     justify-content: flex-start;
   }
 
-  /* 键盘快捷键提示在触屏上没有意义(kbd 无法输入),却固定占住右下角
-     218x104 —— 约等于 1/12 屏。窄屏直接不渲染。 */
-  .zx-help {
-    display: none;
-  }
 
   /* 每个 workspace 的 3 列(5 小时 / 本周 / 本月)在 320px 下每列仅 ~93px,
      数字与重置时间挤在一起。窄屏改 1 列,标签与数值各自成行更好读。 */

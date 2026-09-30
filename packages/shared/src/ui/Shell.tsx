@@ -3,7 +3,6 @@
 import { PreferencesProvider } from './theme-context.js'
 import { Topbar } from './Topbar.js'
 import { Footer } from './Footer.js'
-import { HelpHint } from './HelpHint.js'
 import { ChatWidget } from './ChatWidget.js'
 import { AppDock } from './AppDock.js'
 import type { AppItem } from '../schema.js'
@@ -62,7 +61,6 @@ export function Shell({
         <Topbar nav={nav} activeHref={activeHref} pathname={pathname} link={link} shell={profile?.shell} extra={extra} />
         <main className="zx-main">{children}</main>
         <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />
-        <HelpHint />
         <ChatWidget />
         <AppDock apps={apps} link={link} mockId={mockId} />
       </div>

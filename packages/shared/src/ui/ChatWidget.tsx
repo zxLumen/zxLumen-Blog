@@ -159,12 +159,7 @@ function defaultPos(): Pos {
   const x = window.innerWidth - FAB_SIZE - MARGIN - rightGutter()
   // 窄屏时应用栏是底部横条,浮标要整体上移一个栏高,否则会压在横条上
   // (浮标坐标是行内 top/left,样式表里的 bottom 让位不生效,必须在这里扣)
-  let y = window.innerHeight - FAB_SIZE - MARGIN - bottomGutter()
-  const help = document.querySelector('.zx-help')
-  if (help) {
-    const r = help.getBoundingClientRect()
-    if (r.width > 0 && r.height > 0) y = r.top - FAB_SIZE - 12
-  }
+  const y = window.innerHeight - FAB_SIZE - MARGIN - bottomGutter()
   return clampPos({ x, y })
 }
 
