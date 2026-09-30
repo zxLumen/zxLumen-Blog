@@ -6,9 +6,9 @@ import { getDb } from "@/lib/db";
 import { isAdmin } from "@/lib/auth";
 import { effectiveCid, isMockActive, MOCK_COOKIE } from "@/lib/clientid";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
-import { fetchUsage } from "@/lib/deepseek";
+import { fetchSsrUsage } from "@/lib/usage/ssr-rows";
 import { getSourceAvailability } from "@/lib/usage-sources";
-import { getUsageSourceOrder } from "@/lib/usage-source-order";
+import { getUsageSourceOrder, getUsageDefaultSource } from "@/lib/usage-source-order";
 import { getRuntimeContent } from "@zx/shared/server";
 import { getVisibleProjects } from "@/lib/projects-config";
 import { getVisibleVlogSeries, pickRandomVlogStart } from "@/lib/vlog-config";
@@ -39,10 +39,21 @@ export default async function Home() {
   const db = getDb();
 
   // 用量筛选存档(cookie 下发):SSR 首帧即按上次选择渲染,刷新无闪跳
-  const initialSel: UsageSel = parseUsageSel((await cookies()).get(USAGE_SEL_COOKIE)?.value ?? "");
+  // 无存档时按 admin 配置的「默认数据源」初始化(缺省 DeepSeek)
+  const defaultSource = getUsageDefaultSource();
+  const initialSel: UsageSel = parseUsageSel(
+    (await cookies()).get(USAGE_SEL_COOKIE)?.value ?? "",
+    defaultSource,
+  );
+  // SSR 首帧预取的数据源 = 存档选中源(否则默认源):默认源非 DeepSeek 时首屏也有数据
+  const ssrSrc = initialSel.dataSrc;
 
   // 各数据源可用性(已配置 + 近30天有数据):SSR 决定显示哪些源,避免隐藏源闪现
-  const availableSources = { ...(await getSourceAvailability()), order: getUsageSourceOrder() };
+  const availableSources = {
+    ...(await getSourceAvailability()),
+    order: getUsageSourceOrder(),
+    defaultSource,
+  };
 
   // 首页统计聚合(访客/留言/事件)
   const stats = db.stats();
@@ -54,17 +65,16 @@ export default async function Home() {
     viewerCid,
   });
 
-  // 优先 DeepSeek 平台真实用量;失败/未配置回退本地 usage 表(再空则前端用 mock)
+  // 预取当前(存档/默认)数据源的 30 天用量;失败回退本地 usage 表(再空则前端用 mock)
   let usage: UsageRow[] | undefined;
   let usageWindow: { start?: string; end?: string } | undefined;
-  try {
-    const u = await fetchUsage("30d");
-    usage = u.rows;
-    usageWindow = { start: u.start, end: u.end };
-  } catch {
-    usage = undefined;
+  const ssr = await fetchSsrUsage(ssrSrc, "30d");
+  if (ssr) {
+    usage = ssr.rows;
+    usageWindow = { start: ssr.start, end: ssr.end };
   }
-  if (!usage || usage.length === 0) {
+  // 本地 usage 表是 DeepSeek 口径,仅在默认源为 deepseek 时兜底
+  if (ssrSrc === "deepseek" && (!usage || usage.length === 0)) {
     usage = db.listUsage(30);
     usageWindow = undefined;
   }
@@ -83,6 +93,7 @@ export default async function Home() {
       commentsPage={commentsPage}
       usage={usage}
       usageWindow={usageWindow}
+      usageSource={ssrSrc}
       initialSel={initialSel}
       availableSources={availableSources}
       stats={stats}

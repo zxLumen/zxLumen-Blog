@@ -28,16 +28,22 @@ import { Pagination } from './Pagination.js'
 export function UsageSection({
   rows,
   window: ssrWin,
+  usageSource,
   initialSel,
   availableSources,
 }: {
   rows?: UsageRow[]
   window?: { start?: string; end?: string }
+  /** SSR 阶段 rows/window 所属的数据源(缺省 deepseek) */
+  usageSource?: DataSource
   initialSel?: UsageSel
   /** SSR 计算的数据源可用性;未提供则客户端探测 */
   availableSources?: SourceAvailability
 }) {
-  const [dataSrc, setDataSrc] = useState<DataSource>(initialSel?.dataSrc ?? DEFAULT_SEL.dataSrc)
+  const ssrSrc = usageSource ?? 'deepseek'
+  const [dataSrc, setDataSrc] = useState<DataSource>(
+    initialSel?.dataSrc ?? availableSources?.defaultSource ?? DEFAULT_SEL.dataSrc,
+  )
   // RECENT 明细表翻页
   const [recentPage, setRecentPage] = useState(1)
   const [recentPageSize, setRecentPageSize] = useState(10)
@@ -47,6 +53,8 @@ export function UsageSection({
   )
   // admin 配置的数据源展示顺序(缺省 = 出厂默认序)
   const [srcOrder, setSrcOrder] = useState<DataSource[] | null>(availableSources?.order ?? null)
+  // admin 配置的默认数据源(新访客/无存档时打开)
+  const [srcDefault, setSrcDefault] = useState<DataSource | null>(availableSources?.defaultSource ?? null)
   // 各源最近一次拉取错误(仅用于 tab 上的报错角标)
   const [srcErrors, setSrcErrors] = useState<Partial<Record<DataSource, string>>>(availableSources?.errors ?? {})
   useEffect(() => {
@@ -59,6 +67,7 @@ export function UsageSection({
           setAvail(pickAvail(d))
           setSrcErrors(d.errors ?? {})
           if (d.order) setSrcOrder(d.order)
+          if (d.defaultSource) setSrcDefault(d.defaultSource)
         }
       })
       .catch(() => {
@@ -77,12 +86,12 @@ export function UsageSection({
     const rest = SOURCES.filter((s) => !ordered.some((o) => o.key === s.key))
     return [...ordered, ...rest].filter((s) => (avail ? avail[s.key] : true))
   }, [avail, srcOrder])
-  // 当前源若被隐藏,回退到默认(DeepSeek)
+  // 当前源若被隐藏:优先回落到 admin 配置的默认源,否则展示顺序第一项
   useEffect(() => {
-    if (avail && !avail[dataSrc] && sources.length > 0 && dataSrc !== sources[0].key) {
-      setDataSrc(sources[0].key)
-    }
-  }, [avail, dataSrc, sources])
+    if (!avail || sources.length === 0 || avail[dataSrc]) return
+    const fb = srcDefault && avail[srcDefault] ? srcDefault : sources[0].key
+    if (fb !== dataSrc) setDataSrc(fb)
+  }, [avail, dataSrc, sources, srcDefault])
   const [live, setLive] = useState<UsageRow[] | null>(null)
   const [fetchedFor, setFetchedFor] = useState<{ range: Range; src: DataSource } | null>(null)
   const [source, setSource] = useState<'server' | 'deepseek' | 'opencode' | 'zhipu' | 'stale' | 'local' | 'none' | 'unconfigured' | 'invalid' | 'error'>('server')
@@ -129,13 +138,13 @@ export function UsageSection({
 
   useEffect(() => {
     if (rows?.length) {
-      setKnownModels((prev) => ({ ...prev, deepseek: mergeUnique(prev.deepseek, rows.map((r) => r.model)) }))
+      setKnownModels((prev) => ({ ...prev, [ssrSrc]: mergeUnique(prev[ssrSrc] ?? [], rows.map((r) => r.model)) }))
       setKnownKeys((prev) => ({
         ...prev,
-        deepseek: mergeUnique(prev.deepseek, rows.map((r) => r.apiKey ?? '').filter(Boolean)),
+        [ssrSrc]: mergeUnique(prev[ssrSrc] ?? [], rows.map((r) => r.apiKey ?? '').filter(Boolean)),
       }))
     }
-  }, [rows])
+  }, [rows, ssrSrc])
 
   useEffect(() => {
     let alive = true
@@ -199,12 +208,13 @@ export function UsageSection({
     }
   }, [range, customApplied, dataSrc, wsKey])
 
-  const serverRows = dataSrc === 'deepseek' && rows && rows.length > 0 ? rows : null
+  const serverRows = dataSrc === ssrSrc && rows && rows.length > 0 ? rows : null
   const fetchedLive = fetchedFor?.range === range && fetchedFor?.src === dataSrc && live !== null
   const allData = useMemo(() => {
     if (fetchedLive) return live ?? []
-    if (dataSrc === 'opencode' || dataSrc === 'zhipu') return [] // 这两个源只展示实时拉取,避免混入 DeepSeek 数据
-    return serverRows ?? genMockUsage(30)
+    if (serverRows) return serverRows // SSR 首帧已带该源数据
+    if (dataSrc === 'opencode' || dataSrc === 'zhipu') return [] // 实时拉取前留空,避免混入其它源
+    return genMockUsage(30)
   }, [fetchedLive, live, serverRows, dataSrc])
   const usingMock = dataSrc === 'deepseek' && !fetchedLive && !serverRows
 

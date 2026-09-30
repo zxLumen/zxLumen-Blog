@@ -93,6 +93,8 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
   // 前端 Token用量「数据源展示顺序」(admin 可调 ↑/↓)
   const [srcOrder, setSrcOrder] = useState<DataSource[] | null>(null)
   const [srcOrderBusy, setSrcOrderBusy] = useState(false)
+  // 前端 Token用量「默认数据源」(新访客/无存档时默认打开)
+  const [srcDefault, setSrcDefault] = useState<DataSource | null>(null)
   // 展示用顺序:未加载完成/未配置时回退出厂默认序
   const orderItems: DataSource[] = srcOrder ?? SOURCES.map((s) => s.key)
 
@@ -115,12 +117,17 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       const res = await adminFetch('/api/admin/usage-source-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: srcOrder }),
+        body: JSON.stringify({ order: srcOrder, defaultSource: srcDefault ?? undefined }),
       })
-      const d = (await res.json().catch(() => ({}))) as { error?: string; order?: DataSource[] }
+      const d = (await res.json().catch(() => ({}))) as {
+        error?: string
+        order?: DataSource[]
+        defaultSource?: DataSource
+      }
       if (!res.ok) throw new Error(d.error || '保存失败')
       if (d.order && d.order.length > 0) setSrcOrder(d.order)
-      setMsg({ kind: 'ok', text: '数据源顺序已保存,首页即生效' })
+      if (d.defaultSource) setSrcDefault(d.defaultSource)
+      setMsg({ kind: 'ok', text: '数据源顺序 / 默认源已保存,首页即生效' })
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '保存失败' })
     } finally {
@@ -274,7 +281,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       getJson<DsStatus>('/api/admin/deepseek'),
       getJson<OcStatus>('/api/admin/opencode'),
       getJson<ZhipuStatus>('/api/admin/zhipu'),
-      getJson<{ order?: DataSource[] }>('/api/admin/usage-source-order'),
+      getJson<{ order?: DataSource[]; defaultSource?: DataSource }>('/api/admin/usage-source-order'),
     ])
     if (s) {
       setNick(s.nick ?? '')
@@ -290,6 +297,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
     }
     if (so?.order) setSrcOrder(so.order)
+    if (so?.defaultSource) setSrcDefault(so.defaultSource)
   }, [applyOc])
 
   async function loadDeepseek() {
@@ -888,16 +896,25 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
           数据源顺序 <span>前端「Token用量」供应商 tab 的展示顺序</span>
         </h3>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
-          用 ↑/↓ 调整 DeepSeek / OpenCode / 智谱 的顺序,保存后首页即生效(无需重建)。未设置时按出厂默认序。
+          用 ↑/↓ 调整 DeepSeek / OpenCode / 智谱 的顺序;点「设为默认」指定新访客默认打开哪个源。保存后首页即生效(无需重建)。未设置时按出厂默认序 / DeepSeek。
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
           {orderItems.map((k, i) => {
             const meta = SOURCES.find((s) => s.key === k)
+            const isDefault = srcDefault === k
             return (
               <div key={k} style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 <span className="zx-muted zx-mono" style={{ fontSize: '0.7rem', minWidth: '1.4rem' }}>#{i + 1}</span>
                 <span className="zx-mono" style={{ fontSize: '0.78rem', minWidth: '5.5rem' }}>{meta?.label ?? k}</span>
                 <span className="zx-muted zx-mono" style={{ fontSize: '0.68rem', flex: 1 }}>{meta?.hint ?? ''}</span>
+                <button
+                  className={`zx-btn zx-btn-sm ${isDefault ? 'zx-btn-primary' : 'zx-btn-ghost'}`}
+                  disabled={srcOrderBusy}
+                  onClick={() => setSrcDefault(k)}
+                  title="设为新访客默认数据源"
+                >
+                  {isDefault ? '● 默认' : '设为默认'}
+                </button>
                 <button
                   className="zx-btn zx-btn-sm zx-btn-ghost"
                   disabled={i === 0 || srcOrderBusy}
@@ -924,11 +941,15 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
             disabled={srcOrderBusy || !srcOrder}
             onClick={() => void saveSourceOrder()}
           >
-            {srcOrderBusy ? '保存中…' : '保存顺序'}
+            {srcOrderBusy ? '保存中…' : '保存顺序 / 默认源'}
           </button>
           <span className="zx-muted zx-mono" style={{ fontSize: '0.68rem' }}>
             当前顺序:{orderItems.map((k) => SOURCES.find((s) => s.key === k)?.label ?? k).join(' → ')}
             {!srcOrder && ' (未自定义)'}
+          </span>
+          <span className="zx-muted zx-mono" style={{ fontSize: '0.68rem' }}>
+            默认源:{SOURCES.find((s) => s.key === (srcDefault ?? orderItems[0]))?.label ?? srcDefault ?? 'DeepSeek'}
+            {!srcDefault && ' (未自定义)'}
           </span>
         </div>
       </div>

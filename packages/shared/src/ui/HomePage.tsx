@@ -3,7 +3,7 @@
 import type { Contacts, LinkItem, Profile, Project, TechItem, TimelineEntry } from '../content.js'
 import type { CommentRow, PagedComments, StatsResult, UsageRow } from '../schema.js'
 import type { VlogSeries, VlogStart } from '../schema.js'
-import type { SourceAvailability, UsageSel } from '../usage-sel.js'
+import type { SourceAvailability, UsageSel, DataSource } from '../usage-sel.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
 import { UsageSection } from './UsageSection.js'
@@ -19,6 +19,8 @@ interface HomePageProps {
   usage?: UsageRow[]
   /** SSR 阶段 usage 对应的日期窗口(用于柱状图补齐 0 值天) */
   usageWindow?: { start?: string; end?: string }
+  /** SSR 阶段 usage 所属数据源(缺省 deepseek) */
+  usageSource?: DataSource
   /** 用量区块存档(cookie 下发,用于 SSR 首帧渲染正确筛选) */
   initialSel?: UsageSel
   /** 各数据源可用性(SSR 计算;隐藏未配置/无数据的源) */
@@ -50,6 +52,7 @@ export function HomePage({
   commentsPage,
   usage,
   usageWindow,
+  usageSource,
   initialSel,
   availableSources,
   isAdmin,
@@ -74,7 +77,13 @@ export function HomePage({
       <StatusWidget />
       <Hero profile={profile} vlogSeries={vlogSeries} vlogStart={vlogStart} />
       <ProjectsSection projects={projects} clicks={stats?.events.clicksByTarget} pv={stats?.visits.pv} />
-      <UsageSection rows={usage} window={usageWindow} initialSel={initialSel} availableSources={availableSources} />
+      <UsageSection
+        rows={usage}
+        window={usageWindow}
+        usageSource={usageSource}
+        initialSel={initialSel}
+        availableSources={availableSources}
+      />
       <AboutSection contacts={contacts} profile={profile} links={links} tech={tech} timeline={timeline} />
       <GuestbookSection
         page={commentsPage}

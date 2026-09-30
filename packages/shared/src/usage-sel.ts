@@ -18,6 +18,8 @@ export interface SourceAvailability {
   zhipu?: boolean
   errors?: Partial<Record<DataSource, string>>
   order?: DataSource[]
+  /** admin 配置的「默认数据源」(新访客/无存档时默认打开;缺省 = 出厂首项) */
+  defaultSource?: DataSource
 }
 
 /** 时间区间 + 自定义日期(按数据源各自保存) */
@@ -116,8 +118,8 @@ const asPer = (v: Partial<UsageSel> | null | undefined, dataSrc: DataSource): Re
   return out
 }
 
-const asSel = (v: Partial<UsageSel> | null | undefined): UsageSel => {
-  const dataSrc = v && SOURCES_SET.includes(v.dataSrc as DataSource) ? (v.dataSrc as DataSource) : DEFAULT_SEL.dataSrc
+const asSel = (v: Partial<UsageSel> | null | undefined, fallbackSrc: DataSource = DEFAULT_SEL.dataSrc): UsageSel => {
+  const dataSrc = v && SOURCES_SET.includes(v.dataSrc as DataSource) ? (v.dataSrc as DataSource) : fallbackSrc
   return {
     dataSrc,
     per: asPer(v, dataSrc),
@@ -128,13 +130,17 @@ const asSel = (v: Partial<UsageSel> | null | undefined): UsageSel => {
   }
 }
 
-/** 解析 cookie 存档(服务端/客户端通用);空值或非法一律回落默认 */
-export const parseUsageSel = (raw: string | null | undefined): UsageSel => {
-  if (!raw) return DEFAULT_SEL
+/**
+ * 解析 cookie 存档(服务端/客户端通用);空值或非法一律回落默认。
+ * `defaultSrc` 为 admin 配置的「默认数据源」(缺省 = 出厂首项),仅用于无存档时的初值。
+ */
+export const parseUsageSel = (raw: string | null | undefined, defaultSrc?: DataSource): UsageSel => {
+  const fallback = defaultSrc && SOURCES_SET.includes(defaultSrc) ? defaultSrc : DEFAULT_SEL.dataSrc
+  if (!raw) return { ...DEFAULT_SEL, dataSrc: fallback }
   try {
-    return asSel(JSON.parse(decodeURIComponent(raw)) as Partial<UsageSel>)
+    return asSel(JSON.parse(decodeURIComponent(raw)) as Partial<UsageSel>, fallback)
   } catch {
-    return DEFAULT_SEL
+    return { ...DEFAULT_SEL, dataSrc: fallback }
   }
 }
 
