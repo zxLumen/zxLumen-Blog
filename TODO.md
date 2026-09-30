@@ -16,6 +16,7 @@
 
 - [ ] 增加 vlog 页,展示抖音旅行视频,支持点赞评论 — 优先级:中
 - [ ] 主页 home 右侧空白位置放 vlog,每次刷新播放的都不同 — 优先级:中
+- [ ] **自建播放器(替代官方 iframe)**:已验证可行 —— 官方 `aweme/detail` 响应的 `video.play_addr` 能拿到 3 条 mp4 URL(最高只有 720p,单条约 6.5MB),浏览器可直连 CDN(`Access-Control-Allow-Origin: *`,96 条里仅约 1 条 URL 已失效),服务端 fetch(不带 Referer)也通(`206 video/mp4`)。做法:抓 mp4 存进 `docker/site-content/` 由 Caddy 直供(不过服务器流量),前端换成原生 `<video>`。收益:单击/拖动/进度/统计完全可控、不再被 iframe 吃掉拖动、封面挡画面这类问题从根上消失。代价:占服务器存储、播放量算我们自己的、去掉抖音播放器 UI;需处理播放源过期(加刷新入口 + `onError` 自动回退 iframe)。— 优先级:中
 
 ## blog / 迁移
 

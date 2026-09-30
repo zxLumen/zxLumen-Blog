@@ -45,6 +45,96 @@ const MIN_W = 320
 const MIN_H = 360
 const TEASER_DELAY = 1200
 const TEASER_DURATION = 7000
+/** 首访自动开窗前留给首屏布局稳定的时间 + 等视频卡挂上来的上限 */
+const AUTOOPEN_DELAY = 800
+const AUTOOPEN_POLL_MS = 250
+const AUTOOPEN_WAIT_MAX = 6000
+/** 视频卡中央播放区半径(与 HeroVlog 的 PLAY_ZONE / PLAY_ZONE_MIN 保持一致) */
+const PLAY_ZONE = 0.26
+const PLAY_ZONE_MIN = 72
+
+/**
+ * 聊天窗(右下角浮标锚定)会不会压住 Hero 视频卡的中央播放区。
+ *
+ * 窗口宽 min(380, 100vw-32)、高 min(560, 75vh),在手机上正好盖住视频卡中央 —— 那一下
+ * 点击全落在聊天框上,视频点不动(还表现为「聊天在一直打字」)。压住就不自动弹,留给
+ * 用户点浮标自己开。圆(播放区)与矩形(窗口)相交即算压住。
+ */
+function coversActiveVlog(
+  win: { x: number; y: number; w: number; h: number },
+  cardRect?: DOMRect | null
+): boolean | null {
+  let c: DOMRect | null = null
+  if (cardRect) {
+    c = cardRect
+  } else {
+    const card = document.querySelector('.zx-vlog-card.is-active')
+    if (!(card instanceof HTMLElement)) return null
+    c = card.getBoundingClientRect()
+  }
+  // 量不到(尺寸还是 0)不等于「没压住」—— 慢设备上布局还没稳定,此时若按「没压住」开窗,
+  // 窗口就会落在稍后才量出尺寸的卡片上,视频再也点不动。返回 null = 还量不准,让调用方继续等。
+  if (!c || c.width === 0 || c.height === 0) return null
+  // 卡片中心不在视口内(手机上视频区通常在首屏之下,而聊天窗浮在视口上):判「压没压住」要看
+  // 用户滚到视频时的情况,那时卡片中心基本就在视口中心。仍按当前坐标量会得出「没压住」→
+  // 自动开窗,等用户滚下去视频就被盖住(实测落点=DIV.zxchat-list)。所以中心不在视口内时
+  // 按视口中心算,宁可保守不自动弹。
+  const rawCx = c.left + c.width / 2
+  const rawCy = c.top + c.height / 2
+  const centerInView =
+    rawCx >= 0 && rawCx <= window.innerWidth && rawCy >= 0 && rawCy <= window.innerHeight
+  const cx = centerInView ? rawCx : window.innerWidth / 2
+  const cy = centerInView ? rawCy : window.innerHeight / 2
+  const radius = Math.max(PLAY_ZONE_MIN, Math.min(c.width, c.height) * PLAY_ZONE)
+  const nx = Math.max(win.x, Math.min(cx, win.x + win.w))
+  const ny = Math.max(win.y, Math.min(cy, win.y + win.h))
+  return Math.hypot(cx - nx, cy - ny) <= radius
+}
+
+/** 最近一次量到的卡片矩形(供稳定判定用) */
+let lastCardRect: { w: number; h: number; left: number; top: number } | null = null
+
+/**
+ * 量当前卡片的矩形,且要求**连续两次量到相同尺寸**才认。
+ *
+ * 慢设备(实测 4x CPU 降速 + Fast3G)上卡片会先以 350x213 出现、1s 后才跳到 740x451:
+ * 只量一次容易落在中间态,判成「窗口没压住」就自动开窗,等卡片跳到最终尺寸时正好被盖住,
+ * 视频再也点不动(实测落点变成 DIV.zxchat-list)。尺寸还在变就返回 null,让调用方继续等。
+ */
+function stableCardRect(): DOMRect | null {
+  const card = document.querySelector('.zx-vlog-card.is-active')
+  if (!(card instanceof HTMLElement)) {
+    lastCardRect = null
+    return null
+  }
+  const c = card.getBoundingClientRect()
+  if (c.width === 0 || c.height === 0) {
+    lastCardRect = null
+    return null
+  }
+  const p = lastCardRect
+  if (p && p.w === c.width && p.h === c.height) return c
+  lastCardRect = { w: c.width, h: c.height, left: c.left, top: c.top }
+  return null
+}
+
+/** 首次打开时的窗口矩形:按浮标就近推导(右下锚定) */
+function defaultWindowRect(pos: { x: number; y: number } | null): {
+  x: number
+  y: number
+  w: number
+  h: number
+} {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const w = Math.min(380, vw - 32)
+  const h = Math.min(560, vh * 0.75)
+  const fab = pos ?? { x: vw - FAB_SIZE - 20, y: vh - FAB_SIZE - 20 }
+  const leftHalf = fab.x + FAB_SIZE / 2 < vw / 2
+  const x = leftHalf ? fab.x + FAB_SIZE + 12 : fab.x - w - 12
+  const y = fab.y + FAB_SIZE - h
+  return { x, y, w, h }
+}
 
 function loadSession(): string {
   try {
@@ -142,6 +232,10 @@ export function ChatWidget() {
   const listRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const teaserShownRef = useRef(false)
+  /** 首访自动开窗只判一次(量播放区要等布局稳定,期间 pos 变化会重跑这个 effect) */
+  const autoTriedRef = useRef(false)
+  /** 「本页有视频区但卡片还没挂上」的轮询:切走/卸载时用来停掉它(否则会一直 setTimeout) */
+  const autoWaitRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; rx: number; ry: number; moved: boolean } | null>(null)
   const resizeRef = useRef<{ dir: string; sx: number; sy: number; r0: Rect } | null>(null)
 
@@ -191,13 +285,49 @@ export function ChatWidget() {
       /* ignore */
     }
     if (!seen) {
-      setOpen(true)
-      try {
-        localStorage.setItem(AUTOOPEN_KEY, '1')
-      } catch {
-        /* ignore */
+      if (autoTriedRef.current) return
+      autoTriedRef.current = true
+      // 视频区是**异步**渲染的:固定延时去量,它八成还没挂上,于是判成「没压住」→ 开窗,
+      // 等卡片挂好正好落在窗口底下(手机全屏宽,必中)。所以先等卡片出现再量;等到上限
+      // 还没见着卡片就当本页没有视频区,照常开。
+      let waited = 0
+      const openNow = () => {
+        setOpen(true)
+        try {
+          localStorage.setItem(AUTOOPEN_KEY, '1')
+        } catch {
+          /* ignore */
+        }
       }
-      return
+      const tick = () => {
+        if (document.querySelector('.zx-vlog-card.is-active')) {
+          // 连续量到两次相同尺寸才算布局稳定:慢设备上卡片会在 350x213(未换算好)→
+          // 740x451(就位)之间跳,只量一次容易量到中间态,判成「没压住」就开窗,
+          // 等它跳到最终尺寸正好被窗口盖住。
+          const c = stableCardRect()
+          if (c) {
+            const cov = coversActiveVlog(defaultWindowRect(pos), c)
+            if (cov === false) { openNow(); return }
+            if (cov === true) return
+          }
+        }
+        // 视频区在(`.zx-vlog` 是服务端就渲染出来的外壳)但卡片还没挂上 → 是「还没到」,
+        // 不是「本页没有视频区」。慢设备 + 慢网下卡片可能要 6s+ 才出现(实测 4x 降速 +
+        // Fast3G 会超过原来的上限),若此时按「本页没有视频区」开窗,窗口正好落在稍后
+        // 出现的卡片上,视频就再也点不动了。所以这种情况继续等,不受上限约束。
+        if (document.querySelector('.zx-vlog')) {
+          autoWaitRef.current = setTimeout(tick, AUTOOPEN_POLL_MS)
+          return
+        }
+        if (waited < AUTOOPEN_WAIT_MAX) {
+          waited += AUTOOPEN_POLL_MS
+          autoWaitRef.current = setTimeout(tick, AUTOOPEN_POLL_MS)
+          return
+        }
+        openNow()
+      }
+      autoWaitRef.current = setTimeout(tick, AUTOOPEN_DELAY)
+      return () => clearTimeout(autoWaitRef.current)
     }
     // 已访问过:延迟弹气泡;若用户先开了窗(open)或本页已弹过则不再弹
     if (open || teaserShownRef.current) return
@@ -206,7 +336,7 @@ export function ChatWidget() {
       setTeaser(true)
     }, TEASER_DELAY)
     return () => clearTimeout(t)
-  }, [cfg, open])
+  }, [cfg, open, pos])
 
   // 窗口与气泡互斥:窗口一开,气泡立即消失
   useEffect(() => {
@@ -238,17 +368,7 @@ export function ChatWidget() {
   // 首次打开、且无记忆几何时:按浮标就近推导初始矩形(右下锚定)
   useEffect(() => {
     if (!open || !pos) return
-    setRect((r) => {
-      if (r) return clampRect(r)
-      const vw = window.innerWidth
-      const vh = window.innerHeight
-      const w = Math.min(380, vw - 32)
-      const h = Math.min(560, vh * 0.75)
-      const leftHalf = pos.x + FAB_SIZE / 2 < vw / 2
-      const x = leftHalf ? pos.x + FAB_SIZE + 12 : pos.x - w - 12
-      const y = pos.y + FAB_SIZE - h
-      return clampRect({ x, y, w, h })
-    })
+    setRect((r) => (r ? clampRect(r) : clampRect(defaultWindowRect(pos))))
   }, [open, pos])
 
   if (!cfg || !cfg.enabled) return null

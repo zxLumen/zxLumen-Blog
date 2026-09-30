@@ -1113,7 +1113,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   display: block;
 }
 
-/* 有封面的卡:播放器提前挂在封面底下暖机,封面盖在它上面;播放器就绪后
+/* 有封面的卡:播放器提前挂在封面底下暖机,封面盖在它上面;闸门开过后
    封面变成 pointer-events:none,一次点击直接穿透进播放器起播(见 HeroVlog) */
 .zx-vlog-poster {
   position: absolute;
@@ -1128,11 +1128,18 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   display: block;
   user-select: none;
   -webkit-user-drag: none;
+  /* 撤封面时淡出(声音已经出了,画面别硬切) */
+  transition: opacity 0.24s ease;
 }
 
-/* 播放器已就绪:封面只管显示,点击交还给下层的播放器 */
+/* 闸门已开:封面只管显示,点击交还给下层的播放器 */
 .zx-vlog-poster.is-through {
   pointer-events: none;
+}
+
+/* 退场:淡出后由 JS 摘掉。期间保持穿透,补点一下也能进播放器 */
+.zx-vlog-poster.is-fading {
+  opacity: 0;
 }
 
 .zx-vlog-poster-play {
@@ -1161,6 +1168,66 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 /* 非当前集的卡已有角标,不再叠播放按钮 */
 .zx-vlog-card:not(.is-active) .zx-vlog-poster-play {
   display: none;
+}
+
+/* 闸门内(播放器还没真正可播):播放键转圈,提示「再等一下下」,封面不撤 */
+.zx-vlog-poster-play.is-busy svg {
+  animation: zx-vlog-wait 1.1s linear infinite;
+  transform-origin: 50% 50%;
+  opacity: 0.75;
+}
+
+@keyframes zx-vlog-wait {
+  0% {
+    transform: rotate(0deg) scale(0.86);
+  }
+  50% {
+    transform: rotate(180deg) scale(1);
+  }
+  100% {
+    transform: rotate(360deg) scale(0.86);
+  }
+}
+
+/* 闸门内点中央播放区:抖一下,告诉访客「等它就绪」,但绝不撤封面(那就变成点两下了) */
+.zx-vlog-poster-play.is-pulse {
+  animation: zx-vlog-pulse 0.42s ease;
+}
+
+@keyframes zx-vlog-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(0.82);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* ?vlogdiag=1:显示父页面到底收到了什么信号、封面走哪条路退场(排查用) */
+.zx-vlog-diag {
+  position: absolute;
+  left: 0.4rem;
+  bottom: 0.4rem;
+  z-index: 3;
+  max-width: calc(100% - 0.8rem);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.3rem;
+  background: rgb(0 0 0 / 72%);
+  color: #9ef;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zx-vlog-poster-play.is-busy svg,
+  .zx-vlog-poster-play.is-pulse {
+    animation: none;
+  }
 }
 
 .zx-vlog-meta {
