@@ -445,7 +445,7 @@ function fastKind(rel: string, name: string, text: string): { kind: CorpusKind; 
   return null
 }
 
-/* ---------- 后台蒸馏任务 + 进度(供面板轮询) ---------- */
+/* ---------- 后台任务(蒸馏 / 人格)+ 进度 + 取消(供面板轮询) ---------- */
 
 export interface DistillProgress {
   running: boolean
@@ -458,36 +458,92 @@ export interface DistillProgress {
   current: string
   startedAt: string
   finishedAt: string | null
+  /** 已请求取消 */
+  cancelRequested?: boolean
+  /** 已按取消结束 */
+  cancelled?: boolean
 }
 
-let activeJob: DistillProgress | null = null
-const P_KEY = 'chatbot_distill_progress'
+export interface PersonaStatus {
+  running: boolean
+  startedAt: string
+  finishedAt: string | null
+  ok: boolean
+  faq: number
+  error: string
+  cancelRequested?: boolean
+  cancelled?: boolean
+}
 
-function persistProgress(p: DistillProgress) {
+const P_KEY = 'chatbot_distill_progress'
+const PERSONA_KEY = 'chatbot_persona_status'
+
+let distillJob: DistillProgress | null = null
+let personaJob: PersonaStatus | null = null
+
+function persistMeta(key: string, v: unknown) {
   try {
-    getDb().setMeta(P_KEY, JSON.stringify(p))
+    getDb().setMeta(key, JSON.stringify(v))
   } catch {
     /* 忽略 */
   }
 }
 
-/** 当前/最近一次蒸馏进度(内存优先;进程重启后残留的「运行中」视为已结束) */
-export function distillProgress(): DistillProgress | null {
-  if (activeJob) return activeJob
-  const raw = getDb().getMeta(P_KEY)
+function readMeta<T>(key: string): T | null {
+  const raw = getDb().getMeta(key)
   if (!raw) return null
   try {
-    const j = JSON.parse(raw) as DistillProgress
-    if (j.running) j.running = false
-    return j
+    return JSON.parse(raw) as T
   } catch {
     return null
   }
 }
 
+/** 是否有后台任务在跑(蒸馏 / 人格) */
+export function distillBusy(): { running: boolean; kind: 'distill' | 'persona' | null } {
+  if (distillJob?.running) return { running: true, kind: 'distill' }
+  if (personaJob?.running) return { running: true, kind: 'persona' }
+  return { running: false, kind: null }
+}
+
+/** 当前/最近一次蒸馏进度(内存优先;进程重启后残留的运行态视为已结束) */
+export function distillProgress(): DistillProgress | null {
+  if (distillJob) return distillJob
+  const j = readMeta<DistillProgress>(P_KEY)
+  if (j?.running) j.running = false
+  return j
+}
+
+/** 当前/最近一次人格生成状态 */
+export function personaStatus(): PersonaStatus | null {
+  if (personaJob) return personaJob
+  const j = readMeta<PersonaStatus>(PERSONA_KEY)
+  if (j?.running) j.running = false
+  return j
+}
+
+/** 请求取消正在跑的任务(蒸馏/人格):正在进行的调用自然收尾后不再继续 */
+export function cancelJob(): { cancelled: boolean } {
+  let cancelled = false
+  if (distillJob?.running) {
+    distillJob.cancelRequested = true
+    persistMeta(P_KEY, distillJob)
+    cancelled = true
+  }
+  if (personaJob?.running) {
+    personaJob.cancelRequested = true
+    persistMeta(PERSONA_KEY, personaJob)
+    cancelled = true
+  }
+  return { cancelled }
+}
+
 /** 启动后台蒸馏(已有任务在跑则拒绝);立即返回,进度见 distillProgress() */
 export function startDistill(force: boolean): { started: boolean; reason?: string } {
-  if (activeJob?.running) return { started: false, reason: '已有蒸馏任务在跑,请等它结束' }
+  const b = distillBusy()
+  if (b.running) {
+    return { started: false, reason: b.kind === 'persona' ? '正在生成人格,完成后再试' : '已有蒸馏任务在跑,请等它结束' }
+  }
   const p: DistillProgress = {
     running: true,
     force,
@@ -500,15 +556,44 @@ export function startDistill(force: boolean): { started: boolean; reason?: strin
     startedAt: new Date().toISOString(),
     finishedAt: null,
   }
-  activeJob = p
-  persistProgress(p)
+  distillJob = p
+  persistMeta(P_KEY, p)
   void processCorpus(force, p)
     .catch(() => {})
     .finally(() => {
       p.running = false
       p.current = ''
       p.finishedAt = new Date().toISOString()
-      persistProgress(p)
+      persistMeta(P_KEY, p)
+    })
+  return { started: true }
+}
+
+/** 启动后台人格生成(已有任务在跑则拒绝);结果见 personaStatus() */
+export function startPersona(): { started: boolean; reason?: string } {
+  const b = distillBusy()
+  if (b.running) {
+    return { started: false, reason: b.kind === 'distill' ? '正在蒸馏,完成后再生成人格' : '人格生成已在跑' }
+  }
+  const s: PersonaStatus = {
+    running: true,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    ok: false,
+    faq: 0,
+    error: '',
+  }
+  personaJob = s
+  persistMeta(PERSONA_KEY, s)
+  void generatePersona(s)
+    .catch((e) => {
+      s.ok = false
+      s.error = String(e).slice(0, 300)
+    })
+    .finally(() => {
+      s.running = false
+      s.finishedAt = new Date().toISOString()
+      persistMeta(PERSONA_KEY, s)
     })
   return { started: true }
 }
@@ -571,6 +656,7 @@ export async function processCorpus(force = false, progress?: DistillProgress): 
   const corpus = await listCorpus()
   const result = new Map<string, CorpusStatusItem>()
   if (progress) progress.total = corpus.length
+  const isCancelled = () => !!progress?.cancelRequested
 
   interface Job {
     file: CorpusFile
@@ -582,6 +668,10 @@ export async function processCorpus(force = false, progress?: DistillProgress): 
 
   // Phase 1:垃圾过滤 + 跳过已完成 + 脱敏 + 确定性分类
   for (const file of corpus) {
+    if (isCancelled()) {
+      if (progress) progress.cancelled = true
+      break
+    }
     const doc = db.getKbDoc(file.rel)
     const done = !!doc && doc.status === 'processed' && doc.sha === file.sha
     const junk = junkReason(file.text)
@@ -611,14 +701,14 @@ export async function processCorpus(force = false, progress?: DistillProgress): 
         progress.done++
         progress.ignored++
         progress.current = file.name
-        persistProgress(progress)
+        persistMeta(P_KEY, progress)
       }
       continue
     }
     if (done && !force) {
       if (progress) {
         progress.done++
-        persistProgress(progress)
+        persistMeta(P_KEY, progress)
       }
       continue
     }
@@ -633,6 +723,7 @@ export async function processCorpus(force = false, progress?: DistillProgress): 
   const groups: Job[][] = []
   for (let i = 0; i < need.length; i += BATCH_SIZE) groups.push(need.slice(i, i + BATCH_SIZE))
   await mapLimit(groups, BATCH_CONC, async (g) => {
+    if (isCancelled()) return
     const res = await classifyGroup(cfg, g.map((t) => ({ name: t.file.name, text: t.cleaned.text })))
     g.forEach((t, i) => {
       const r = res[i] ?? fallbackClassify(t.file.name)
@@ -641,30 +732,37 @@ export async function processCorpus(force = false, progress?: DistillProgress): 
   })
 
   // Phase 3:入库 + 切块/embedding(并发;写库为同步调用)
-  await mapLimit(todo, COMMIT_CONC, async (t) => {
-    const cls = t.cls!
-    t.base.kind = cls.kind
-    t.base.origin = cls.origin
-    try {
-      const docId = db.upsertKbDoc({ source: t.file.rel, kind: cls.kind, title: cls.title, size: t.file.text.length, sha: t.file.sha, status: 'processed' })
-      if (cls.kind === 'knowledge') await indexChunks(cfg, docId, t.file.rel, chunksOf(t.cleaned.text, cfg))
-      else db.clearKbChunks(docId)
-      t.base.status = 'processed'
-      t.base.error = ''
-      db.setMeta('chatbot_last_distill', `[${new Date().toISOString()}] ${t.file.name} → ${cls.kind} (${cls.origin})`)
-      if (progress) progress.ok++
-    } catch (e) {
-      db.upsertKbDoc({ source: t.file.rel, kind: cls.kind, title: t.file.name, size: t.file.text.length, sha: t.file.sha, status: 'error', error: String(e).slice(0, 300) })
-      t.base.status = 'error'
-      t.base.error = String(e).slice(0, 300)
-      if (progress) progress.error++
-    }
-    if (progress) {
-      progress.done++
-      progress.current = t.file.name
-      persistProgress(progress)
-    }
-  })
+  if (isCancelled() && progress) {
+    progress.cancelled = true
+  } else {
+    await mapLimit(todo, COMMIT_CONC, async (t) => {
+      if (isCancelled()) return
+      const cls = t.cls
+      if (!cls) return // 被取消/未分类:不入库
+      t.base.kind = cls.kind
+      t.base.origin = cls.origin
+      try {
+        const docId = db.upsertKbDoc({ source: t.file.rel, kind: cls.kind, title: cls.title, size: t.file.text.length, sha: t.file.sha, status: 'processed' })
+        if (cls.kind === 'knowledge') await indexChunks(cfg, docId, t.file.rel, chunksOf(t.cleaned.text, cfg))
+        else db.clearKbChunks(docId)
+        t.base.status = 'processed'
+        t.base.error = ''
+        db.setMeta('chatbot_last_distill', `[${new Date().toISOString()}] ${t.file.name} → ${cls.kind} (${cls.origin})`)
+        if (progress) progress.ok++
+      } catch (e) {
+        db.upsertKbDoc({ source: t.file.rel, kind: cls.kind, title: t.file.name, size: t.file.text.length, sha: t.file.sha, status: 'error', error: String(e).slice(0, 300) })
+        t.base.status = 'error'
+        t.base.error = String(e).slice(0, 300)
+        if (progress) progress.error++
+      }
+      if (progress) {
+        progress.done++
+        progress.current = t.file.name
+        persistMeta(P_KEY, progress)
+      }
+    })
+    if (isCancelled() && progress) progress.cancelled = true
+  }
 
   // 对账:将 corpus/ 中已删除/更名的旧 doc 及其 chunks 一并清掉,让知识库严格镜像当前文件
   const current = new Set(corpus.map((f) => f.rel))
@@ -675,7 +773,7 @@ export async function processCorpus(force = false, progress?: DistillProgress): 
 }
 
 /** 生成/刷新人格:取全部 persona 类 corpus + 现有 persona,交给 LLM 写 persona.md 与 faq.json */
-export async function generatePersona(): Promise<{ persona: boolean; faq: number; note: string }> {
+export async function generatePersona(status?: PersonaStatus): Promise<{ persona: boolean; faq: number; note: string }> {
   const cfg = getConfig()
   const db = getDb()
   const { loadSoul } = await import('./soul')
@@ -751,7 +849,16 @@ export async function generatePersona(): Promise<{ persona: boolean; faq: number
       /* faq 生成失败不阻断 */
     }
   }
+  if (status?.cancelRequested) {
+    status.cancelled = true
+    status.ok = false
+    return { persona: false, faq: 0, note: '已取消(未写入)' }
+  }
   await writeSoulFiles(persona.trim(), faq)
+  if (status) {
+    status.ok = true
+    status.faq = faq.length
+  }
   return { persona: true, faq: faq.length, note: `persona.md + ${faq.length} 条 FAQ 已写入 ${soulDir().root}` }
 }
 
@@ -763,8 +870,9 @@ export function clearKb() {
 /** 汇总 admin 需要的状态 */
 export async function distillStatus() {
   const db = getDb()
-  const { loadSoul } = await import('./soul')
+  const { loadSoul, soulTimes } = await import('./soul')
   const soul = await loadSoul()
+  const times = await soulTimes()
   return {
     corpus: (await listCorpus()).map((f) => {
       const d = db.getKbDoc(f.rel)
@@ -789,6 +897,10 @@ export async function distillStatus() {
     chunkCount: db.countKbChunks(),
     hasPersona: !!soul.persona,
     faqCount: soul.faq.length,
+    personaAt: times.personaAt,
+    faqAt: times.faqAt,
+    persona: personaStatus(),
+    busy: distillBusy(),
     progress: distillProgress(),
   }
 }

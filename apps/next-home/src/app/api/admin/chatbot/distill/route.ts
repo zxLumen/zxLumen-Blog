@@ -1,14 +1,15 @@
 import { isAdmin } from '@/lib/auth'
 import { readJson } from '@/lib/db'
 import {
+  cancelJob,
   clearKb,
   distillStatus,
-  generatePersona,
   processFile,
   setJunkKeep,
   setKindOverride,
   setSensitiveAllowed,
   startDistill,
+  startPersona,
 } from '@/lib/chat/distill'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +24,7 @@ export async function GET() {
 }
 
 interface Body {
-  action?: 'process' | 'persona' | 'clear' | 'set-kind' | 'set-sensitive-allow' | 'set-ignored'
+  action?: 'process' | 'persona' | 'clear' | 'cancel' | 'set-kind' | 'set-sensitive-allow' | 'set-ignored'
   force?: boolean
   /** set-kind:corpus 相对路径 */
   source?: string
@@ -70,7 +71,12 @@ export async function POST(req: Request) {
       return Response.json({ ok: true, action, ignore: !!body?.ignore, item })
     }
     if (action === 'persona') {
-      const r = await generatePersona()
+      // 后台生成,立即返回;状态通过 GET 的 persona 轮询
+      const r = startPersona()
+      return Response.json({ ok: true, action, ...r })
+    }
+    if (action === 'cancel') {
+      const r = cancelJob()
       return Response.json({ ok: true, action, ...r })
     }
     if (action === 'clear') {

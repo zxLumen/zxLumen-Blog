@@ -187,3 +187,21 @@ export async function publicContactExempt(): Promise<string[]> {
     return []
   }
 }
+
+export interface SoulTimes {
+  /** persona.md 最后写入时间(ISO);不存在为空串 */
+  personaAt: string
+  /** faq.json 最后写入时间(ISO);不存在为空串 */
+  faqAt: string
+}
+
+/** 灵魂文件(生成产物)的最后写入时间,用于面板判断「上次生成人格」是否成功/何时 */
+export async function soulTimes(): Promise<SoulTimes> {
+  const dir = soulDir()
+  const p = await mtime(dir.persona)
+  const f = await mtime(dir.faq)
+  return {
+    personaAt: p ? new Date(p).toISOString() : '',
+    faqAt: f ? new Date(f).toISOString() : '',
+  }
+}

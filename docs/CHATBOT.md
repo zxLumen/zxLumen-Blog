@@ -33,6 +33,7 @@ cd packages/shared && npm run seed:chatbot
 4. `admin → 机器人`:选聊天 provider + 模型、`embedding`(可选)→ 保存。
 5. 「扫描并蒸馏」:自动分类 corpus(人格素材 vs 事实知识),知识类切块(500/75)入库,
     人格类汇总 → 点「生成人格」产出 `persona.md + faq.json`。
+   - **两者都在后台跑**:点「扫描并蒸馏」/「生成人格」立即返回,面板显示 `done/total`(蒸馏)或「生成中→成功·FAQ n 条 / 失败」,并显示 `persona.md`/`faq.json` 最后写入时间,**刷新页面也能看到结果**;同一时刻只允许一个任务,可点「取消」。
    - **也可直接在 admin「机器人 → 灵魂蒸馏」上传** `.md/.txt`(**可多选文件或整个文件夹**;单文件 ≤2MB):
      上传成功即在**后台**执行「扫描并蒸馏」(分类+入库;人格仍只会「待生成」,由你单独点「生成人格」)。
      重名/类型不支持会返回错误;corpus 列表可一键 ✕ 删除(同步移除其知识块)。
@@ -104,7 +105,7 @@ docker compose 已为 `app` 服务配置:
 - `GET /api/chat/config`:公开,仅返回 `{ enabled, name, greeting, suggestions, ready }`,不含密钥。
 - `GET/POST /api/admin/chatbot`:完整配置 + 掩码密钥 + provider 列表(仅站长)。
 - `GET/POST/DELETE /api/admin/chatbot/logs`:对话日志 / 日统计 / 清空。
-- `GET/POST /api/admin/chatbot/distill`:`process`(后台扫描蒸馏,`force` 全量;立即返回 `{started}`)、`persona`(生成人格)、`clear`(清库)、`set-kind`、`set-sensitive-allow`(按文件放行/恢复脱敏)、`set-ignored`(按文件恢复入库/恢复自动过滤);后三者**只重跑该单文件**。GET 返回 `sensitiveAllowed`/`sanitized`、每文件的 `junk`/`nokeep` 及 `progress`。
+- `GET/POST /api/admin/chatbot/distill`:`process`(后台扫描蒸馏,`force` 全量;立即返回 `{started}`)、`persona`(后台生成人格;立即返回 `{started}`)、`cancel`(请求取消正在跑的蒸馏/人格)、`clear`(清库)、`set-kind`、`set-sensitive-allow`(按文件放行/恢复脱敏)、`set-ignored`(按文件恢复入库/恢复自动过滤);后三者**只重跑该单文件**。GET 返回 `sensitiveAllowed`/`sanitized`、每文件的 `junk`/`nokeep`、`progress`(蒸馏进度)、`persona`(人格生成状态)与 `personaAt`/`faqAt`(产物最后写入时间)。
 - `GET/POST/DELETE /api/admin/chatbot/corpus`:上传(返回每文件命中敏感类别)/删除(顺带清知识块与放行记录)。
 
 ## 关键实现

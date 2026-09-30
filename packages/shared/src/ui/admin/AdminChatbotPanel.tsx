@@ -88,6 +88,19 @@ interface DistillProgress {
   current: string
   startedAt: string
   finishedAt: string | null
+  cancelRequested?: boolean
+  cancelled?: boolean
+}
+
+interface PersonaStatus {
+  running: boolean
+  startedAt: string
+  finishedAt: string | null
+  ok: boolean
+  faq: number
+  error: string
+  cancelRequested?: boolean
+  cancelled?: boolean
 }
 
 interface DistillStatus {
@@ -99,6 +112,10 @@ interface DistillStatus {
   chunkCount: number
   hasPersona: boolean
   faqCount: number
+  personaAt?: string
+  faqAt?: string
+  persona?: PersonaStatus | null
+  busy?: { running: boolean; kind: 'distill' | 'persona' | null }
   progress?: DistillProgress | null
 }
 
@@ -602,13 +619,15 @@ export function AdminChatbotPanel({
     }
   }, [gated, active, load, loadDistill, loadLogs])
 
-  // 蒸馏在后台跑时,1.5s 轮询进度(任意标签页都能看到)
+  // 蒸馏/人格在后台跑时,1.5s 轮询进度(任意标签页都能看到)
+  const personaRunning = !!distill?.persona?.running
   const distillRunning = !!distill?.progress?.running
+  const anyRunning = distillRunning || personaRunning
   useEffect(() => {
-    if (!gated || !active || !distillRunning) return
+    if (!gated || !active || !anyRunning) return
     const t = setInterval(() => void loadDistill(), 1500)
     return () => clearInterval(t)
-  }, [gated, active, distillRunning, loadDistill])
+  }, [gated, active, anyRunning, loadDistill])
 
   const set = <K extends keyof BotConfig>(k: K, v: BotConfig[K]) =>
     setCfg((c) => (c ? { ...c, [k]: v } : c))
@@ -681,13 +700,33 @@ export function AdminChatbotPanel({
       await loadDistill()
       if (action === 'process') {
         notify(d.started ? 'ok' : 'err', d.started ? (force ? '已开始全量重跑(后台进行,进度见下方)' : '已开始蒸馏(后台进行,进度见下方)') : d.reason || '已有蒸馏任务在跑')
+      } else if (action === 'persona') {
+        notify(d.started ? 'ok' : 'err', d.started ? '已开始生成人格(后台进行,完成后下方显示时间与 FAQ 数)' : d.reason || '已有任务在跑')
       } else {
-        notify('ok', d.action === 'persona' ? '人格已生成(persona.md + faq.json)' : '知识库已清空')
+        notify('ok', '知识库已清空')
       }
     } catch (e) {
       notify('err', e instanceof Error ? e.message : '操作失败')
     } finally {
       setDBusy('')
+    }
+  }
+
+  const cancelJob = async () => {
+    if (!window.confirm('取消当前后台任务?(已完成的不会回滚)')) return
+    try {
+      const r = await adminFetch('/api/admin/chatbot/distill', {
+        method: 'POST',
+        signal: AbortSignal.timeout(30_000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel' }),
+      })
+      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; cancelled?: boolean; error?: string }
+      if (!r.ok || !d.ok) throw new Error(d.error || '取消失败')
+      await loadDistill()
+      notify(d.cancelled ? 'ok' : 'err', d.cancelled ? '已请求取消,正在收尾…' : '当前没有在跑的任务')
+    } catch (e) {
+      notify('err', e instanceof Error ? e.message : '取消失败')
     }
   }
 
@@ -1077,7 +1116,9 @@ export function AdminChatbotPanel({
           <>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', margin: '0 0 0.6rem' }}>
               <span className="zx-muted zx-mono" style={{ fontSize: '0.72rem' }}>
-                persona:{distill.hasPersona ? '✓ 有' : '无'} · FAQ {distill.faqCount} 条 · 知识块 {distill.chunkCount} 条 · corpus {distill.corpus.length} 个
+                persona:{distill.hasPersona ? '✓ 有' : '无'}
+                {distill.personaAt ? ` (${distill.personaAt.slice(5, 16).replace('T', ' ')})` : ' (未生成)'} · FAQ {distill.faqCount} 条
+                {distill.faqAt ? ` (${distill.faqAt.slice(5, 16).replace('T', ' ')})` : ''} · 知识块 {distill.chunkCount} 条 · corpus {distill.corpus.length} 个
               </span>
               {distill.corpus.length > 0 && (
                 <input
@@ -1110,31 +1151,54 @@ export function AdminChatbotPanel({
           </>
         )}
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.6rem' }}>
-          <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={!!dBusy || distillRunning} onClick={() => void distillAction('process')}>
+          <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={!!dBusy || anyRunning} onClick={() => void distillAction('process')}>
             {distillRunning ? `蒸馏中 ${distill?.progress?.done ?? 0}/${distill?.progress?.total ?? 0}` : dBusy === 'process' ? '启动中…' : '扫描并蒸馏'}
           </button>
-          <label className="zx-check" title={distillRunning ? '有任务在跑,结束后再改' : ''}>
-            <input type="checkbox" checked={force} disabled={distillRunning} onChange={(e) => setForce(e.target.checked)} />
+          <label className="zx-check" title={anyRunning ? '有任务在跑,结束后再改' : ''}>
+            <input type="checkbox" checked={force} disabled={anyRunning} onChange={(e) => setForce(e.target.checked)} />
             <span>全量重跑</span>
           </label>
-          <button className="zx-btn zx-btn-sm" disabled={!!dBusy || distillRunning || !distill?.hasPersona} onClick={() => void distillAction('persona')}>
-            {dBusy === 'persona' ? '生成中…' : '生成人格(persona+FAQ)'}
+          <button className="zx-btn zx-btn-sm" disabled={!!dBusy || anyRunning || !distill?.hasPersona} onClick={() => void distillAction('persona')}>
+            {personaRunning ? '生成人格中…' : dBusy === 'persona' ? '启动中…' : '生成人格(persona+FAQ)'}
           </button>
-          <button className="zx-btn zx-btn-sm zx-btn-ghost" disabled={!!dBusy || distillRunning} onClick={() => void distillAction('clear')}>
+          <button className="zx-btn zx-btn-sm zx-btn-ghost" disabled={!!dBusy || anyRunning} onClick={() => void distillAction('clear')}>
             {dBusy === 'clear' ? '清空中…' : '清空知识库'}
           </button>
+          {anyRunning && (
+            <button className="zx-btn zx-btn-sm zx-btn-ghost" disabled={!!dBusy} onClick={() => void cancelJob()}>
+              取消
+            </button>
+          )}
         </div>
         {distill?.progress && (distill.progress.running || distill.progress.finishedAt) && (
           <div className="zx-muted zx-mono" style={{ fontSize: '0.7rem', marginTop: '0.4rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ color: distill.progress.running ? 'var(--zx-accent, #4c8)' : undefined }}>
               {distill.progress.running
                 ? `蒸馏中 ${distill.progress.done}/${distill.progress.total}`
-                : `上次蒸馏 ${distill.progress.done}/${distill.progress.total}`}
+                : distill.progress.cancelled
+                  ? `上次蒸馏已取消 ${distill.progress.done}/${distill.progress.total}`
+                  : `上次蒸馏 ${distill.progress.done}/${distill.progress.total}`}
               {distill.progress.force ? '(全量)' : '(增量)'}
             </span>
             <span>✓{distill.progress.ok} ⛔{distill.progress.ignored} ✕{distill.progress.error}</span>
             {distill.progress.running && distill.progress.current && <span>当前:{distill.progress.current}</span>}
-            {!distill.progress.running && distill.progress.finishedAt && <span>完成于 {distill.progress.finishedAt.slice(11, 19)}</span>}
+            {!distill.progress.running && distill.progress.finishedAt && <span>于 {distill.progress.finishedAt.slice(11, 19)}</span>}
+          </div>
+        )}
+        {distill?.persona && (distill.persona.running || distill.persona.finishedAt) && (
+          <div className="zx-muted zx-mono" style={{ fontSize: '0.7rem', marginTop: '0.3rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ color: distill.persona.running ? 'var(--zx-accent, #4c8)' : distill.persona.ok ? 'var(--zx-ok, #2f9e44)' : 'var(--zx-danger, #e5484d)' }}>
+              {distill.persona.running
+                ? '人格生成中…'
+                : distill.persona.cancelled
+                  ? '人格生成已取消'
+                  : distill.persona.ok
+                    ? `人格生成成功 · FAQ ${distill.persona.faq} 条`
+                    : '人格生成失败'}
+            </span>
+            {distill.persona.startedAt && <span>开始 {distill.persona.startedAt.slice(11, 19)}</span>}
+            {!distill.persona.running && distill.persona.finishedAt && <span>结束 {distill.persona.finishedAt.slice(11, 19)}</span>}
+            {distill.persona.error && <span style={{ color: 'var(--zx-danger, #e5484d)' }}>错误:{distill.persona.error.slice(0, 120)}</span>}
           </div>
         )}
 <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
