@@ -4765,16 +4765,17 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   -webkit-user-drag: none;
 }
 
+/* 图标显示尺寸:44px 方块里给到 38px,尽量占满、减少留白 */
 .zx-appdock-img {
   position: relative;
-  width: 26px;
-  height: 26px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
 }
 
 /* 首字兜底与图片要叠在同一个格子里。
-   不写这一行的话 grid 会把两个子元素自动排成上下两行,图片被挤到 26px 容器外面。 */
+   不写这一行的话 grid 会把两个子元素自动排成上下两行,图片被挤到 38px 容器外面。 */
 .zx-appdock-img > * {
   grid-area: 1 / 1;
 }
@@ -4786,9 +4787,10 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   display: block;
 }
 
+/* 首字兜底的尺寸与图标对齐(有图标看图标,没图标看首字,两块大小要一致) */
 .zx-appdock-letter {
   font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-size: 1.35rem;
   font-weight: 700;
   line-height: 1;
   text-transform: uppercase;

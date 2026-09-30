@@ -149,14 +149,27 @@ const ICONS = [
   },
 ]
 
+/**
+ * CLI: [name...] 指定只生成哪些;`--scale=N` 字形放大倍数(默认 1,越大越满);
+ * `--out=前缀` 改输出文件名前缀(默认 `cand-`);`--no-sheet` 跳过对照表。
+ * 例:node scripts/app-icons.mjs doc-search --scale=1.25 --out=cand-s125- --no-sheet
+ */
+const ARGS = process.argv.slice(2)
+const scaleArg = ARGS.find((a) => a.startsWith('--scale='))
+const outArg = ARGS.find((a) => a.startsWith('--out='))
+const NO_SHEET = ARGS.includes('--no-sheet')
+/** 字形整体围绕画布中心放大/缩小(描边随之等比变粗);上限 1.6 免得顶到圆角 */
+const SCALE = scaleArg ? Math.max(0.6, Math.min(1.6, parseFloat(scaleArg.slice(8)) || 1)) : 1
+const PREFIX = outArg ? outArg.slice(6) : 'cand-'
+
 const svg = (ic) => `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
 <rect width="256" height="256" rx="${R}" fill="${ic.bg}"/>
 <g fill="none" stroke="#fff" stroke-width="${SW}" stroke-linecap="round" stroke-linejoin="round"
-   transform="translate(${ic.tx || 0},${ic.ty || 0})">${ic.glyph.replace(/BG/g, ic.bg)}</g></svg>`
+   transform="translate(${ic.tx || 0},${ic.ty || 0}) translate(128,128) scale(${SCALE}) translate(-128,-128)">${ic.glyph.replace(/BG/g, ic.bg)}</g></svg>`
 
 /* ---------- 1) 图标本体:sharp 直接把 SVG 栅格化 ---------- */
 
-const only = process.argv.slice(2)
+const only = ARGS.filter((a) => !a.startsWith('--'))
 const picked = only.length ? ICONS.filter((i) => only.includes(i.name)) : ICONS
 if (!picked.length) { console.error('没有匹配的候选:', only.join(', ')); process.exit(1) }
 if (only.length && picked.length !== only.length) {
@@ -165,16 +178,21 @@ if (only.length && picked.length !== only.length) {
 
 mkdirSync(OUT, { recursive: true })
 for (const ic of picked) {
-  const file = path.join(OUT, `cand-${ic.name}.png`)
+  const file = path.join(OUT, `${PREFIX}${ic.name}.png`)
   await sharp(Buffer.from(svg(ic)))
     .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png({ compressionLevel: 9 })
     .toFile(file)
   const kb = (await import('node:fs')).statSync(file).size / 1024
-  console.log(`  ✓ cand-${ic.name}.png  ${ic.bg}  ${kb.toFixed(1)}KB  ${ic.desc}`)
+  console.log(`  ✓ ${PREFIX}${ic.name}.png  ${ic.bg}  ${kb.toFixed(1)}KB  ${ic.desc}`)
 }
 
 /* ---------- 2) 对照表:要排文字,才拉本机 Chrome 整页截一张 ---------- */
+
+if (NO_SHEET) {
+  console.log(`\n共 ${picked.length} 个(--no-sheet,未生成对照表)。目录: ${OUT}`)
+  process.exit(0)
+}
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 if (!existsSync(CHROME)) {
