@@ -1451,9 +1451,15 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 /* ---------- 网格 & 卡片 ---------- */
 
 .zx-grid {
+  /* 项目卡片:每行**最多 3 个**。
+     最小列宽 = min(100%, max(--zx-grid-min, (容器宽 − 2×间距) / 3)):
+     容器够宽时下限取 (宽 − 2gap)/3,第 4 列便挤不进来 → 自动封顶 3 列;
+     容器窄时退回 --zx-grid-min;再窄用 100% 兜底,防横向溢出。 */
+  --zx-grid-min: 280px;
+  --zx-grid-gap: 1.1rem;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
-  gap: 1.1rem;
+  gap: var(--zx-grid-gap);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(var(--zx-grid-min), calc((100% - 2 * var(--zx-grid-gap)) / 3))), 1fr));
 }
 
 /* 项目分组之间的淡分隔线(个人新项目 / 历史工作成果) */
@@ -1484,9 +1490,9 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   padding-top: 0.6rem;
 }
 
-/* 卡片亮点(指标)行:始终一行,字号按 --hl-scale(JS 量宽度算出)整体缩放。
-   值/标签设 nowrap,故 scrollWidth 即自然宽,便于测量;极端窄卡片缩到下限后
-   用省略号兜底,不会逐字断行、也不会切半个字。 */
+/* 卡片亮点(指标)行:优先一行,字号按 --hl-scale(JS 量卡片宽度算出)整体缩放。
+   值/标签设 nowrap,故 scrollWidth 即自然宽,便于测量。
+   缩到下限(0.7)仍放不下时由 JS 加 .is-wrap —— 改为**换行**(不使用省略号)。 */
 .zx-card-highlights {
   display: flex;
   flex-wrap: nowrap;
@@ -1495,7 +1501,18 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   --hl-scale: 1;
 }
 
+/* 缩到下限仍不够:整体换行,行间距收紧 */
+.zx-card-highlights.is-wrap {
+  flex-wrap: wrap;
+  gap: calc(0.5rem * var(--hl-scale, 1)) calc(1.4rem * var(--hl-scale, 1));
+}
+
 .zx-highlight {
+  flex: 0 0 auto;
+}
+
+/* 换行兜底时,允许单个指标内部再换行(单值超卡片宽也不会溢出) */
+.zx-card-highlights.is-wrap .zx-highlight {
   flex: 0 1 auto;
   min-width: 0;
 }
@@ -1504,16 +1521,17 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   font-size: calc(1.05rem * var(--hl-scale, 1));
   font-weight: 700;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .zx-highlight-l {
   font-size: calc(0.66rem * var(--hl-scale, 1));
   text-transform: uppercase;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.zx-card-highlights.is-wrap .zx-highlight-v,
+.zx-card-highlights.is-wrap .zx-highlight-l {
+  white-space: normal;
 }
 
 .zx-card:hover {
@@ -2513,7 +2531,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 [data-layout='fullbleed'] .zx-grid {
-  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  --zx-grid-min: 320px;
 }
 
 /* ---------- 布局:bento ---------- */
@@ -2600,8 +2618,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 [data-layout='compact'] .zx-grid {
-  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
-  gap: 0.6rem;
+  --zx-grid-min: 220px;
+  --zx-grid-gap: 0.6rem;
 }
 
 [data-layout='compact'] .zx-grid-stats {
@@ -2849,7 +2867,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   /* bento 的内层网格原先被强制单列,宽屏下每张卡会拉到近 1000px。
      这里放开为自适应多列。 */
   [data-layout='bento'] .zx-grid {
-    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+    --zx-grid-min: 320px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, max(var(--zx-grid-min), calc((100% - 2 * var(--zx-grid-gap)) / 3))), 1fr));
   }
 }
 
@@ -4775,13 +4794,13 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   user-select: none;
 }
 
-/* hover 提示:桌面从左侧弹出 */
-.zx-appdock-item::after {
-  content: attr(data-label);
-  position: absolute;
-  right: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
+/* hover 提示:portal 挂到 body、position:fixed,由 JS 定位(data-side 决定朝向)。
+   为什么不留在 item 的 ::after 里:应用栏是滚动容器(overflow-y:auto),
+   CSS 会把 overflow-x 也算成 auto —— 画在 64px 栏外的气泡整个被裁掉,永远看不到。
+   fixed + 门户就能彻底绕开这层裁剪。 */
+.zx-appdock-tip {
+  position: fixed;
+  z-index: 9999;
   padding: 0.25rem 0.55rem;
   max-width: 12rem;
   white-space: nowrap;
@@ -4794,16 +4813,27 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   border: 1px solid var(--line-strong);
   border-radius: 6px;
   box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.9);
-  opacity: 0;
-  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  animation: zx-appdock-tip-in 0.13s ease;
 }
 
-.zx-appdock-item:hover::after,
-.zx-appdock-item:focus-visible::after {
-  opacity: 1;
-  visibility: visible;
+/* 桌面:竖排,弹在图标左侧、垂直居中 */
+.zx-appdock-tip[data-side='left'] {
+  transform: translate(-100%, -50%);
+}
+
+/* 窄屏:横排,弹在图标上方、水平居中 */
+.zx-appdock-tip[data-side='top'] {
+  transform: translate(-50%, -100%);
+}
+
+@keyframes zx-appdock-tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* 分组分隔线 */
@@ -4849,10 +4879,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   border-color: var(--accent);
 }
 
-/* 拖拽中把提示气泡收起来,免得它跟着挡住落点 */
-.zx-appdock[data-dragging-active] .zx-appdock-item::after {
-  display: none;
-}
+/* 拖拽中的提示由 JS 收起(气泡在 body 上,不在这棵树里,无法用 CSS 选中) */
 
 /* 恢复默认顺序:只在访客真的改过顺序时才出现,平时不占地方 */
 .zx-appdock-reset {
@@ -4953,14 +4980,7 @@ html[data-apps='1'] .zxchat {
     margin-left: 0.2rem;
   }
 
-  /* 提示改为向上弹 */
-  .zx-appdock-item::after {
-    right: auto;
-    left: 50%;
-    top: auto;
-    bottom: calc(100% + 8px);
-    transform: translateX(-50%);
-  }
+  /* 提示朝向(向上)改由 JS 的 data-side='top' 决定,见 .zx-appdock-tip */
 
   .zx-appdock-sep {
     width: 1px;

@@ -5,18 +5,19 @@ import { PROJECTS, normalizeUrl, isExternalUrl, type Project } from '../content.
 import { Section } from './Section.js'
 import { trackEvent } from './track.js'
 
-/** 亮点字号的最小缩放比;低于此值不再缩小,改由省略号兜底 */
+/** 亮点字号的最小缩放比;缩到该值仍放不下时改为换行(不用省略号) */
 const HL_MIN_SCALE = 0.7
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
 /**
- * 亮点(指标)行:始终保持**一行**、按卡片可用宽度自动缩放字号。
+ * 亮点(指标)行:优先保持**一行**、按卡片可用宽度自动缩放字号;缩到下限仍放不下
+ * 就整块**换行**(不使用省略号)。
  *
- * 纯 CSS 做不到"一行且不断字":中文的 min-content 只有一个字宽,flex 会把
- * 每个指标压扁后逐字断行;而卡片可用宽 = 卡片宽 − 内边距(含常数),字号随
- * 视口缩放也追不平,窄卡片仍会溢出。
+ * 纯 CSS 做不到"一行且不断字":中文的 min-content 只有一个字宽,flex 会把每个指标
+ * 压扁后逐字断行;而卡片可用宽 = 卡片宽 − 内边距(含常数),字号随视口缩放也追不平。
  * 这里直接量:把值/标签的 `scrollWidth`(自然宽,不受 flex 收缩影响)与间距相加,
- * 与行宽相比得到缩放比写进 `--hl-scale`,字号与间距同步缩放,自然保持一行。
+ * 与行宽相比得到缩放比写进 `--hl-scale`,字号与间距同步缩放,自然保持一行;
+ * 若所需缩放低于 HL_MIN_SCALE,就退回下限字号并加 `.is-wrap` 让指标换行。
  * 卡片宽度任何变化(换列数 / 窗口缩放 / 应用栏开关)由 ResizeObserver 重算。
  */
 function HighlightRow({ items }: { items: NonNullable<Project['highlights']> }) {
@@ -27,6 +28,7 @@ function HighlightRow({ items }: { items: NonNullable<Project['highlights']> }) 
     if (!row) return
     const kids = Array.from(row.children) as HTMLElement[]
     if (kids.length === 0) return
+    row.classList.remove('is-wrap')
     row.style.setProperty('--hl-scale', '1')
     const gap = parseFloat(getComputedStyle(row).columnGap) || 0
     const natural =
@@ -36,10 +38,16 @@ function HighlightRow({ items }: { items: NonNullable<Project['highlights']> }) 
         return sum + Math.max(v, l)
       }, 0) +
       gap * (kids.length - 1)
-    const avail = row.clientWidth
-    if (natural > 0 && avail > 0) {
-      const scale = Math.max(HL_MIN_SCALE, Math.min(1, avail / natural))
-      row.style.setProperty('--hl-scale', String(scale))
+    // 减 1px 留余量,避免亚像素舍入导致溢出
+    const avail = row.clientWidth - 1
+    if (natural <= 0 || avail <= 0) return
+    const scale = avail / natural
+    if (scale >= HL_MIN_SCALE) {
+      row.style.setProperty('--hl-scale', String(Math.min(1, scale)))
+    } else {
+      // 缩到下限仍放不下:保持下限字号,改为整块换行
+      row.style.setProperty('--hl-scale', String(HL_MIN_SCALE))
+      row.classList.add('is-wrap')
     }
   }
 
