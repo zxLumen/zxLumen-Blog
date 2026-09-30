@@ -38,7 +38,7 @@ export function useAppPanel(): AppPanelApi | null {
 }
 
 const RECT_KEY = 'zx.apppanel.rect'
-const DEFAULT_W = 580
+const DEFAULT_W = 720
 const DEFAULT_H = 680
 const MIN_W = 320
 const MIN_H = 300
