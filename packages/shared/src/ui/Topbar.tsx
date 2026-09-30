@@ -64,7 +64,8 @@ export function Topbar({
     if (p === '/') {
       for (const id of sectionIds) {
         const el = document.getElementById(id)
-        if (el && el.getBoundingClientRect().top <= 130) hash = '#' + id
+        const line = lineRef.current
+        if (el && el.getBoundingClientRect().top <= line) hash = '#' + id
       }
     }
     setActiveHash(hash)
@@ -72,6 +73,14 @@ export function Topbar({
   }, [sectionIds, pathnameProp, setNavAttr])
 
   const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+
+  /** 顶栏实测高度,用作滚动高亮的判定线。
+   *  原先写死 130。改实测后须注意判定线不能只取顶栏高:区块带
+   *  scroll-margin-top: 72px,跳转后区块顶边停在 72px,若判定线 < 72,
+   *  上一区块(顶边同样在判定线之上)会反过来被选中 —— 表现为导航高亮整体错一位。
+   *  故取 max(顶栏高, scroll-margin-top),两者都从 DOM 实测,不再写死。 */
+  const barRef = useRef<HTMLElement | null>(null)
+  const lineRef = useRef(130)
 
   // 路由变化后(含客户端导航):滚动到 hash 或顶部;先用 URL hash 定高亮,避免先闪 home
   useIsoLayoutEffect(() => {
@@ -92,10 +101,29 @@ export function Topbar({
 
   useEffect(() => {
     let raf = 0
+    // 判定线 = max(顶栏实测高, 区块 scroll-margin-top)。两者都随宽度/布局变化
+    // (顶栏窄屏换行后约 138px、宽屏 58px;scroll-margin-top 固定 72px),
+    // 每次布局变化都要重新量,否则判定线会失准。
+    const measure = () => {
+      const barH = barRef.current?.offsetHeight ?? 0
+      let margin = 0
+      for (const el of document.querySelectorAll<HTMLElement>('[id]')) {
+        const v = parseFloat(getComputedStyle(el).scrollMarginTop)
+        if (Number.isFinite(v) && v > 0) { margin = v; break }
+      }
+      // +1px 余量:scrollIntoView 会把区块顶边停在 scroll-margin-top 上,而落点是
+      // 分数滚动偏移,rect.top 常为 72.00000000000001。若判定线恰为 72,
+      // `<=` 因浮点误差判假,导航高亮整体错一位(实测桌面宽度必现、窄屏因
+      // 判定线被顶栏高拉高而幸免)。留 1px 即可吸收。
+      const line = Math.max(barH, margin + 1)
+      if (line > 0) lineRef.current = line
+    }
+    measure()
     const onScroll = () => {
       if (raf) return
       raf = requestAnimationFrame(() => {
         raf = 0
+        measure()
         compute()
       })
     }
@@ -154,7 +182,7 @@ export function Topbar({
   const linkExtra = link ? { scroll: false } : {}
 
   return (
-    <header className="zx-topbar">
+    <header className="zx-topbar" ref={barRef}>
       <div className="zx-topbar-in">
         <Comp className="zx-logo" href="/" onClick={(e) => onNavClick(e, '/')} {...linkExtra}>
           <span className="z">❯</span> {shell ?? PROFILE.shell}

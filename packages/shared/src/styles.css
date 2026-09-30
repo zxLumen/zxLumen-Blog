@@ -621,6 +621,11 @@ pre {
   top: 0;
   z-index: 200;
   display: flex;
+  /* 刘海屏(配合 layout.tsx 的 viewportFit:cover):顶栏是 sticky 且背景不透明,
+     不加这一条内容会整排埋进刘海/灵动岛里。左右一并留出,横屏时避开刘海。 */
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   align-items: center;
   gap: 1.25rem;
   /* 横向内边距交给 .zx-topbar-in:若外层带 padding,居中区域会被压缩 gutter 宽度,
@@ -2216,6 +2221,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   border-top: 1px solid var(--line);
   /* 同 .zx-topbar:横向内边距交给 .zx-footer-in,边框仍铺满整宽 */
   padding: 1.4rem 0;
+  /* home 指示条留白 */
+  padding-bottom: calc(1.4rem + env(safe-area-inset-bottom));
   margin-top: 2rem;
 }
 
@@ -3501,7 +3508,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 .zx-toast {
   position: fixed;
   left: 50%;
-  bottom: 1.4rem;
+  bottom: calc(1.4rem + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 500;
   padding: 0.6rem 1rem;
@@ -4312,7 +4319,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 .zxchat-fab {
   position: fixed;
   right: 20px;
-  bottom: 104px;
+  /* 避开 home 指示条 */
+  bottom: calc(104px + env(safe-area-inset-bottom));
   z-index: 350;
   width: 52px;
   height: 52px;
@@ -5017,21 +5025,21 @@ html[data-apps='1'] .zxchat {
   .zx-statswidget-btn {
     top: auto;
     right: auto;
-    bottom: 1.1rem;
+    bottom: calc(1.1rem + env(safe-area-inset-bottom));
     left: 1rem;
   }
 
   .zx-statuswidget {
     top: auto;
     right: auto;
-    bottom: 3.25rem;
+    bottom: calc(3.25rem + env(safe-area-inset-bottom));
     left: 1rem;
   }
 
   .zx-statswidget-pop {
     top: auto;
     right: auto;
-    bottom: 5.4rem;
+    bottom: calc(5.4rem + env(safe-area-inset-bottom));
     left: 1rem;
   }
 }

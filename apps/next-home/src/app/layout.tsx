@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import "@zx/shared/styles.css";
 import {
@@ -23,6 +23,20 @@ export async function generateMetadata(): Promise<Metadata> {
     keywords: SITE_META.keywords,
   };
 }
+
+/**
+ * viewportFit: "cover" —— 配合样式里的 env(safe-area-inset-*),让页面延伸到
+ * 刘海/圆角区域,再由 safe-area 内边距把内容推回可视区;缺了它 iOS 会把整页
+ * 塞进"安全区",底部 fixed 悬浮件贴不上 home 指示条。
+ * 另:不要加 user-scalable=no,会禁用无障碍缩放。
+ * themeColor 取默认主题(terminal)的 --bg;14 个主题均为深色,状态栏不会出现割裂。
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#040b07",
+};
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const admin = await isAdmin();
