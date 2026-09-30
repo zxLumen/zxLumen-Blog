@@ -623,7 +623,9 @@ pre {
   display: flex;
   align-items: center;
   gap: 1.25rem;
-  padding: 0.72rem 1.25rem;
+  /* 横向内边距交给 .zx-topbar-in:若外层带 padding,居中区域会被压缩 gutter 宽度,
+     导致顶栏内容比正文右移一个 gutter。背景/边框仍由本层铺满整宽。 */
+  padding: 0.72rem 0;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg) 76%, transparent);
   backdrop-filter: blur(12px);
@@ -634,6 +636,7 @@ pre {
 .zx-topbar-in {
   max-width: var(--zx-max);
   margin-inline: auto;
+  padding-inline: var(--zx-gutter);
   width: 100%;
   display: flex;
   align-items: center;
@@ -2211,13 +2214,15 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 .zx-footer {
   border-top: 1px solid var(--line);
-  padding: 1.4rem 1.25rem;
+  /* 同 .zx-topbar:横向内边距交给 .zx-footer-in,边框仍铺满整宽 */
+  padding: 1.4rem 0;
   margin-top: 2rem;
 }
 
 .zx-footer-in {
   max-width: var(--zx-max);
   margin-inline: auto;
+  padding-inline: var(--zx-gutter);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2320,8 +2325,11 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   gap: 0.3rem;
 }
 
-[data-layout='centered'] .zx-section .zx-container {
-  max-width: 860px;
+/* 窄栏靠收窄 --zx-max 实现,这样 hero / 各区块 / 顶栏 / 页脚共用同一宽度基准。
+   (原先只收窄 .zx-section .zx-container,导致 hero 与区块宽度不一致,
+    顶栏与页脚也仍是 1120px,大屏上整体错位 130~150px。) */
+[data-layout='centered'] {
+  --zx-max: 860px;
 }
 
 /* ---------- 布局:sidebar ---------- */
@@ -2446,8 +2454,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   grid-template-columns: 1fr;
 }
 
-[data-layout='magazine'] .zx-section .zx-container {
-  max-width: 900px;
+[data-layout='magazine'] {
+  --zx-max: 900px;
 }
 
 [data-layout='magazine'] .zx-sec-head {
@@ -2471,9 +2479,15 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 /* ---------- 布局:fullbleed ---------- */
 
+/* 满宽的观感来自 .zx-section 的边框与底色(在容器之外),容器只管内容宽度。
+   留白写成变量,顶栏/页脚继承同源值,避免窄屏下正文与导航差出一个 5vw-1.25rem 的错位。 */
+[data-layout='fullbleed'] {
+  --zx-gutter: clamp(1.25rem, 5vw, 5rem);
+}
+
 [data-layout='fullbleed'] .zx-container {
   max-width: none;
-  padding-inline: clamp(1.25rem, 5vw, 5rem);
+  padding-inline: var(--zx-gutter);
 }
 
 [data-layout='fullbleed'] .zx-hero {
@@ -2721,6 +2735,153 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
   [data-layout='window'] body {
     padding: 8px;
+  }
+}
+
+/* ---------- 响应式:大屏分档(≥1440 / ≥1920) ----------
+   原先 --zx-max 固定 1120px,视口超过 ~1136px 之后内容完全冻结:
+   2560px 屏每侧空 740px、3440px 空 1160px,像"没做完"。
+   这里按布局性质分档:
+   - 阅读型(classic / sidebar / window / hud)小幅放宽,行宽仍舒适
+   - 窄栏型(centered / magazine)只微增,保住排版张力
+   - 密度型(compact)放宽最多,宽屏正好发挥密排优势
+   - 展示型(showcase / bento / fullbleed)大幅放宽,让既有栅格真正展开
+   字号同理:原有 clamp() 上限在 1440px 就到顶,这里统一提一档。 */
+
+@media (min-width: 1440px) {
+  :root {
+    --zx-gutter: clamp(1.5rem, 1.4vw, 3rem);
+  }
+
+  /* 阅读型(基线) */
+  :root,
+  [data-layout='classic'],
+  [data-layout='sidebar'],
+  [data-layout='window'],
+  [data-layout='hud'] {
+    --zx-max: 1280px;
+    --zx-max-vlog: 1680px;
+  }
+
+  /* 窄栏型:只微增,保持"窄栏感" */
+  [data-layout='centered'] {
+    --zx-max: 900px;
+  }
+
+  [data-layout='magazine'] {
+    --zx-max: 980px;
+  }
+
+  /* 密度型 */
+  [data-layout='compact'] {
+    --zx-max: 1440px;
+  }
+
+  /* 展示型 */
+  [data-layout='showcase'] {
+    --zx-max: 1680px;
+  }
+
+  [data-layout='bento'] {
+    --zx-max: 1760px;
+  }
+
+  /* fullbleed 的"全宽"观感来自 .zx-section 的边框与 nth-child 背景(在容器之外),
+     所以给容器封顶不会损失任何满宽效果,却能把 2400px 的行长收回来。
+     改 --zx-max(而非只写死容器宽度)是为了让顶栏与页脚一并通栏,否则会出现新错位。 */
+  [data-layout='fullbleed'] {
+    --zx-max: 1760px;
+    /* 留白继续按视口放大,不能被通用 --zx-gutter 压回 24px,否则失去满宽感 */
+    --zx-gutter: clamp(2rem, 3vw, 5rem);
+  }
+
+  [data-layout='fullbleed'] .zx-container {
+    max-width: var(--zx-max);
+  }
+
+  /* 字号整体提一档(原上限在 1440px 已到顶) */
+  .zx-hero {
+    padding: clamp(4rem, 8vh, 7rem) 0 clamp(2.5rem, 6vh, 4.5rem);
+  }
+
+  .zx-hero h1 {
+    font-size: clamp(3.5rem, 4.2vw, 4.5rem);
+  }
+
+  .zx-section {
+    padding: clamp(4.5rem, 6vh, 6.5rem) 0;
+  }
+
+  .zx-sec-title {
+    font-size: clamp(2rem, 1.6vw, 2.5rem);
+  }
+
+  /* bento 的内层网格原先被强制单列,宽屏下每张卡会拉到近 1000px。
+     这里放开为自适应多列。 */
+  [data-layout='bento'] .zx-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  }
+}
+
+@media (min-width: 1920px) {
+  :root,
+  [data-layout='classic'],
+  [data-layout='sidebar'],
+  [data-layout='window'],
+  [data-layout='hud'] {
+    --zx-max: 1360px;
+  }
+
+  [data-layout='centered'] {
+    --zx-max: 960px;
+  }
+
+  [data-layout='magazine'] {
+    --zx-max: 1040px;
+  }
+
+  [data-layout='compact'] {
+    --zx-max: 1600px;
+  }
+
+  [data-layout='showcase'] {
+    --zx-max: 1920px;
+  }
+
+  [data-layout='bento'] {
+    --zx-max: 1920px;
+  }
+
+  [data-layout='fullbleed'] {
+    --zx-max: 1920px;
+  }
+
+  [data-layout='fullbleed'] .zx-container {
+    max-width: var(--zx-max);
+  }
+}
+
+/* 超宽屏(≥2560):再加一档,避免 3440px 屏上重演"两侧空 1160px"。
+   只放宽展示型与密度型,阅读型不再加宽以守住行长。 */
+@media (min-width: 2560px) {
+  [data-layout='compact'] {
+    --zx-max: 1760px;
+  }
+
+  [data-layout='showcase'] {
+    --zx-max: 2240px;
+  }
+
+  [data-layout='bento'] {
+    --zx-max: 2240px;
+  }
+
+  [data-layout='fullbleed'] {
+    --zx-max: 2240px;
+  }
+
+  [data-layout='fullbleed'] .zx-container {
+    max-width: var(--zx-max);
   }
 }
 
