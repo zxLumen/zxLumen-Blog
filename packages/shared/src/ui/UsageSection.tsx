@@ -5,7 +5,7 @@ import { dailyAggregate, genMockUsage, modelAggregate } from '../mock.js'
 import { tokensOf } from '../pricing.js'
 import type { UsageRow } from '../schema.js'
 import { fmtCompact, fmtCny, fmtUsd, fmtDate, fmtInt } from '../format.js'
-import { DEFAULT_SEL, defaultRangeSel, writeUsageSelCookie } from '../usage-sel.js'
+import { DEFAULT_SEL, DATA_SOURCES, defaultRangeSel, writeUsageSelCookie } from '../usage-sel.js'
 import type { DataSource, Range, RangeSel, SourceAvailability, UsageSel } from '../usage-sel.js'
 import { Section } from './Section.js'
 import {
@@ -45,6 +45,8 @@ export function UsageSection({
   const [avail, setAvail] = useState<Record<DataSource, boolean> | null>(
     availableSources ? pickAvail(availableSources) : null,
   )
+  // admin 配置的数据源展示顺序(缺省 = 出厂默认序)
+  const [srcOrder, setSrcOrder] = useState<DataSource[] | null>(availableSources?.order ?? null)
   // 各源最近一次拉取错误(仅用于 tab 上的报错角标)
   const [srcErrors, setSrcErrors] = useState<Partial<Record<DataSource, string>>>(availableSources?.errors ?? {})
   useEffect(() => {
@@ -56,6 +58,7 @@ export function UsageSection({
         if (alive && d) {
           setAvail(pickAvail(d))
           setSrcErrors(d.errors ?? {})
+          if (d.order) setSrcOrder(d.order)
         }
       })
       .catch(() => {
@@ -65,15 +68,15 @@ export function UsageSection({
       alive = false
     }
   }, [availableSources])
-  // 仅显示可用的数据源(单环境:全部放行)
-  const sources = useMemo(
-    () =>
-      SOURCES.filter((s) => {
-        if (avail && !avail[s.key]) return false
-        return true
-      }),
-    [avail],
-  )
+  // 仅显示可用的数据源(单环境:全部放行),顺序 = admin 配置的展示顺序(缺省出厂序)
+  const sources = useMemo(() => {
+    const ordered = (srcOrder ?? DATA_SOURCES)
+      .map((k) => SOURCES.find((s) => s.key === k))
+      .filter((s): s is (typeof SOURCES)[number] => !!s)
+    // 兜底:配置缺项/新增源时,把遗漏的按出厂序补在末尾
+    const rest = SOURCES.filter((s) => !ordered.some((o) => o.key === s.key))
+    return [...ordered, ...rest].filter((s) => (avail ? avail[s.key] : true))
+  }, [avail, srcOrder])
   // 当前源若被隐藏,回退到默认(DeepSeek)
   useEffect(() => {
     if (avail && !avail[dataSrc] && sources.length > 0 && dataSrc !== sources[0].key) {

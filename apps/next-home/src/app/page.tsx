@@ -8,6 +8,7 @@ import { effectiveCid, isMockActive, MOCK_COOKIE } from "@/lib/clientid";
 import { getAdminNick, getClientContacts } from "@/lib/settings";
 import { fetchUsage } from "@/lib/deepseek";
 import { getSourceAvailability } from "@/lib/usage-sources";
+import { getUsageSourceOrder } from "@/lib/usage-source-order";
 import { getRuntimeContent } from "@zx/shared/server";
 import { getVisibleProjects } from "@/lib/projects-config";
 import { getVisibleVlogSeries, pickRandomVlogStart } from "@/lib/vlog-config";
@@ -41,7 +42,7 @@ export default async function Home() {
   const initialSel: UsageSel = parseUsageSel((await cookies()).get(USAGE_SEL_COOKIE)?.value ?? "");
 
   // 各数据源可用性(已配置 + 近30天有数据):SSR 决定显示哪些源,避免隐藏源闪现
-  const availableSources = await getSourceAvailability();
+  const availableSources = { ...(await getSourceAvailability()), order: getUsageSourceOrder() };
 
   // 首页统计聚合(访客/留言/事件)
   const stats = db.stats();

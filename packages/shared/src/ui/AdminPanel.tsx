@@ -5,6 +5,8 @@ import type { ArchivedCommentRow, CommentRow, PagedComments, StatsResult, VlogSe
 import { fmtDateTime, fmtInt } from '../format.js'
 import { PROJECTS, type Project } from '../content.js'
 import { Pagination } from './Pagination.js'
+import { SOURCES } from './usage/constants.js'
+import type { DataSource } from '../usage-sel.js'
 import { AdminProjectsPanel } from './admin/AdminProjectsPanel.js'
 import { AdminVlogPanel } from './admin/AdminVlogPanel.js'
 import { AdminAppsPanel } from './admin/AdminAppsPanel.js'
@@ -86,6 +88,43 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
   const [zpUrl, setZpUrl] = useState('')
   const [zpKey, setZpKey] = useState('')
   const [zpBusy, setZpBusy] = useState(false)
+  // 前端 Token用量「数据源展示顺序」(admin 可调 ↑/↓)
+  const [srcOrder, setSrcOrder] = useState<DataSource[] | null>(null)
+  const [srcOrderBusy, setSrcOrderBusy] = useState(false)
+  // 展示用顺序:未加载完成/未配置时回退出厂默认序
+  const orderItems: DataSource[] = srcOrder ?? SOURCES.map((s) => s.key)
+
+  const moveSource = (i: number, dir: -1 | 1) => {
+    const j = i + dir
+    if (j < 0 || j >= orderItems.length || !srcOrder) return
+    setSrcOrder((list) => {
+      if (!list) return list
+      const next = [...list]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
+
+  async function saveSourceOrder() {
+    if (!srcOrder || srcOrder.length === 0) return
+    setSrcOrderBusy(true)
+    setMsg(null)
+    try {
+      const res = await adminFetch('/api/admin/usage-source-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: srcOrder }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string; order?: DataSource[] }
+      if (!res.ok) throw new Error(d.error || '保存失败')
+      if (d.order && d.order.length > 0) setSrcOrder(d.order)
+      setMsg({ kind: 'ok', text: '数据源顺序已保存,首页即生效' })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '保存失败' })
+    } finally {
+      setSrcOrderBusy(false)
+    }
+  }
   // 刷新/新标签页都停留在上次 Tab(localStorage;SSR 首帧不渲染 tabs,无 hydration 冲突)
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === 'undefined') return 'comments'
@@ -224,7 +263,7 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
         return null
       }
     }
-    const [s, q, d, o, z] = await Promise.all([
+    const [s, q, d, o, z, so] = await Promise.all([
       getJson<{
         nick?: string
         contacts?: { email?: string; wechat?: string; phone?: string }
@@ -233,6 +272,7 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
       getJson<DsStatus>('/api/admin/deepseek'),
       getJson<OcStatus>('/api/admin/opencode'),
       getJson<ZhipuStatus>('/api/admin/zhipu'),
+      getJson<{ order?: DataSource[] }>('/api/admin/usage-source-order'),
     ])
     if (s) {
       setNick(s.nick ?? '')
@@ -247,6 +287,7 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
       setZp(z)
       if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
     }
+    if (so?.order) setSrcOrder(so.order)
   }, [applyOc])
 
   async function loadDeepseek() {
@@ -834,6 +875,58 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
           </label>
           <span className="zx-muted zx-mono" style={{ fontSize: '0.7rem' }}>
             PNG/JPEG/WebP · ≤800KB · 上传即生效
+          </span>
+        </div>
+      </div>
+      )}
+
+      {tab === 'token' && (
+      <div className="zx-panel" style={{ marginBottom: '1rem' }}>
+        <h3>
+          数据源顺序 <span>前端「Token用量」供应商 tab 的展示顺序</span>
+        </h3>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
+          用 ↑/↓ 调整 DeepSeek / OpenCode / 智谱 的顺序,保存后首页即生效(无需重建)。未设置时按出厂默认序。
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          {orderItems.map((k, i) => {
+            const meta = SOURCES.find((s) => s.key === k)
+            return (
+              <div key={k} style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span className="zx-muted zx-mono" style={{ fontSize: '0.7rem', minWidth: '1.4rem' }}>#{i + 1}</span>
+                <span className="zx-mono" style={{ fontSize: '0.78rem', minWidth: '5.5rem' }}>{meta?.label ?? k}</span>
+                <span className="zx-muted zx-mono" style={{ fontSize: '0.68rem', flex: 1 }}>{meta?.hint ?? ''}</span>
+                <button
+                  className="zx-btn zx-btn-sm zx-btn-ghost"
+                  disabled={i === 0 || srcOrderBusy}
+                  onClick={() => moveSource(i, -1)}
+                  title="上移"
+                >
+                  ↑ 上移
+                </button>
+                <button
+                  className="zx-btn zx-btn-sm zx-btn-ghost"
+                  disabled={i === orderItems.length - 1 || srcOrderBusy}
+                  onClick={() => moveSource(i, 1)}
+                  title="下移"
+                >
+                  ↓ 下移
+                </button>
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+          <button
+            className="zx-btn zx-btn-sm zx-btn-primary"
+            disabled={srcOrderBusy || !srcOrder}
+            onClick={() => void saveSourceOrder()}
+          >
+            {srcOrderBusy ? '保存中…' : '保存顺序'}
+          </button>
+          <span className="zx-muted zx-mono" style={{ fontSize: '0.68rem' }}>
+            当前顺序:{orderItems.map((k) => SOURCES.find((s) => s.key === k)?.label ?? k).join(' → ')}
+            {!srcOrder && ' (未自定义)'}
           </span>
         </div>
       </div>

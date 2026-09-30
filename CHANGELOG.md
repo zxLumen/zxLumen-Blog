@@ -16,6 +16,8 @@
   - **「配置成空数组」= 真的零应用**:未配置过才回退出厂默认;一旦保存过就以配置为准(含空),所以能整体撤掉应用栏。
   - 部署:`docker-compose.yml` 加 `./site-content/apps:/srv/site/apps` 可写子挂载;**首次上线**需在服务器 `sudo chown -R 10001:10001 ~/zxLumen-Blog/docker/site-content/apps`(之后换图不需要)。本地点 `apps/next-home/public/apps` 软链以对齐线上。
 
+- **token用量「数据源顺序」可调**:admin「Token用量」新增「数据源顺序」面板,可 ↑/↓ 调整 **DeepSeek / OpenCode / 智谱** 的展示顺序并保存;首页 Token用量 的供应商 tab 按该顺序渲染(未设置时保持出厂默认序 DeepSeek→OpenCode→智谱)。顺序存 `meta.usage_source_order`,保存即生效、无需重建。
+
 - **`cover:push`:线上兜底首帧一条命令补齐**:`npm run cover:push` 读线上库算出缺哪些横屏视频,本机 Chrome 现抓抖音首帧(`cover:vlog` 新增 `--vids` 复用生成能力、不依赖本地库),再经 SSH(scp + `sudo install -o 10001`)推到服务器封面目录,末尾抽查线上可访问性;`--dry-run` 只列清单。新增视频后跑这一条即可,不用再手动 `scp`。SSH 目标配在 gitignore 的 `packages/shared/.env.local`(`ZX_SSH`)。
 
 - **admin「机器人 → 灵魂蒸馏」corpus 列表改版**:长列表按状态分组成「出错 / 待处理 / 已入库」三个可折叠区块(+数量角标,已入库默认折叠,看上万个文件不卡屏),新增**文件名筛选**;每组每行**点击即可弹出查看原文**(新接口 `GET /api/admin/chatbot/corpus?name=…`,traversal 安全,弹层内可直接删除);类别下拉/按原文放行/恢复脱敏/删除收进行尾,超长文件名省略号截断 + 悬停看全名。待上传文件也改为**计数 + 前 8 个文件名 chips** + 「清空」按钮,不再把几百个文件名拼成长串
