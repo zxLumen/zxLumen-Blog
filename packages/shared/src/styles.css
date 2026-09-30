@@ -400,7 +400,7 @@ html {
 
 body {
   margin: 0;
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: clip;
   color: var(--fg);
   font-family: var(--font-body);
@@ -589,7 +589,7 @@ pre {
 }
 
 .zx-app {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -2371,8 +2371,12 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 /* ---------- 布局:window ---------- */
 
+[data-layout='window'] {
+  --zx-window-pad: 22px;
+}
+
 [data-layout='window'] body {
-  padding: 22px;
+  padding: var(--zx-window-pad);
 }
 
 /* 竖栏落在 body 的 22px 外框内,上边让开模拟标题栏 */
@@ -2383,10 +2387,15 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 [data-layout='window'] .zx-app {
-  min-height: calc(100vh - 44px);
+  /* 原 calc(100vh - 44px) 把 22px*2 写死,而窄屏下 padding 改成 8px,
+     底部凭空多出 28px 空白。改由 --zx-window-pad 驱动。 */
+  min-height: calc(100dvh - var(--zx-window-pad) * 2);
   border: 1px solid var(--line-strong);
   border-radius: 12px;
-  overflow: hidden;
+  /* hidden 会让 .zx-app 变成滚动容器,顶栏 position:sticky 随之失效(实测滚 1500px
+     后顶栏 top 变成 -1441,直接跟着滚走)。clip 同样能裁掉 ::before 伪窗口栏的圆角角外,
+     但不创建滚动容器,sticky 恢复。 */
+  overflow: clip;
   box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85);
   background: color-mix(in srgb, var(--bg) 92%, transparent);
 }
@@ -2491,7 +2500,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 [data-layout='fullbleed'] .zx-hero {
-  min-height: 84vh;
+  /* 84vh 在 2560x1440 上是 1209px,远超内容所需;同时 vh 不随移动端地址栏收缩。 */
+  min-height: min(84dvh, 620px);
   display: flex;
   align-items: center;
 }
@@ -2675,6 +2685,15 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   animation: zx-rise 0.6s ease both;
 }
 
+/* 触屏设备上 background-attachment: fixed 会被 iOS Safari 直接忽略(背景随内容滚走),
+   在安卓 Chrome 上则要等首屏合成后才生效、期间背景空白,滚动也更吃力。
+   指针为 coarse(触屏)时统一退回 scroll,桌面小窗仍保留 fixed 观感。 */
+@media (pointer: coarse), (max-width: 820px) {
+  body {
+    background-attachment: scroll;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
@@ -2698,7 +2717,10 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
     grid-template-columns: 1fr;
   }
 
-  .zx-topbar {
+  /* 换行必须加在 .zx-topbar-in 上:它是真正的 flex 容器(.zx-topbar 只有它一个子元素,
+     换行加在外层从不生效)。原先因此没换行,导航被挤到 ~102px 宽、内部自行换行堆到
+     222px 高,顶栏在 375px 屏上高达 246px(占屏 37%),并压住右上角两个悬浮件。 */
+  .zx-topbar-in {
     flex-wrap: wrap;
   }
 
@@ -2707,6 +2729,19 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
     width: 100%;
     justify-content: flex-start;
   }
+
+  /* 键盘快捷键提示在触屏上没有意义(kbd 无法输入),却固定占住右下角
+     218x104 —— 约等于 1/12 屏。窄屏直接不渲染。 */
+  .zx-help {
+    display: none;
+  }
+
+  /* 每个 workspace 的 3 列(5 小时 / 本周 / 本月)在 320px 下每列仅 ~93px,
+     数字与重置时间挤在一起。窄屏改 1 列,标签与数值各自成行更好读。 */
+  .zx-quota.is-fixed3 {
+    grid-template-columns: 1fr;
+  }
+
 
   [data-layout='sidebar'] .zx-topbar {
     position: sticky;
@@ -2733,8 +2768,10 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
     margin-left: 0;
   }
 
-  [data-layout='window'] body {
-    padding: 8px;
+  /* 同步收窄 --zx-window-pad,不能只改 padding:body 上 padding 变了、
+     而 .zx-app 的 min-height 仍按 22px 变量算,底部会凭空多出 28px。 */
+  [data-layout='window'] {
+    --zx-window-pad: 8px;
   }
 }
 
@@ -4971,5 +5008,30 @@ html[data-apps='1'] .zxchat {
   html[data-apps='1'] .zx-statswidget-pop,
   html[data-apps='1'] .zx-statuswidget {
     right: 1rem;
+  }
+}
+
+/* 悬浮件窄屏让位:置于文件末尾,因为这三个元素的定位基础规则定义在 3566/3809/3609 行,
+   位于上面的 @media (max-width: 820px) 之后;同优先级下源顺序在后者胜,放在前面会被覆盖。 */
+@media (max-width: 820px) {
+  .zx-statswidget-btn {
+    top: auto;
+    right: auto;
+    bottom: 1.1rem;
+    left: 1rem;
+  }
+
+  .zx-statuswidget {
+    top: auto;
+    right: auto;
+    bottom: 3.25rem;
+    left: 1rem;
+  }
+
+  .zx-statswidget-pop {
+    top: auto;
+    right: auto;
+    bottom: 5.4rem;
+    left: 1rem;
   }
 }
