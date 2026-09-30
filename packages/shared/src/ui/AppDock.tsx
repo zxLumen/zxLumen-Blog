@@ -1,6 +1,7 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import type { AppItem } from '../schema.js'
 import { isSpaRoute, normalizeUrl } from '../content.js'
 import type { LinkComponent } from './types.js'
@@ -46,6 +47,8 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
   /** 访客自定义的 id 顺序;null = 还没读 / 用默认 */
   const [order, setOrder] = useState<string[] | null>(null)
   const [customized, setCustomized] = useState(false)
+  /** 悬停/聚焦时的名称气泡。位置在事件里按图标 rect 现算,portal 到 body —— 见下方注释 */
+  const [tip, setTip] = useState<{ text: string; top: number; left: number; side: 'left' | 'top' } | null>(null)
 
   const storageKey = appsOrderKey(mockId)
 
@@ -110,6 +113,39 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
     disabled: list.length < 2,
   })
 
+  /**
+   * 名称气泡:不能画在 item 的 ::after 里 —— 应用栏是滚动容器(overflow-y:auto),
+   * CSS 会把 overflow-x 也算成 auto,气泡整个在 64px 栏外、被裁掉,永远看不到。
+   * 所以 portal 到 body 用 position:fixed,位置按图标 rect 现算。
+   */
+  const showTip = useCallback(
+    (text: string, el: HTMLElement | null) => {
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setTip(
+        horizontal
+          ? { text, top: r.top - 8, left: r.left + r.width / 2, side: 'top' }
+          : { text, top: r.top + r.height / 2, left: r.left - 10, side: 'left' },
+      )
+    },
+    [horizontal],
+  )
+  const hideTip = useCallback(() => setTip(null), [])
+
+  // 拖动中收起:气泡会挡住落点,也免得跟着乱飘
+  useEffect(() => {
+    if (dragId) setTip(null)
+  }, [dragId])
+
+  // 应用栏自身滚动时图标会移位,旧坐标就错了 —— 收起,重新悬停即可
+  useEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    const onScroll = () => setTip(null)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
   // 只在真的和 admin 默认顺序不一样时,才显示「重置」——平时不占地方
   useEffect(() => {
     // 比的是**渲染出来的** idsKey,不是 localStorage 里的原始 order:归拢之后画面
@@ -169,6 +205,11 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
           ...handleProps(app.id),
           'data-dragging': dragId === app.id ? '' : undefined,
           'data-drop': drop?.targetId === app.id ? (drop.before ? 'before' : 'after') : undefined,
+          // 名称气泡(鼠标悬停 + 键盘聚焦都算)
+          onMouseEnter: (e: ReactMouseEvent) => showTip(app.name, e.currentTarget as HTMLElement),
+          onMouseLeave: hideTip,
+          onFocus: (e: ReactFocusEvent) => showTip(app.name, e.currentTarget as HTMLElement),
+          onBlur: hideTip,
           /**
            * <a href> 默认是可拖的:一动就触发浏览器原生 drag,随即给指针序列发
            * pointercancel,自建的拖拽当场断掉(鼠标也一样,不只是触屏)。必须关掉。
@@ -208,6 +249,19 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
           ↺
         </button>
       )}
+
+      {tip &&
+        createPortal(
+          <div
+            className="zx-appdock-tip"
+            role="tooltip"
+            data-side={tip.side}
+            style={{ top: tip.top, left: tip.left }}
+          >
+            {tip.text}
+          </div>,
+          document.body,
+        )}
     </nav>
   )
 }
