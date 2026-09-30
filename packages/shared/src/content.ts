@@ -59,6 +59,25 @@ export function isExternalUrl(url?: string): boolean {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(s)
 }
 
+/**
+ * 判断这个地址是否该交给 `next/link` 做**客户端导航** —— 仅限站内「路由」。
+ *
+ * 为什么站内链接不能一律走 next/link:`/resume.pdf` 是 Caddy 直接吐字节的静态
+ * 文件(Caddyfile 里 `handle /resume.pdf { file_server }`,应用内并没有对应路由),
+ * 拿它走客户端路由既拿不到 SPA 的好处,又把「打开方式:新标签页」静默吃掉 ——
+ * 访客点了简历留在当前页,而且是在浏览器里丢一个页面的行为。
+ * 外链、`mailto:`/`tel:`,以及末段带扩展名的站内资源,都不该走客户端路由。
+ */
+export function isSpaRoute(url?: string): boolean {
+  const s = (url ?? '').trim()
+  // 站内:`/`、`#`、`?` 开头。`//host/x` 是协议相对外链,以 `/` 开头但不是站内
+  if (s.startsWith('//') || !/^[/#?]/.test(s)) return false
+  // 先切掉 ?query 和 #hash,免得 /?f=a.pdf 这种被误判成静态文件
+  const path = s.split(/[?#]/, 1)[0]
+  const seg = path.slice(path.lastIndexOf('/') + 1)
+  return !/\.[a-z0-9]{1,8}$/i.test(seg)
+}
+
 export interface Profile {
   name: string
   handle: string

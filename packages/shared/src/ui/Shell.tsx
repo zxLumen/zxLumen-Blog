@@ -5,6 +5,8 @@ import { Topbar } from './Topbar.js'
 import { Footer } from './Footer.js'
 import { HelpHint } from './HelpHint.js'
 import { ChatWidget } from './ChatWidget.js'
+import { AppDock } from './AppDock.js'
+import type { AppItem } from '../schema.js'
 import type { Contacts, Profile } from '../content.js'
 import type { LayoutId } from '../theme.js'
 import type { LinkComponent, NavItem } from './types.js'
@@ -17,6 +19,8 @@ interface ShellProps {
   contacts?: Contacts
   /** 个人资料(服务端注入;缺省用占位默认) */
   profile?: Profile
+  /** 右侧应用栏条目(admin 配置;空数组 = 不渲染) */
+  apps?: AppItem[]
   /** 允许的主题 / 布局(admin 配置的放行集合) */
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
@@ -37,6 +41,7 @@ export function Shell({
   link,
   contacts,
   profile,
+  apps,
   allowedThemeIds,
   allowedLayoutIds,
   defaultTheme,
@@ -59,6 +64,7 @@ export function Shell({
         <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />
         <HelpHint />
         <ChatWidget />
+        <AppDock apps={apps} link={link} mockId={mockId} />
       </div>
     </PreferencesProvider>
   )

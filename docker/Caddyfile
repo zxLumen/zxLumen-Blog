@@ -45,6 +45,13 @@
 		file_server
 	}
 
+	# 右侧应用栏图标:/admin「应用」面板上传的 /apps/<id>.<ext>(浏览器端压到长边 256 的 PNG)
+	# 与本地 dev 同路径(本地由 apps/next-home/public/apps 软链提供)
+	handle /apps/* {
+		root * /srv/site
+		file_server
+	}
+
 	# 内部指标端点绝不对外暴露(仅 Alloy 经容器内网抓取;纵深防御)
 	handle /api/metrics* {
 		respond 404

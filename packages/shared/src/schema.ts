@@ -409,3 +409,29 @@ export interface VlogStart {
   series: number
   video: number
 }
+
+/** 打开方式:仅这两种已实现;`panel`(页内浮层)等后续再加,未知值一律按 newtab 处理 */
+export type AppOpenIn = 'newtab' | 'self'
+
+/** 右侧应用栏条目(admin 配置;整表覆盖,存 meta 键 apps_config) */
+export interface StoredApp {
+  id: string
+  /** 名称:hover 提示 + 无图标时的兜底首字 */
+  name: string
+  /** 目标地址;落库前已 `normalizeUrl`(裸域名补 https://,站内路径原样) */
+  url: string
+  /**
+   * 图标站内路径 `/apps/<id>.<ext>`(由 /admin 面板上传,落 docker/site-content/apps/)。
+   * 缺省时前端回退到 `name` 首字,所以**不需要写库**也能显示。
+   */
+  icon?: string
+  /** 打开方式:缺省 = newtab(留空/非法值一律按 newtab 处理) */
+  openIn?: AppOpenIn
+  /** 可选分组名:相邻同名之间自动插一条分隔线(纯展示,不影响行为) */
+  group?: string
+  /** true=在垃圾箱(前端不显示);缺省/false=正常 */
+  deleted?: boolean
+}
+
+/** 展示用应用条目(去掉 deleted) */
+export type AppItem = Omit<StoredApp, 'deleted'>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FLOAT_MARGIN, snapEdge } from './floating.js'
+import { FLOAT_MARGIN, maxX, rightGutter, snapEdge } from './floating.js'
 import { Sparkline, type SparkPoint } from './Sparkline.js'
 
 type Metric = 'cpu' | 'mem' | 'disk' | 'load'
@@ -95,12 +95,16 @@ export function StatusWidget() {
     }
   }, [])
 
+  // 恢复上次拖动位置(右侧扣掉应用栏,免得老位置压住它)
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(POS_KEY)
       if (!raw) return
       const p = JSON.parse(raw) as { x: number; y: number }
-      if (Number.isFinite(p?.x) && Number.isFinite(p?.y)) setPos({ x: p.x, y: p.y })
+      if (Number.isFinite(p?.x) && Number.isFinite(p?.y)) {
+        const w = ref.current?.offsetWidth ?? 120
+        setPos({ x: Math.min(Math.max(FLOAT_MARGIN, p.x), maxX(w)), y: p.y })
+      }
     } catch {
       /* ignore */
     }
@@ -122,7 +126,7 @@ export function StatusWidget() {
       const el = ref.current
       const w = el?.offsetWidth ?? 120
       const h = el?.offsetHeight ?? 28
-      const x = Math.min(Math.max(FLOAT_MARGIN, e.clientX - d.dx), window.innerWidth - w - FLOAT_MARGIN)
+      const x = Math.min(Math.max(FLOAT_MARGIN, e.clientX - d.dx), maxX(w))
       const y = Math.min(Math.max(FLOAT_MARGIN, e.clientY - d.dy), window.innerHeight - h - FLOAT_MARGIN)
       setPos({ x, y })
     }
@@ -136,7 +140,7 @@ export function StatusWidget() {
           const w = el?.offsetWidth ?? 120
           const h = el?.offsetHeight ?? 28
           const snapped = {
-            x: snapEdge(p.x, window.innerWidth - w - FLOAT_MARGIN),
+            x: snapEdge(p.x, window.innerWidth - w - FLOAT_MARGIN - rightGutter()),
             y: snapEdge(p.y, window.innerHeight - h - FLOAT_MARGIN),
           }
           try {

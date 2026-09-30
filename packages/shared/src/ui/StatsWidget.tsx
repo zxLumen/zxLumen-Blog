@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { StatsResult } from '../schema.js'
 import { fmtCompact } from '../format.js'
-import { FLOAT_MARGIN, snapEdge } from './floating.js'
+import { FLOAT_MARGIN, maxX, rightGutter, snapEdge } from './floating.js'
 import { useBarTooltip } from './BarTooltip.js'
 
 const POS_KEY = 'zx-stats-pos'
@@ -44,13 +44,16 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
     [],
   )
 
-  // 恢复上次拖动位置(限定在视口内)
+  // 恢复上次拖动位置(限定在视口内;右侧再扣掉应用栏,免得老位置压住它)
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(POS_KEY)
       if (!raw) return
       const p = JSON.parse(raw) as { x: number; y: number }
-      if (Number.isFinite(p?.x) && Number.isFinite(p?.y)) setPos({ x: p.x, y: p.y })
+      if (Number.isFinite(p?.x) && Number.isFinite(p?.y)) {
+        const w = btnRef.current?.offsetWidth ?? 120
+        setPos({ x: Math.min(Math.max(4, p.x), maxX(w, 4)), y: p.y })
+      }
     } catch {
       /* ignore */
     }
@@ -65,7 +68,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
       const el = btnRef.current
       const w = el?.offsetWidth ?? 120
       const h = el?.offsetHeight ?? 28
-      const x = Math.min(Math.max(4, e.clientX - d.dx), window.innerWidth - w - 4)
+      const x = Math.min(Math.max(4, e.clientX - d.dx), maxX(w, 4))
       const y = Math.min(Math.max(4, e.clientY - d.dy), window.innerHeight - h - 4)
       setPos({ x, y })
     }
@@ -79,7 +82,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
           const w = el?.offsetWidth ?? 120
           const h = el?.offsetHeight ?? 28
           const snapped = {
-            x: snapEdge(p.x, window.innerWidth - w - FLOAT_MARGIN),
+            x: snapEdge(p.x, window.innerWidth - w - FLOAT_MARGIN - rightGutter()),
             y: snapEdge(p.y, window.innerHeight - h - FLOAT_MARGIN),
           }
           try {
@@ -107,7 +110,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
     const width = Math.min(POP_W, window.innerWidth - 24)
     let left = r.right - width
     if (left < 12) left = 12
-    if (left + width > window.innerWidth - 12) left = window.innerWidth - width - 12
+    if (left + width > window.innerWidth - 12 - rightGutter()) left = window.innerWidth - width - 12 - rightGutter()
     let top = r.bottom + 8
     if (top + POP_H > window.innerHeight - 12) top = Math.max(12, r.top - POP_H - 8)
     setPopPos({ left, top })

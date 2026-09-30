@@ -25,6 +25,15 @@
   --ascii-border-left: 1px solid var(--line);
   --ascii-glow: none;
   --shadow: 0 0 0 1px var(--line), 0 22px 60px -34px rgba(0, 0, 0, 0.9);
+
+  /* ---------- 右侧应用栏(html[data-apps='1'] 时才占位) ---------- */
+  /* 桌面:右侧竖栏宽度;窄屏(≤820px)改为底部横条高度 */
+  --zx-dock-w: 64px;
+  --zx-dock-h: 68px;
+  /* 各布局可覆盖的边距内缩(window 布局有 body padding,需让开外框) */
+  --zx-dock-inset-r: 0px;
+  --zx-dock-inset-t: 0px;
+  --zx-dock-inset-b: 0px;
 }
 
 /* 兜底(未匹配到主题时) */
@@ -2344,6 +2353,13 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   padding: 22px;
 }
 
+/* 竖栏落在 body 的 22px 外框内,上边让开模拟标题栏 */
+[data-layout='window'] {
+  --zx-dock-inset-r: 22px;
+  --zx-dock-inset-t: 64px;
+  --zx-dock-inset-b: 22px;
+}
+
 [data-layout='window'] .zx-app {
   min-height: calc(100vh - 44px);
   border: 1px solid var(--line-strong);
@@ -4448,5 +4464,337 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   to {
     opacity: 1;
     transform: translateY(-50%);
+  }
+}
+
+/* ===========================================================================
+   右侧应用栏(macOS Dock 竖置版)
+   由 <html data-apps="1">(server 端按应用数量下发)决定是否渲染 / 占位,
+   所以首帧就有边距,不随内容高度抖动。窄屏见文末 @media。
+   =========================================================================== */
+
+.zx-appdock {
+  position: fixed;
+  top: var(--zx-dock-inset-t);
+  right: var(--zx-dock-inset-r);
+  bottom: var(--zx-dock-inset-b);
+  z-index: 380; /* 高于正文;低于 .zx-pop(400)与访客统计浮层(401) */
+  width: var(--zx-dock-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  /* 顶部让开固定顶栏(sidebar 布局下顶栏是整列高) */
+  padding: 4.4rem 0 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+  border-left: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background-color 0.35s ease, border-color 0.35s ease;
+}
+
+.zx-appdock::-webkit-scrollbar {
+  display: none;
+}
+
+.zx-appdock-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--fg-dim);
+  background: color-mix(in srgb, var(--bg-2) 78%, transparent);
+  border: 1px solid var(--line);
+  transition: color 0.18s, border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+
+.zx-appdock-item:hover,
+.zx-appdock-item:focus-visible {
+  color: var(--fg);
+  border-color: var(--line-strong);
+  transform: translateY(-3px) scale(1.06);
+  box-shadow: 0 12px 28px -14px rgba(0, 0, 0, 0.85);
+}
+
+.zx-appdock-item:active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+/* 图标与首字只是"画",所有交互交给外层 <a>。
+   顺带解决:图片天生可拖,在图标上按下会被浏览器判成"拖这张图",
+   随即 pointercancel,自建的拖拽就断了。draggable={false} 之外再加 pointer-events,
+   让命中目标恒为 <a>,不再取决于恰好点到图片还是首字。 */
+.zx-appdock-item img,
+.zx-appdock-item .zx-appdock-letter,
+.zx-appdock-item .zx-appdock-img {
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.zx-appdock-img {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+}
+
+/* 首字兜底与图片要叠在同一个格子里。
+   不写这一行的话 grid 会把两个子元素自动排成上下两行,图片被挤到 26px 容器外面。 */
+.zx-appdock-img > * {
+  grid-area: 1 / 1;
+}
+
+.zx-appdock-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.zx-appdock-letter {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--accent);
+  user-select: none;
+}
+
+/* hover 提示:桌面从左侧弹出 */
+.zx-appdock-item::after {
+  content: attr(data-label);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.25rem 0.55rem;
+  max-width: 12rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--fg);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.zx-appdock-item:hover::after,
+.zx-appdock-item:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* 分组分隔线 */
+.zx-appdock-sep {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 1px;
+  margin: 0.2rem 0;
+  background: var(--line-strong);
+}
+
+/* ---------- 访客自定义顺序:按住拖动 ---------- */
+
+/* touch-action:none 是「按住就拖」在触屏上能成立的前提 ——
+   浏览器一旦把触摸手势判给滚动就会发 pointercancel,拖拽当场断掉。
+   代价:手指横扫不再能滚这个盒子,所以拖到边缘由 JS 自动滚(见 useDragReorder)。
+
+   user-select:none 同理:拖动时别顺带把周围的字选中。
+   -webkit-user-drag:none 配合 JS 里的 draggable={false} 一起,
+   确保按住图标不会变成「拖链接到别处」的原生拖拽。 */
+.zx-appdock-item {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.zx-appdock-item[data-dragging] {
+  opacity: 0.35;
+  transform: scale(1.08);
+  border-color: var(--accent);
+}
+
+/* 落点指示:亮边落在"将要插入的那一侧"。
+   桌面右侧竖排 → 上半亮上边、下半亮下边;
+   窄屏底部横排 → 左右两侧,方向跟着排布方向走(见下面的 820px 段)。 */
+.zx-appdock-item[data-drop='before'] {
+  box-shadow: inset 0 3px 0 var(--accent);
+  border-color: var(--accent);
+}
+
+.zx-appdock-item[data-drop='after'] {
+  box-shadow: inset 0 -3px 0 var(--accent);
+  border-color: var(--accent);
+}
+
+/* 拖拽中把提示气泡收起来,免得它跟着挡住落点 */
+.zx-appdock[data-dragging-active] .zx-appdock-item::after {
+  display: none;
+}
+
+/* 恢复默认顺序:只在访客真的改过顺序时才出现,平时不占地方 */
+.zx-appdock-reset {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  margin-top: 0.45rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 0.18s, border-color 0.18s, transform 0.18s;
+}
+
+.zx-appdock-reset:hover,
+.zx-appdock-reset:focus-visible {
+  color: var(--fg);
+  border-color: var(--accent);
+  transform: scale(1.06);
+}
+
+/* ---------- 让开右边缘:占位 + 右下角悬浮件 ---------- */
+
+html[data-apps='1'] .zx-main,
+html[data-apps='1'] .zx-footer {
+  padding-right: var(--zx-dock-w);
+}
+
+/* 顶栏通栏且在竖栏上方(z 200 < 380),窄视口下右侧内容会压到竖栏,给它让出内边距。
+   sidebar 布局的顶栏是左侧固定列(208px),与右侧竖栏不冲突,排除掉。 */
+html[data-apps='1'] .zx-topbar {
+  padding-right: calc(1.25rem + var(--zx-dock-w));
+}
+
+html[data-layout='sidebar'][data-apps='1'] .zx-topbar {
+  padding-right: 1rem;
+}
+
+html[data-apps='1'] .zx-statswidget-btn {
+  right: calc(var(--zx-dock-w) + 1rem);
+}
+
+html[data-apps='1'] .zx-statswidget-pop {
+  right: calc(var(--zx-dock-w) + 1rem);
+}
+
+/* 服务器状态浮件:未拖动时靠 right 定位,同样要让开;
+   拖动过的由 JS(rightGutter/maxX)保证不压住。 */
+html[data-apps='1'] .zx-statuswidget {
+  right: calc(var(--zx-dock-w) + 1rem);
+}
+
+html[data-apps='1'] .zxchat-fab {
+  right: calc(var(--zx-dock-w) + 20px);
+}
+
+html[data-apps='1'] .zxchat {
+  right: calc(var(--zx-dock-w) + 20px);
+}
+
+/* ---------- 应用栏:窄屏转底部横排 ---------- */
+
+@media (max-width: 820px) {
+  .zx-appdock {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.7rem;
+    border-left: none;
+    border-top: 1px solid var(--line);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .zx-appdock-item {
+    width: 40px;
+    height: 40px;
+  }
+
+  .zx-appdock-reset {
+    width: 40px;
+    height: 40px;
+    margin-top: 0;
+    margin-left: 0.2rem;
+  }
+
+  /* 提示改为向上弹 */
+  .zx-appdock-item::after {
+    right: auto;
+    left: 50%;
+    top: auto;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+  }
+
+  .zx-appdock-sep {
+    width: 1px;
+    height: 22px;
+    margin: 0 0.2rem;
+  }
+
+  /* 横排时"上/下"不代表插入位置,亮边要改到左/右,才看得出会插到哪一侧 */
+  .zx-appdock-item[data-drop='before'] {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  .zx-appdock-item[data-drop='after'] {
+    box-shadow: inset -3px 0 0 var(--accent);
+  }
+
+  /* 占位由右边距换成底部内边距 */
+  html[data-apps='1'] .zx-main,
+  html[data-apps='1'] .zx-footer {
+    padding-right: 0;
+    padding-bottom: var(--zx-dock-h);
+  }
+
+  html[data-apps='1'] .zx-topbar,
+  html[data-layout='sidebar'][data-apps='1'] .zx-topbar {
+    padding-right: 1.25rem;
+  }
+
+  /* 聊天入口顶到底部横条之上 */
+  html[data-apps='1'] .zxchat-fab {
+    right: 16px;
+    bottom: calc(var(--zx-dock-h) + 16px);
+  }
+
+  html[data-apps='1'] .zxchat {
+    right: 0;
+    bottom: var(--zx-dock-h);
+  }
+
+  html[data-apps='1'] .zx-statswidget-btn,
+  html[data-apps='1'] .zx-statswidget-pop,
+  html[data-apps='1'] .zx-statuswidget {
+    right: 1rem;
   }
 }

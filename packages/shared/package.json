@@ -29,10 +29,12 @@
     "ensure-content": "node scripts/ensure-content.mjs",
     "export:content": "node scripts/export-content.mjs",
     "cover:vlog": "node scripts/vlog-cover.mjs",
+    "icons:apps": "node scripts/app-icons.mjs",
     "cover:push": "node scripts/cover-push.mjs",
     "seed:chatbot": "node scripts/seed-chatbot.mjs",
     "build": "tsc -p tsconfig.json",
-    "watch": "tsc -p tsconfig.json --watch"
+    "watch": "tsc -p tsconfig.json --watch",
+    "test": "npm run build && node --test tests/*.test.ts"
   },
   "peerDependencies": {
     "@mantine/core": "^9.6.2",

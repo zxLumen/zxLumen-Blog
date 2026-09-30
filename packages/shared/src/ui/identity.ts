@@ -13,3 +13,7 @@ export const nickKey = (mockId?: string | null): string => `zx_nick${selSuffix(m
 
 /** 主题 localStorage 键(带身份后缀) */
 export const themeKey = (mockId?: string | null): string => `${THEME_STORAGE_KEY}${selSuffix(mockId)}`
+
+/** 访客自定义应用栏顺序的 localStorage 键(带身份后缀)
+ *  → 每个 mock 身份各自一份顺序,切 A/B/C 时互不影响,便于验证「不同访客独立」 */
+export const appsOrderKey = (mockId?: string | null): string => `zx_apps.order${selSuffix(mockId)}`

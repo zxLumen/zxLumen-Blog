@@ -52,6 +52,9 @@ export type { StoredProject } from './schema.js'
 // 抖音短视频数据(整表覆盖:admin 可增删/排序/软删,存 meta 键 vlog_config)
 export type { StoredVlogSeries, StoredVlogVideo, VlogSeries, VlogVideo, VlogStart } from './schema.js'
 
+// 右侧应用栏数据(整表覆盖:admin 可增删/排序/软删,存 meta 键 apps_config)
+export type { StoredApp, AppItem, AppOpenIn } from './schema.js'
+
 // 计价与统计
 export {
   PRICING,

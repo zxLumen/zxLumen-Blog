@@ -51,4 +51,8 @@ apps/next-home/public/wechat.png
 # 这里是指向它的软链,让本地 dev 也能用同一个 /vlog/<vid>.jpg 路径
 apps/next-home/public/vlog
 
+# 应用栏图标(/admin 面板上传到 docker/site-content/apps/,不入库)
+# 这里是指向它的软链,让本地 dev 也能用同一个 /apps/<id>.png 路径
+apps/next-home/public/apps
+
 docs/proxy.yaml

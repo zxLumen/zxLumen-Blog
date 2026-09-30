@@ -37,6 +37,11 @@ cd apps/next-home && npm run lint && npm run build
 
 > 需要 Node 20+(推荐 22 LTS;`export:content` 依赖 Node 22+ 原生 TS)。
 
+> **应用栏图标本地联调**:`apps/next-home/public/apps` 是指向
+> `docker/site-content/apps` 的**软链**(被 `.gitignore` 忽略,新克隆需重建),
+> 这样本地上传的图标也能像线上一样经 `/apps/<id>.<ext>` 访问:
+> `ln -s ../../../docker/site-content/apps apps/next-home/public/apps`
+
 ## 命令调用规范(避免卡死 / 中断)
 
 经验:工具调用「卡死 / 中断」几乎都发生在**调用过重或过多**时。务必遵守:
@@ -148,7 +153,16 @@ cd apps/next-home && npm run lint && npm run build
    手动执行一次**(之后换图不需要):
    `sudo chown -R 10001:10001 ~/zxLumen-Blog/docker/site-content/vlog`
    Caddy 经 `/vlog/*` 静态服务,替换即生效。
-4. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
+4. **`docker/site-content/apps/`** —— 应用栏图标目录,文件**只有**站长在 `/admin`「应用」
+   面板上传时才会出现在服务器上(上传即写库 `meta.apps_config` + 落盘,**不需要 scp**)。
+   文件名 = `<应用 id>.<ext>`(jpg/png/webp),由 Caddy 经 `/apps/*` 静态服务。
+   目录**在库里不入库**(空目录由代码 `mkdir` 兜底),所以线上首次上传前目录可能不存在。
+
+   ⚠️ 与 vlog 同样的可写性要求:`docker-compose.yml` 已加
+   `./site-content/apps:/srv/site/apps` 子挂载覆盖只读的 `/srv/site`,**首次上线前在服务器
+   手动执行一次**(之后换图标不需要):
+   `sudo chown -R 10001:10001 ~/zxLumen-Blog/docker/site-content/apps`
+5. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
    改了邮箱/联系方式要**同时更新线上库**(线上 `/admin → 个人信息`,或直接改 `meta`)。
 
 > `docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` / `docker/ci-run.sh` /
