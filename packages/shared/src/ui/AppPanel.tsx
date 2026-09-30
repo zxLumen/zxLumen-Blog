@@ -98,6 +98,7 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
   const [slow, setSlow] = useState(false)
   const dragRef = useRef<{ dx: number; dy: number } | null>(null)
   const resizeRef = useRef<{ sx: number; sy: number; r0: Rect } | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setRect(loadRect())
@@ -105,11 +106,18 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
+    // 点面板外收起(点 iframe 内部收不到 —— 跨域,正合适)
+    const onDown = (e: PointerEvent) => {
+      const el = panelRef.current
+      if (el && !el.contains(e.target as Node)) onClose()
+    }
     window.addEventListener('resize', onWinResize)
     window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown)
     return () => {
       window.removeEventListener('resize', onWinResize)
       window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
     }
   }, [onClose])
 
@@ -179,6 +187,7 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
 
   return createPortal(
     <div
+      ref={panelRef}
       className="zx-apppanel"
       data-narrow={narrow ? '' : undefined}
       role="dialog"
