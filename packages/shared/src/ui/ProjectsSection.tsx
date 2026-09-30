@@ -1,8 +1,71 @@
 'use client'
 
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { PROJECTS, normalizeUrl, isExternalUrl, type Project } from '../content.js'
 import { Section } from './Section.js'
 import { trackEvent } from './track.js'
+
+/** 亮点字号的最小缩放比;低于此值不再缩小,改由省略号兜底 */
+const HL_MIN_SCALE = 0.7
+const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+
+/**
+ * 亮点(指标)行:始终保持**一行**、按卡片可用宽度自动缩放字号。
+ *
+ * 纯 CSS 做不到"一行且不断字":中文的 min-content 只有一个字宽,flex 会把
+ * 每个指标压扁后逐字断行;而卡片可用宽 = 卡片宽 − 内边距(含常数),字号随
+ * 视口缩放也追不平,窄卡片仍会溢出。
+ * 这里直接量:把值/标签的 `scrollWidth`(自然宽,不受 flex 收缩影响)与间距相加,
+ * 与行宽相比得到缩放比写进 `--hl-scale`,字号与间距同步缩放,自然保持一行。
+ * 卡片宽度任何变化(换列数 / 窗口缩放 / 应用栏开关)由 ResizeObserver 重算。
+ */
+function HighlightRow({ items }: { items: NonNullable<Project['highlights']> }) {
+  const rowRef = useRef<HTMLDivElement>(null)
+
+  const fit = () => {
+    const row = rowRef.current
+    if (!row) return
+    const kids = Array.from(row.children) as HTMLElement[]
+    if (kids.length === 0) return
+    row.style.setProperty('--hl-scale', '1')
+    const gap = parseFloat(getComputedStyle(row).columnGap) || 0
+    const natural =
+      kids.reduce((sum, el) => {
+        const v = el.querySelector<HTMLElement>('.zx-highlight-v')?.scrollWidth ?? 0
+        const l = el.querySelector<HTMLElement>('.zx-highlight-l')?.scrollWidth ?? 0
+        return sum + Math.max(v, l)
+      }, 0) +
+      gap * (kids.length - 1)
+    const avail = row.clientWidth
+    if (natural > 0 && avail > 0) {
+      const scale = Math.max(HL_MIN_SCALE, Math.min(1, avail / natural))
+      row.style.setProperty('--hl-scale', String(scale))
+    }
+  }
+
+  useIsoLayoutEffect(() => {
+    fit()
+    const row = rowRef.current
+    if (!row) return
+    const ro = new ResizeObserver(fit)
+    ro.observe(row)
+    // 字体就绪后再量一次,避免用回退字体的宽度量偏
+    document.fonts?.ready.then(fit).catch(() => {})
+    return () => ro.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items])
+
+  return (
+    <div className="zx-card-highlights" ref={rowRef}>
+      {items.map((h) => (
+        <div className="zx-highlight" key={h.label}>
+          <div className="zx-mono zx-accent zx-highlight-v">{h.value}</div>
+          <div className="zx-muted zx-mono zx-highlight-l">{h.label}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 const STATUS_LABEL: Record<Project['status'], string> = {
   online: 'ONLINE',
@@ -60,18 +123,7 @@ function ProjectCard({
 
       <div className="zx-card-bottom">
         {project.highlights && project.highlights.length > 0 && (
-          <div style={{ display: 'flex', gap: '1.4rem', margin: '0 0 0.6rem' }}>
-            {project.highlights.map((h) => (
-              <div key={h.label}>
-                <div className="zx-mono zx-accent" style={{ fontSize: '1.05rem', fontWeight: 700 }}>
-                  {h.value}
-                </div>
-                <div className="zx-muted zx-mono" style={{ fontSize: '0.66rem', textTransform: 'uppercase' }}>
-                  {h.label}
-                </div>
-              </div>
-            ))}
-          </div>
+          <HighlightRow items={project.highlights} />
         )}
 
         <div className="zx-tags">

@@ -1484,6 +1484,38 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   padding-top: 0.6rem;
 }
 
+/* 卡片亮点(指标)行:始终一行,字号按 --hl-scale(JS 量宽度算出)整体缩放。
+   值/标签设 nowrap,故 scrollWidth 即自然宽,便于测量;极端窄卡片缩到下限后
+   用省略号兜底,不会逐字断行、也不会切半个字。 */
+.zx-card-highlights {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: calc(1.4rem * var(--hl-scale, 1));
+  margin: 0 0 0.6rem;
+  --hl-scale: 1;
+}
+
+.zx-highlight {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.zx-highlight-v {
+  font-size: calc(1.05rem * var(--hl-scale, 1));
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zx-highlight-l {
+  font-size: calc(0.66rem * var(--hl-scale, 1));
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .zx-card:hover {
   transform: translateY(-3px);
   border-color: var(--line-strong);
