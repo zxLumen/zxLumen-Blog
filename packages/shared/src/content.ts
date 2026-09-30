@@ -9,6 +9,8 @@ export interface LinkItem {
   url: string
 }
 
+import type { NavItem } from './ui/types.js'
+
 export interface TechItem {
   name: string
   /** 0-1 熟练度 */
@@ -131,13 +133,13 @@ export const PROJECTS: Project[] = DEFAULT_CONTENT.PROJECTS
 export const SITE_META: SiteMeta = DEFAULT_CONTENT.SITE_META
 export const CONTACTS: Contacts = DEFAULT_CONTENT.CONTACTS
 
-export const NAV = [
+export const NAV: NavItem[] = [
   { label: '主页', href: '/' },
   { label: '项目', href: '/#projects' },
   { label: 'Token用量', href: '/#usage' },
   { label: '关于', href: '/#about' },
   { label: '留言板', href: '/#guestbook' },
-  { label: '监控', href: 'https://grafana.zxlumen.cn/d/rYdddlPWk/node-exporter-full' },
+  { label: '监控', href: 'https://grafana.zxlumen.cn/d/rYdddlPWk/node-exporter-full', adminOnly: true },
 ]
 
 const NAV_SECTION_IDS = NAV.filter((n) => n.href.includes('#')).map((n) => n.href.split('#')[1])

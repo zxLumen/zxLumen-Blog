@@ -43,7 +43,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const contacts = await getClientContacts();
   const { PROFILE } = await getRuntimeContent();
 
-  const nav = admin ? [...NAV, { label: "admin", href: "/admin" }] : NAV;
+  const nav = admin
+    ? [...NAV, { label: "admin", href: "/admin" }]
+    : NAV.filter((n) => !n.adminOnly);
 
   // 模拟访客身份:主题/昵称等偏好按身份分键(等价于一台独立设备);仅站长
   const mockCid = (await cookies()).get(MOCK_COOKIE)?.value ?? "";
