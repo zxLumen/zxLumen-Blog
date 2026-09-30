@@ -415,8 +415,14 @@ export interface VlogStart {
   video: number
 }
 
-/** 打开方式:仅这两种已实现;`panel`(页内浮层)等后续再加,未知值一律按 newtab 处理 */
-export type AppOpenIn = 'newtab' | 'self'
+/**
+ * 打开方式:
+ *  - `newtab`(缺省):外链 / 站内静态文件开新标签页;站内路由仍走站内跳转
+ *  - `self`:当前页打开
+ *  - `panel`:站内**页内浮层**(iframe 悬浮窗),不离开站点 —— 适合自己的 web 应用
+ * 未知值一律按 newtab 处理。
+ */
+export type AppOpenIn = 'newtab' | 'self' | 'panel'
 
 /** 右侧应用栏条目(admin 配置;整表覆盖,存 meta 键 apps_config) */
 export interface StoredApp {

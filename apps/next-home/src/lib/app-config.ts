@@ -27,8 +27,8 @@ function normalizeOne(raw: unknown): StoredApp | null {
   const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim() : id
   const icon =
     typeof r.icon === 'string' && ICON_RE.test(r.icon.trim()) ? r.icon.trim() : undefined
-  // 只认 'self';留空/未知(未来的 'panel' 等)一律按 newtab 落库,不会把老数据搞坏
-  const openIn: AppOpenIn = r.openIn === 'self' ? 'self' : 'newtab'
+  // 只认 'self' 与 'panel';留空/未知一律按 newtab 落库,不会把老数据搞坏
+  const openIn: AppOpenIn = r.openIn === 'self' || r.openIn === 'panel' ? r.openIn : 'newtab'
   const group = typeof r.group === 'string' && r.group.trim() ? r.group.trim() : undefined
   // 点击埋点绑定(纯统计):空/非字符串一律丢弃,交由前端 resolveAppTrack 兜底成 app_click
   const bind = typeof r.bind === 'string' && r.bind.trim() ? r.bind.trim() : undefined

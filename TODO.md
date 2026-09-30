@@ -36,7 +36,7 @@
 - [x] **站内静态文件按「打开方式」处理**:`isSpaRoute` 区分「站内页面路由」(走 `next/link`)与「站内静态文件」(`/resume.pdf` 等,按设置决定 `target`)—— 修此前 `/resume.pdf` 选「新标签页」仍只在当前页打开;admin 面板该选项补了说明 — 优先级:中
 - [x] 纯函数入库测试:`packages/shared/tests/`(node --test,零新依赖),覆盖 `groupContiguous` / `snapDropToGroup` / `applySavedOrder` / `isSpaRoute`;`npm test` 先 build 再跑 dist — 优先级:中
 - [ ] **顺序上云**(当前顺序只在本机浏览器):若想让访客换设备也保留,需加一张表按 `cid` 存顺序,并定「多端冲突以谁为准」;不上云则清缓存即丢 — 优先级:低
-- [ ] **第三种打开方式 `panel`**:应用在站内以面板形式打开(而非跳转),复用现有弹层/侧栏;目前 `openIn` 只落地 `newtab` / `self`,存库时未知值已安全退回 `newtab` — 优先级:低
+- [x] **第三种打开方式 `panel`(页内浮层)**:`openIn` 新增 `panel`,应用在站内以可拖拽/可缩放的悬浮窗打开(iframe,复用 portal + floating 让位逻辑),窄屏全屏;第一个用户是自建 Opentodo 网页版 — 优先级:低
 - [ ] 应用栏点击埋点(哪些应用被点、点击率排序),可接进 `docs/STATS.md` 口径 — 优先级:低
 
 ## blog / 内容整理

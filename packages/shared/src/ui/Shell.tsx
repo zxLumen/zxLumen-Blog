@@ -5,6 +5,7 @@ import { Topbar } from './Topbar.js'
 import { Footer } from './Footer.js'
 import { ChatWidget } from './ChatWidget.js'
 import { AppDock } from './AppDock.js'
+import { AppPanelProvider } from './AppPanel.js'
 import type { AppItem } from '../schema.js'
 import type { Contacts, Profile } from '../content.js'
 import type { LayoutId } from '../theme.js'
@@ -62,7 +63,10 @@ export function Shell({
         <main className="zx-main">{children}</main>
         <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />
         <ChatWidget />
-        <AppDock apps={apps} link={link} mockId={mockId} />
+        {/* 应用「页内浮层」宿主:挂在应用栏同层,AppDock 通过 context 打开 */}
+        <AppPanelProvider>
+          <AppDock apps={apps} link={link} mockId={mockId} />
+        </AppPanelProvider>
       </div>
     </PreferencesProvider>
   )

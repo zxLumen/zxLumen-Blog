@@ -9,6 +9,7 @@ import { appsOrderKey } from './identity.js'
 import { resolveAppTrack } from './app-track.js'
 import { trackEvent } from './track.js'
 import { applySavedOrder, groupContiguous, useDragReorder } from './useDragReorder.js'
+import { useAppPanel } from './AppPanel.js'
 
 interface AppDockProps {
   /** 展示用应用条目(已排除垃圾箱);空数组 → 不渲染 */
@@ -53,6 +54,8 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
   const [tip, setTip] = useState<{ text: string; top: number; left: number; side: 'left' | 'top' } | null>(null)
 
   const storageKey = appsOrderKey(mockId)
+  /** openIn='panel' 的应用:用站内浮层打开(没有 Provider 时为 null,降级成普通链接) */
+  const appPanel = useAppPanel()
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return
@@ -198,6 +201,8 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
         const spa = isSpaRoute(href)
         // newtab(缺省):非站内路由开新标签(外链 / 静态文件)
         // self:一律当前页打开
+        // panel:站内浮层(iframe),不跳转;保留 href 以便 Cmd/Ctrl/中键在新标签打开
+        const panel = (app.openIn ?? 'newtab') === 'panel' && !!appPanel
         const newTab = (app.openIn ?? 'newtab') === 'newtab' && !spa
         const common = {
           className: 'zx-appdock-item',
@@ -216,9 +221,15 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
            * 点击埋点:绑定到项目/联系方式/简历的与对应按钮合并计数,没绑定的记 app_click。
            * 拖动后浏览器补发的那次 click 会被 handleProps 的 onClickCapture 吃掉,故只有真点击才计。
            */
-          onClick: () => {
+          onClick: (e: ReactMouseEvent) => {
             const { type, target } = resolveAppTrack(app)
             trackEvent(type, target)
+            if (panel && appPanel) {
+              // Cmd/Ctrl/Shift/中键 → 放行走默认,在新标签页打开
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+              e.preventDefault()
+              appPanel.open(app)
+            }
           },
           /**
            * <a href> 默认是可拖的:一动就触发浏览器原生 drag,随即给指针序列发
@@ -227,7 +238,11 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
           draggable: false,
         }
 
-        const item = newTab ? (
+        const item = panel ? (
+          <a {...common} href={href}>
+            <DockIcon app={app} />
+          </a>
+        ) : newTab ? (
           <a {...common} href={href} target="_blank" rel="noreferrer noopener">
             <DockIcon app={app} />
           </a>

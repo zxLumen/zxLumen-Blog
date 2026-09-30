@@ -32,6 +32,7 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/i
 const OPEN_OPTIONS = [
   { value: 'newtab', label: '新标签页' },
   { value: 'self', label: '当前页' },
+  { value: 'panel', label: '页内浮层' },
 ]
 
 /** 「绑定埋点」下拉里代表「不绑定」的哨兵值(Mantine Select 空字符串会显示成 placeholder) */
@@ -452,7 +453,7 @@ export function AdminAppsPanel({
                       value={a.openIn ?? 'newtab'}
                       allowDeselect={false}
                       disabled={actionsDisabled}
-                      onChange={(val) => patch(a.id, { openIn: (val === 'self' ? 'self' : 'newtab') as AppOpenIn })}
+                      onChange={(val) => patch(a.id, { openIn: (val === 'self' || val === 'panel' ? val : 'newtab') as AppOpenIn })}
                       style={{ width: 120, flex: 'none' }}
                     />
                     <TextInput

@@ -5106,3 +5106,160 @@ html[data-apps='1'] .zxchat {
 .zx-mockpop {
   width: min(300px, calc(100vw - 2rem));
 }
+
+/* ---------- 应用「页内浮层」面板(openIn='panel')----------
+   portal 到 body、position:fixed:盖在应用栏之上、不被应用栏的 overflow 裁剪。
+   桌面是可拖拽 + 右下角可缩放的浮窗;窄屏(≤820px)直接全屏。 */
+
+.zx-apppanel {
+  position: fixed;
+  z-index: 950; /* 高于应用栏(380)与 .zx-pop(400) */
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+}
+
+.zx-apppanel[data-narrow] {
+  inset: 0;
+  border-radius: 0;
+  border: none;
+}
+
+.zx-apppanel-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.zx-apppanel-bar:active {
+  cursor: grabbing;
+}
+
+.zx-apppanel-ico {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-2) 78%, transparent);
+  border: 1px solid var(--line);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  overflow: hidden;
+}
+
+.zx-apppanel-ico img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zx-apppanel-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.zx-apppanel-spacer {
+  flex: 1;
+}
+
+.zx-apppanel-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--fg-dim);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.zx-apppanel-btn:hover {
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  color: var(--fg);
+}
+
+.zx-apppanel-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-2);
+}
+
+.zx-apppanel-body iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #fff;
+}
+
+.zx-apppanel-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 1rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  color: var(--fg-dim);
+  font-size: 0.75rem;
+}
+
+.zx-apppanel-spin {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  animation: zx-apppanel-spin 0.7s linear infinite;
+}
+
+@keyframes zx-apppanel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.zx-apppanel-hint a {
+  color: var(--accent);
+}
+
+.zx-apppanel-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.zx-apppanel-grip::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--line-strong);
+  border-bottom: 2px solid var(--line-strong);
+}
