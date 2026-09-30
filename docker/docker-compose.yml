@@ -52,6 +52,8 @@ services:
     environment:
       # 站长数据(单 JSON);访客数据落在同卷的 visitors/
       OPENTODO_FILE: /data/todos.json
+      # 运行期数据目录(访客 / 对话 / 配置)也指到卷上 —— 否则落在容器可写层,重建即丢
+      OPENTODO_DATA_DIR: /data
       # 放行访客使用 AI(走站长配的 provider);=0 关闭
       OPENTODO_VISITOR_AI: ${OPENTODO_VISITOR_AI:-1}
     volumes:
