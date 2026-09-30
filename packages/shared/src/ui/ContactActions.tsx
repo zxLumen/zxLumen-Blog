@@ -11,13 +11,13 @@ interface ContactActionsProps {
   variant?: 'full' | 'compact'
 }
 
-const POP_W = 330
+const POP_W_MAX = 330
 const POP_GAP = 8
 
 export function ContactActions({ contacts, variant = 'full' }: ContactActionsProps) {
   const c = contacts ?? CONTACTS
   const [toast, setToast] = useState('')
-  const [pop, setPop] = useState<{ left: number; top: number } | null>(null)
+  const [pop, setPop] = useState<{ left: number; top: number; w: number } | null>(null)
   const [mounted, setMounted] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const popRef = useRef<HTMLDivElement>(null)
@@ -67,13 +67,17 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
     const vh = window.innerHeight
     const x = e.clientX
     const y = e.clientY
-    const estH = POP_W * (1131 / 888) + 16 // 按图片比例估算高度
+    // 窄屏下按视口收窄,否则 330px 宽的浮窗在 320px 屏上会拖出整页横向滚动
+    const popW = Math.min(POP_W_MAX, Math.max(160, vw - 16))
+    const estH = popW * (1131 / 888) + 16 // 按图片比例估算高度
 
     let left = x + POP_GAP
     let top = y - estH - POP_GAP // 浮窗出现在点击点"右上"→ 底边贴近点击点上方
-    if (left + POP_W > vw - 8) left = Math.max(8, x - POP_GAP - POP_W)
+    if (left + popW > vw - 8) left = Math.max(8, x - POP_GAP - popW)
+    if (left + popW > vw - 8) left = 8 // 点击点本身也贴近右缘:退回左边距
     if (top < 8) top = Math.min(vh - estH - 8, y + POP_GAP)
-    setPop({ left, top })
+    if (top < 8) top = 8
+    setPop({ left, top, w: popW })
   }
 
   // 点击其它位置 / Esc / 滚动 → 关闭浮窗
@@ -139,7 +143,7 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
           <div
             ref={popRef}
             className="zx-wechat-pop"
-            style={{ position: 'fixed', left: pop.left, top: pop.top, width: POP_W }}
+            style={{ position: 'fixed', left: pop.left, top: pop.top, width: pop.w }}
           >
             <img src={c.wechatQr} alt="微信二维码" />
           </div>,
