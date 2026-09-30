@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { StatsResult } from '../schema.js'
 import { fmtCompact } from '../format.js'
-import { FLOAT_MARGIN, maxX, rightGutter, snapEdge } from './floating.js'
+import { FLOAT_MARGIN, NARROW_MAX, maxX, rightGutter, snapEdge } from './floating.js'
 import { useBarTooltip } from './BarTooltip.js'
 
 const POS_KEY = 'zx-stats-pos'
@@ -17,6 +17,8 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   const [series, setSeries] = useState<'pv' | 'uv'>('pv')
   const [mounted, setMounted] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  /** 窄屏(≤820px):定位交给 CSS(左下角),不套用拖拽/存档坐标 */
+  const [narrow, setNarrow] = useState(false)
   const [popPos, setPopPos] = useState<{ left: number; top: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
@@ -44,8 +46,22 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
     [],
   )
 
-  // 恢复上次拖动位置(限定在视口内;右侧再扣掉应用栏,免得老位置压住它)
+  // 监听窄屏断点:进入/离开窄屏时要重算坐标(窄屏清空、回到桌面再恢复存档)
   useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${NARROW_MAX}px)`)
+    const sync = () => setNarrow(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  // 恢复上次拖动位置(限定在视口内;右侧再扣掉应用栏,免得老位置压住它)。
+  // 窄屏不恢复:坐标改由 CSS(左下角)决定,行内 left/top 会盖过样式表。
+  useEffect(() => {
+    if (narrow) {
+      setPos(null)
+      return
+    }
     try {
       const raw = window.localStorage.getItem(POS_KEY)
       if (!raw) return
@@ -57,7 +73,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
     } catch {
       /* ignore */
     }
-  }, [])
+  }, [narrow])
 
   // 拖动
   useEffect(() => {
@@ -148,7 +164,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   const maxV = Math.max(1, ...days.map(val))
   const seriesName = series === 'pv' ? '访问量(PV)' : '独立访客(UV)'
 
-  const btnStyle = pos ? { left: pos.x, top: pos.y, right: 'auto' } : undefined
+  const btnStyle = pos && !narrow ? { left: pos.x, top: pos.y, right: 'auto' } : undefined
 
   const popover =
     open && mounted && popPos
@@ -215,6 +231,8 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
         className={`zx-statswidget-btn${open ? ' is-open' : ''}`}
         style={btnStyle}
         onPointerDown={(e) => {
+          // 窄屏由 CSS 定位,不参与拖拽:拖出来的坐标是桌面系的,会破坏左下角堆叠
+          if (narrow) return
           const el = btnRef.current
           if (!el) return
           const r = el.getBoundingClientRect()

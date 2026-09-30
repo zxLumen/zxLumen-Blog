@@ -5010,6 +5010,12 @@ html[data-apps='1'] .zxchat {
     padding-bottom: calc(1.4rem + var(--zx-dock-h) + env(safe-area-inset-bottom));
   }
 
+  /* 窄屏应用栏变成底部横条、不再占右侧,顶栏要复位全局规则里加上的 dock 右内边距;
+     右侧留白继续由内层 .zx-topbar-in 的 --zx-gutter 提供(否则顶栏比正文右移 64px)。 */
+  html[data-apps='1'] .zx-topbar {
+    padding-right: 0;
+  }
+
   /* 聊天入口顶到底部横条之上(再叠加 home 指示条) */
   html[data-apps='1'] .zxchat-fab {
     right: 16px;
@@ -5047,6 +5053,16 @@ html[data-apps='1'] .zxchat {
     right: auto;
     bottom: calc(5.4rem + env(safe-area-inset-bottom) + var(--zx-dock-reserve-b));
     left: 1rem;
+  }
+
+  /* 他们有一条全局 `html[data-apps='1'] .zx-{statswidget-btn,statswidget-pop,statuswidget}
+     { right: calc(var(--zx-dock-w) + 1rem) }`(优先级 0,2,1),高于这里的 .zx-X(0,1,0)。
+     窄屏这些元素在左下角,必须显式把 right 复位为 auto,否则 right+left 同时生效、
+     被拉满整行。选择器对齐其优先级,再靠"在文件更后"取胜。 */
+  html[data-apps='1'] .zx-statswidget-btn,
+  html[data-apps='1'] .zx-statswidget-pop,
+  html[data-apps='1'] .zx-statuswidget {
+    right: auto;
   }
 
   /* admin 的 9 个 Tab(留言/归档/统计/个人信息/项目/视频/外观/机器人/Token用量)

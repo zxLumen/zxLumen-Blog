@@ -45,3 +45,38 @@ export function maxX(w: number, margin = FLOAT_MARGIN): number {
   return Math.max(margin, window.innerWidth - w - margin - rightGutter())
 }
 
+/**
+ * 悬浮件改由 CSS 定位(左下角堆叠)的断点,与样式里的 @media (max-width: 820px) 一致。
+ */
+export const NARROW_MAX = 820
+
+/**
+ * 是否处于窄屏。
+ *
+ * 窄屏下悬浮件的坐标由 CSS 负责(左下角堆叠,已避开顶栏与底部应用栏),
+ * **不再套用拖拽 / localStorage 里的旧坐标**:那套坐标是按桌面算的,写成行内
+ * left/top 后优先级高于样式表,会把悬浮件重新拽回桌面位置(窄屏上可能出屏)。
+ * 桌面(> 820px)维持原样,拖拽/吸附/存档完全不变。
+ */
+export function isNarrow(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.innerWidth <= NARROW_MAX
+}
+
+/**
+ * 窄屏时底部应用栏(底部横条)占据的高度,悬浮件要向上让开;其余情况返回 0。
+ *
+ * 桌面应用栏在右侧(见 rightGutter);窄屏它变成贴底的横条,占的是**底部**,
+ * 所以要让的是 Y 方向。悬浮件坐标同样是行内样式,样式表里给 .zxchat-fab 等写的
+ * `bottom: calc(var(--zx-dock-h) + …)` 会被行内 `top` 盖掉,因此必须在算坐标时扣除。
+ */
+export function bottomGutter(): number {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return 0
+  if (document.documentElement.getAttribute('data-apps') !== '1') return 0
+  if (window.innerWidth > NARROW_MAX) return 0
+  const h = parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--zx-dock-h'),
+  )
+  return Number.isFinite(h) && h > 0 ? h : 0
+}
+

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FLOAT_MARGIN, maxX, rightGutter, snapEdge } from './floating.js'
+import { FLOAT_MARGIN, NARROW_MAX, maxX, rightGutter, snapEdge } from './floating.js'
 import { Sparkline, type SparkPoint } from './Sparkline.js'
 
 type Metric = 'cpu' | 'mem' | 'disk' | 'load'
@@ -48,6 +48,8 @@ export function StatusWidget() {
   const [open, setOpen] = useState(false)
   const [metric, setMetric] = useState<Metric>('cpu')
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  /** 窄屏(≤820px):定位交给 CSS(左下角),不套用拖拽/存档坐标 */
+  const [narrow, setNarrow] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -95,8 +97,22 @@ export function StatusWidget() {
     }
   }, [])
 
-  // 恢复上次拖动位置(右侧扣掉应用栏,免得老位置压住它)
+  // 监听窄屏断点:进入/离开窄屏时重算坐标(窄屏清空,回到桌面再恢复存档)
   useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${NARROW_MAX}px)`)
+    const sync = () => setNarrow(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  // 恢复上次拖动位置(右侧扣掉应用栏,免得老位置压住它)。
+  // 窄屏不恢复:坐标改由 CSS(左下角)决定,行内 left/top 会盖过样式表。
+  useEffect(() => {
+    if (narrow) {
+      setPos(null)
+      return
+    }
     try {
       const raw = window.localStorage.getItem(POS_KEY)
       if (!raw) return
@@ -108,7 +124,7 @@ export function StatusWidget() {
     } catch {
       /* ignore */
     }
-  }, [])
+  }, [narrow])
 
   useEffect(
     () => () => {
@@ -168,7 +184,7 @@ export function StatusWidget() {
   const pts = ok ? (data?.series?.[metric] ?? []) : []
   const peak = pts.length ? Math.max(...pts.map((p) => p.v)) : null
   const cur = ok ? data?.[metric] : undefined
-  const style = pos ? { left: pos.x, top: pos.y, right: 'auto' as const } : undefined
+  const style = pos && !narrow ? { left: pos.x, top: pos.y, right: 'auto' as const } : undefined
 
   return (
     <div
@@ -183,6 +199,8 @@ export function StatusWidget() {
         className={`zx-statuswidget-btn${open ? ' is-open' : ''}`}
         title="服务器状态(可拖动)"
         onPointerDown={(e) => {
+          // 窄屏由 CSS 定位,不参与拖拽:拖出来的坐标是桌面系的,会破坏左下角堆叠
+          if (narrow) return
           const el = ref.current
           if (!el) return
           const r = el.getBoundingClientRect()

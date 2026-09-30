@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { MessageIcon } from './icons.js'
-import { maxX, rightGutter } from './floating.js'
+import { bottomGutter, maxX, rightGutter } from './floating.js'
 
 interface ChatConfig {
   enabled: boolean
@@ -157,7 +157,9 @@ const clampNum = (v: number, min: number, max: number) => Math.min(Math.max(v, m
 
 function defaultPos(): Pos {
   const x = window.innerWidth - FAB_SIZE - MARGIN - rightGutter()
-  let y = window.innerHeight - FAB_SIZE - MARGIN
+  // 窄屏时应用栏是底部横条,浮标要整体上移一个栏高,否则会压在横条上
+  // (浮标坐标是行内 top/left,样式表里的 bottom 让位不生效,必须在这里扣)
+  let y = window.innerHeight - FAB_SIZE - MARGIN - bottomGutter()
   const help = document.querySelector('.zx-help')
   if (help) {
     const r = help.getBoundingClientRect()
@@ -167,7 +169,7 @@ function defaultPos(): Pos {
 }
 
 function clampPos(p: Pos): Pos {
-  const maxY = Math.max(MARGIN, window.innerHeight - FAB_SIZE - MARGIN)
+  const maxY = Math.max(MARGIN, window.innerHeight - FAB_SIZE - MARGIN - bottomGutter())
   return { x: clampNum(p.x, MARGIN, maxX(FAB_SIZE, MARGIN)), y: clampNum(p.y, MARGIN, maxY) }
 }
 
@@ -188,11 +190,11 @@ function clampRect(r: Rect): Rect {
   const vw = window.innerWidth
   const vh = window.innerHeight
   const maxW = Math.max(MIN_W, Math.min(760, vw - 24))
-  const maxH = Math.max(MIN_H, Math.min(860, vh - 24))
+  const maxH = Math.max(MIN_H, Math.min(860, vh - 24 - bottomGutter()))
   const w = clampNum(r.w, MIN_W, maxW)
   const h = clampNum(r.h, MIN_H, maxH)
   const x = clampNum(r.x, 12, Math.max(12, vw - w - 12 - rightGutter()))
-  const y = clampNum(r.y, 12, Math.max(12, vh - h - 12))
+  const y = clampNum(r.y, 12, Math.max(12, vh - h - 12 - bottomGutter()))
   return { x, y, w, h }
 }
 
