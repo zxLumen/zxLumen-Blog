@@ -4734,7 +4734,10 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  /* 图标铺满 44px;图标自带圆角(≈18%),方块圆角收到 8px 才贴合轮廓。
+     overflow:hidden 裁掉铺满后越过圆角的像素,四角才干净 */
+  border-radius: 8px;
+  overflow: hidden;
   text-decoration: none;
   color: var(--fg-dim);
   background: color-mix(in srgb, var(--bg-2) 78%, transparent);
@@ -4765,17 +4768,17 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   -webkit-user-drag: none;
 }
 
-/* 图标显示尺寸:44px 方块里给到 38px,尽量占满、减少留白 */
+/* 图标显示尺寸:铺满 44px 方块,零留白 */
 .zx-appdock-img {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
 }
 
 /* 首字兜底与图片要叠在同一个格子里。
-   不写这一行的话 grid 会把两个子元素自动排成上下两行,图片被挤到 38px 容器外面。 */
+   不写这一行的话 grid 会把两个子元素自动排成上下两行,图片被挤到 44px 容器外面。 */
 .zx-appdock-img > * {
   grid-area: 1 / 1;
 }
@@ -4975,6 +4978,12 @@ html[data-apps='1'] .zxchat {
   }
 
   .zx-appdock-item {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* 窄屏方块缩到 40px,图标容器跟着缩,否则 44px 的图标会溢出 */
+  .zx-appdock-img {
     width: 40px;
     height: 40px;
   }
