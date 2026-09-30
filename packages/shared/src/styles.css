@@ -34,6 +34,8 @@
   --zx-dock-inset-r: 0px;
   --zx-dock-inset-t: 0px;
   --zx-dock-inset-b: 0px;
+  /* 窄屏底部应用栏占位(无应用栏时为 0),供固定悬浮件 / 页脚让出底部 */
+  --zx-dock-reserve-b: 0px;
 
   /* ---------- 版面尺寸(全站唯一的宽度来源) ----------
      --zx-max       标准内容容器上限。原先散落 5 处硬编码 1120px,
@@ -4903,8 +4905,10 @@ html[data-apps='1'] .zx-footer {
 
 /* 顶栏通栏且在竖栏上方(z 200 < 380),窄视口下右侧内容会压到竖栏,给它让出内边距。
    sidebar 布局的顶栏是左侧固定列(208px),与右侧竖栏不冲突,排除掉。 */
+/* 顶栏外层横向内边距已归零,留白由内层 .zx-topbar-in 的 --zx-gutter 承担;
+   这里只再补 dock 宽度,不可再加 1.25rem,否则顶栏比正文多缩 20px。 */
 html[data-apps='1'] .zx-topbar {
-  padding-right: calc(1.25rem + var(--zx-dock-w));
+  padding-right: var(--zx-dock-w);
 }
 
 html[data-layout='sidebar'][data-apps='1'] .zx-topbar {
@@ -4989,22 +4993,27 @@ html[data-apps='1'] .zxchat {
     box-shadow: inset -3px 0 0 var(--accent);
   }
 
+  /* 底部应用栏占据的高度,供固定悬浮件让位(无应用栏时保持 0) */
+  html[data-apps='1'] {
+    --zx-dock-reserve-b: var(--zx-dock-h);
+  }
+
   /* 占位由右边距换成底部内边距 */
-  html[data-apps='1'] .zx-main,
-  html[data-apps='1'] .zx-footer {
+  html[data-apps='1'] .zx-main {
     padding-right: 0;
     padding-bottom: var(--zx-dock-h);
   }
 
-  html[data-apps='1'] .zx-topbar,
-  html[data-layout='sidebar'][data-apps='1'] .zx-topbar {
-    padding-right: 1.25rem;
+  html[data-apps='1'] .zx-footer {
+    padding-right: 0;
+    /* home 指示条与底部应用栏都要让开,二者叠加而非互相覆盖 */
+    padding-bottom: calc(1.4rem + var(--zx-dock-h) + env(safe-area-inset-bottom));
   }
 
-  /* 聊天入口顶到底部横条之上 */
+  /* 聊天入口顶到底部横条之上(再叠加 home 指示条) */
   html[data-apps='1'] .zxchat-fab {
     right: 16px;
-    bottom: calc(var(--zx-dock-h) + 16px);
+    bottom: calc(var(--zx-dock-h) + 16px + env(safe-area-inset-bottom));
   }
 
   html[data-apps='1'] .zxchat {
@@ -5012,11 +5021,8 @@ html[data-apps='1'] .zxchat {
     bottom: var(--zx-dock-h);
   }
 
-  html[data-apps='1'] .zx-statswidget-btn,
-  html[data-apps='1'] .zx-statswidget-pop,
-  html[data-apps='1'] .zx-statuswidget {
-    right: 1rem;
-  }
+  /* 这三个悬浮件在窄屏已移到左下角(见文件末尾),原来的 right: 1rem 会与
+     left: 1rem 同时生效、把元素拉满整行,故删除,统一由文件末尾接管。 */
 }
 
 /* 悬浮件窄屏让位:置于文件末尾,因为这三个元素的定位基础规则定义在 3566/3809/3609 行,
@@ -5025,21 +5031,21 @@ html[data-apps='1'] .zxchat {
   .zx-statswidget-btn {
     top: auto;
     right: auto;
-    bottom: calc(1.1rem + env(safe-area-inset-bottom));
+    bottom: calc(1.1rem + env(safe-area-inset-bottom) + var(--zx-dock-reserve-b));
     left: 1rem;
   }
 
   .zx-statuswidget {
     top: auto;
     right: auto;
-    bottom: calc(3.25rem + env(safe-area-inset-bottom));
+    bottom: calc(3.25rem + env(safe-area-inset-bottom) + var(--zx-dock-reserve-b));
     left: 1rem;
   }
 
   .zx-statswidget-pop {
     top: auto;
     right: auto;
-    bottom: calc(5.4rem + env(safe-area-inset-bottom));
+    bottom: calc(5.4rem + env(safe-area-inset-bottom) + var(--zx-dock-reserve-b));
     left: 1rem;
   }
 
