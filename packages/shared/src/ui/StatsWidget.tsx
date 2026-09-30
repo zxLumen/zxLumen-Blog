@@ -248,7 +248,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
         title="访客统计(可拖动)"
       >
         <span className="zx-envdot" />
-        <span className="zx-mono">今日 {fmtCompact(today.pv)}</span>
+        <span className="zx-mono">访问 {fmtCompact(today.pv)}</span>
         <span className="zx-statswidget-sep">·</span>
         <span className="zx-mono zx-muted">访客 {fmtCompact(today.uv)}</span>
       </button>
