@@ -196,13 +196,18 @@ export async function streamChat(
   return opts.protocol === 'ollama' ? streamOllama(opts, onToken) : streamOpenAi(opts, onToken)
 }
 
+/** 非流式单轮补全,返回完整结果(含 finishReason/reasoningLen,供截断判断与诊断) */
+export async function completeChatFull(
+  opts: Omit<StreamChatOpts, 'maxTokens' | 'temperature'> & { temperature?: number; maxTokens?: number },
+): Promise<StreamChatResult> {
+  return streamChat(opts, () => {})
+}
+
 /** 非流式单轮补全(蒸馏/分类用,避免在服务器上保留会话) */
 export async function completeChat(
   opts: Omit<StreamChatOpts, 'maxTokens' | 'temperature'> & { temperature?: number; maxTokens?: number },
 ): Promise<string> {
-  const parts: string[] = []
-  await streamChat(opts, (d) => parts.push(d))
-  return parts.join('')
+  return (await completeChatFull(opts)).text
 }
 
 /* ---------- embedding ---------- */

@@ -7,7 +7,7 @@ import crypto from 'node:crypto'
 import { getRuntimeContent } from '@zx/shared/server'
 import { getDb } from '../db'
 import { chatProtocol, getChatApiKey, getConfig } from './config'
-import { completeChat } from './llm'
+import { completeChatFull } from './llm'
 
 const BJ_OFFSET = 8 * 3600_000
 const LAT = 39.9042
@@ -247,19 +247,29 @@ async function auditTime(
       '输出修正后的问候语列表,每行一条:',
       ...lines,
     ].join('\n')
-    const text = await completeChat({
-      protocol: chatProtocol(),
-      baseUrl: cfg.chatBaseUrl,
-      apiKey: key,
-      model: cfg.chatModel,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2,
-      maxTokens: 2048,
-      provider: cfg.chatProvider,
-      // 会话头必须是 ASCII:对唯一 key(时段+日期)取哈希
-      sessionId: `greet-audit:${crypto.createHash('sha1').update(facts).digest('hex').slice(0, 16)}`,
-    })
-    return parseLines(text)
+    // 逐次放大预算;被截断的结果一律不采纳(宁可保留原句,也不落残缺文案)
+    for (const budget of [2048, 4096, 6144]) {
+      const res = await completeChatFull({
+        protocol: chatProtocol(),
+        baseUrl: cfg.chatBaseUrl,
+        apiKey: key,
+        model: cfg.chatModel,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+        maxTokens: budget,
+        provider: cfg.chatProvider,
+        signal: AbortSignal.timeout(120_000),
+        // 会话头必须是 ASCII:对唯一 key(时段+日期)取哈希
+        sessionId: `greet-audit:${crypto.createHash('sha1').update(facts).digest('hex').slice(0, 16)}`,
+      })
+      if (res.finishReason === 'length') {
+        console.warn(`[greeting] audit truncated (budget=${budget}),放大重试`)
+        continue
+      }
+      const out = parseLines(res.text)
+      if (out.length) return out
+    }
+    return []
   } catch (e) {
     console.warn('[greeting] audit failed:', e instanceof Error ? e.message : String(e))
     return []
@@ -328,23 +338,46 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       `请直接输出 ${PER_BUCKET} 条不同的问候语,每行一条,不要编号、不要引号、不要任何解释。`,
     ].join('\n')
 
+    // 生成:预算逐次放大,直到拿到「未截断且足量」的结果。
+    // 判定要点:finishReason==='length' 即视为被截断 —— 该次整轮不采纳、末条也丢掉,
+    // 绝不把截断/残缺的结果落盘(宁可本轮失败等下一个 tick,也不缓存坏文案)。
+    const BUDGETS = [4096, 6144, 8192, 12288, 16384]
     let lines: string[] = []
-    for (let attempt = 0; attempt < 3 && lines.length === 0; attempt++) {
-      if (attempt) await new Promise((r) => setTimeout(r, 600))
-      const text = await completeChat({
+    let best: string[] = [] // 未截断候选里条数最多的一次(兜底,仍非截断)
+    for (let i = 0; i < BUDGETS.length; i++) {
+      const budget = BUDGETS[i]
+      if (i) await new Promise((r) => setTimeout(r, 600 * i))
+      const res = await completeChatFull({
         protocol: chatProtocol(),
         baseUrl: cfg.chatBaseUrl,
         apiKey: key,
         model: cfg.chatModel,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.85,
-        maxTokens: 4096,
+        maxTokens: budget,
         provider: cfg.chatProvider,
+        // 大预算 + 推理模型可能远超默认 60s,单独放宽
+        signal: AbortSignal.timeout(180_000),
         // 会话头必须是 ASCII:对含中文的 key 取哈希
         sessionId: `greet:${crypto.createHash('sha1').update(ctx.key).digest('hex').slice(0, 16)}`,
       })
-      lines = parseLines(text)
-      if (!lines.length) console.warn('[greeting] 解析为空,raw len=', text.length)
+      const truncated = res.finishReason === 'length'
+      let parsed = parseLines(res.text)
+      // 截断时最后一条多半被切断:丢掉后再判断,且整次不作为完整结果
+      if (truncated && parsed.length) parsed = parsed.slice(0, -1)
+      console.log(
+        `[greeting] attempt #${i + 1} budget=${budget} → lines=${parsed.length} finish=${res.finishReason ?? '-'} reasoning=${res.reasoningLen ?? 0}`,
+      )
+      if (truncated) continue
+      if (parsed.length > best.length) best = parsed
+      if (parsed.length >= PER_BUCKET) {
+        lines = parsed
+        break
+      }
+    }
+    if (!lines.length && best.length) {
+      lines = best
+      console.warn(`[greeting] 未达 ${PER_BUCKET} 条完整结果,采用未截断的 ${best.length} 条 @ ${ctx.key}`)
     }
     // 时间自审:清掉与当前时段不符的时间表述(通用,不维护词表;失败则保留原句)
     if (lines.length) {
@@ -361,7 +394,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       persist(cache)
       console.log(`[greeting] generated ${lines.length} 条 @ ${ctx.key}`)
     } else {
-      console.warn('[greeting] 生成失败:三次均为空')
+      console.warn(`[greeting] 生成失败:无完整(未截断)结果,等下次重试 @ ${ctx.key}`)
     }
   } catch (e) {
     console.warn('[greeting] generate failed:', e instanceof Error ? e.message : String(e))
