@@ -53,5 +53,11 @@ export function adminCookieOptions() {
     path: '/',
     maxAge: MAX_AGE_S,
     secure: process.env.NODE_ENV === 'production',
+    /**
+     * 生产设 `ADMIN_COOKIE_DOMAIN=.zxlumen.cn`,让子域(如 todo.zxlumen.cn)也能收到这个
+     * 会话 cookie —— Opentodo 网页版据此判定「已登录博客 = 站长」。本地留空(host-only,
+     * cookie 跨端口共享,`localhost:3000` ↔ `localhost:8787` 即可)。
+     */
+    domain: process.env.ADMIN_COOKIE_DOMAIN || undefined,
   }
 }
