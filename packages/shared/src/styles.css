@@ -34,8 +34,6 @@
   --zx-dock-inset-r: 0px;
   --zx-dock-inset-t: 0px;
   --zx-dock-inset-b: 0px;
-  /* 窄屏底部应用栏占位(无应用栏时为 0),供固定悬浮件 / 页脚让出底部 */
-  --zx-dock-reserve-b: 0px;
 
   /* ---------- 版面尺寸(全站唯一的宽度来源) ----------
      --zx-max       标准内容容器上限。原先散落 5 处硬编码 1120px,
@@ -3663,7 +3661,10 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 .zx-statswidget-btn {
   position: fixed;
-  top: 4.2rem;
+  /* 宽窄都固定在右上角:取「原 4.2rem」与「顶栏高 + 间隙」的较大者 ——
+     顶栏窄屏换行后有 ~138px,此时顺次下移;桌面上顶栏仅 ~58px,维持原位置。
+     (sidebar 布局桌面的顶栏是左侧整列,不占顶部,Topbar 会把 --zx-topbar-h 记为 0) */
+  top: max(4.2rem, calc(var(--zx-topbar-h, 0px) + 0.6rem));
   right: 1rem;
   z-index: 400;
   display: inline-flex;
@@ -3705,7 +3706,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 .zx-statswidget-pop {
   position: fixed;
-  top: 6.6rem;
+  top: max(6.6rem, calc(var(--zx-topbar-h, 0px) + 3rem));
   right: 1rem;
   z-index: 401;
   width: min(232px, calc(100vw - 2rem));
@@ -3906,7 +3907,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 .zx-statuswidget {
   position: fixed;
-  top: 7rem;
+  /* 同上,叠在访客统计件之下(与 4.2rem 相差 2.8rem) */
+  top: max(7rem, calc(var(--zx-topbar-h, 0px) + 3.4rem));
   right: 1rem;
   z-index: 399;
   font-family: var(--font-mono);
@@ -4926,18 +4928,20 @@ html[data-layout='sidebar'][data-apps='1'] .zx-topbar {
   padding-right: 1rem;
 }
 
+/* 让开右侧应用栏,并计入竖栏自身的内缩 --zx-dock-inset-r
+   (window 布局竖栏还内缩 22px;只减 --zx-dock-w 会让悬浮件压住竖栏)。 */
 html[data-apps='1'] .zx-statswidget-btn {
-  right: calc(var(--zx-dock-w) + 1rem);
+  right: calc(var(--zx-dock-w) + var(--zx-dock-inset-r, 0px) + 1rem);
 }
 
 html[data-apps='1'] .zx-statswidget-pop {
-  right: calc(var(--zx-dock-w) + 1rem);
+  right: calc(var(--zx-dock-w) + var(--zx-dock-inset-r, 0px) + 1rem);
 }
 
 /* 服务器状态浮件:未拖动时靠 right 定位,同样要让开;
    拖动过的由 JS(rightGutter/maxX)保证不压住。 */
 html[data-apps='1'] .zx-statuswidget {
-  right: calc(var(--zx-dock-w) + 1rem);
+  right: calc(var(--zx-dock-w) + var(--zx-dock-inset-r, 0px) + 1rem);
 }
 
 html[data-apps='1'] .zxchat-fab {
@@ -4997,11 +5001,6 @@ html[data-apps='1'] .zxchat {
     box-shadow: inset -3px 0 0 var(--accent);
   }
 
-  /* 底部应用栏占据的高度,供固定悬浮件让位(无应用栏时保持 0) */
-  html[data-apps='1'] {
-    --zx-dock-reserve-b: var(--zx-dock-h);
-  }
-
   /* 占位由右边距换成底部内边距 */
   html[data-apps='1'] .zx-main {
     padding-right: 0;
@@ -5031,42 +5030,19 @@ html[data-apps='1'] .zxchat {
     bottom: var(--zx-dock-h);
   }
 
-  /* 这三个悬浮件在窄屏已移到左下角(见文件末尾),原来的 right: 1rem 会与
-     left: 1rem 同时生效、把元素拉满整行,故删除,统一由文件末尾接管。 */
+  /* 这三个悬浮件窄屏的 right 复位移到文件末尾(需压过上面的全局 dock 规则)。 */
 }
 
-/* 悬浮件窄屏让位:置于文件末尾,因为这三个元素的定位基础规则定义在 3566/3809/3609 行,
-   位于上面的 @media (max-width: 820px) 之后;同优先级下源顺序在后者胜,放在前面会被覆盖。 */
+/* 访客统计 / 服务器状态两个右上角悬浮件:宽窄都固定在右上角(顶栏之下)。
+   窄屏应用栏是底部横条、不占右侧,而桌面有一条全局
+   `html[data-apps='1'] .zx-{statswidget-btn,statswidget-pop,statuswidget}
+   { right: calc(var(--zx-dock-w) + 1rem) }`(优先级 0,2,1)——窄屏要复位为普通 1rem,
+   否则会被多推左 64px。置于文件末尾以压过那条全局规则。 */
 @media (max-width: 820px) {
-  .zx-statswidget-btn {
-    top: auto;
-    right: auto;
-    bottom: calc(1.1rem + env(safe-area-inset-bottom) + var(--zx-dock-reserve-b));
-    left: 1rem;
-  }
-
-  .zx-statuswidget {
-    top: auto;
-    right: auto;
-    bottom: calc(3.25rem + env(safe-area-inset-bottom) + var(--zx-dock-reserve-b));
-    left: 1rem;
-  }
-
-  .zx-statswidget-pop {
-    top: auto;
-    right: auto;
-    bottom: calc(5.4rem + env(safe-area-inset-bottom) + var(--zx-dock-reserve-b));
-    left: 1rem;
-  }
-
-  /* 他们有一条全局 `html[data-apps='1'] .zx-{statswidget-btn,statswidget-pop,statuswidget}
-     { right: calc(var(--zx-dock-w) + 1rem) }`(优先级 0,2,1),高于这里的 .zx-X(0,1,0)。
-     窄屏这些元素在左下角,必须显式把 right 复位为 auto,否则 right+left 同时生效、
-     被拉满整行。选择器对齐其优先级,再靠"在文件更后"取胜。 */
   html[data-apps='1'] .zx-statswidget-btn,
   html[data-apps='1'] .zx-statswidget-pop,
   html[data-apps='1'] .zx-statuswidget {
-    right: auto;
+    right: 1rem;
   }
 
   /* admin 的 9 个 Tab(留言/归档/统计/个人信息/项目/视频/外观/机器人/Token用量)

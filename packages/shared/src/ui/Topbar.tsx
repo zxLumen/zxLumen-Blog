@@ -81,6 +81,8 @@ export function Topbar({
    *  故取 max(顶栏高, scroll-margin-top),两者都从 DOM 实测,不再写死。 */
   const barRef = useRef<HTMLElement | null>(null)
   const lineRef = useRef(130)
+  /** 顶栏在页面顶端时的下沿(px);供 --zx-topbar-h 与悬浮件定位 */
+  const topbarBottomRef = useRef(0)
 
   // 路由变化后(含客户端导航):滚动到 hash 或顶部;先用 URL hash 定高亮,避免先闪 home
   useIsoLayoutEffect(() => {
@@ -105,7 +107,22 @@ export function Topbar({
     // (顶栏窄屏换行后约 138px、宽屏 58px;scroll-margin-top 固定 72px),
     // 每次布局变化都要重新量,否则判定线会失准。
     const measure = () => {
-      const barH = barRef.current?.offsetHeight ?? 0
+      const bar = barRef.current
+      const rect = bar?.getBoundingClientRect()
+      // 只把「顶部横条」计入顶部占位:sidebar 布局桌面端的顶栏是整列**左栏**
+      // (fixed、208px 宽、满视口高),它在左侧不占顶部,其高度既不能当悬浮件的
+      // top 偏移,也不能当滚动高亮的判定线(否则判定线 = 视口高,高亮永远停在最后一项)。
+      const isTopBar = !!rect && rect.width >= window.innerWidth * 0.85
+      // 记录顶栏在**页面顶端**(scrollY≈0)时的下沿:window 布局顶栏上方还有一条
+      // 伪窗口栏(●●●),此时下沿更低。滚起来顶栏粘到 top:0、下沿变高,取滚动前的
+      // 较大值,悬浮件与判定线在整个滚动过程中都不会压住顶栏。
+      if (isTopBar && rect) {
+        if (window.scrollY <= 1 || topbarBottomRef.current === 0) {
+          topbarBottomRef.current = Math.round(rect.bottom)
+        }
+      }
+      const barH = isTopBar ? topbarBottomRef.current : 0
+      document.documentElement.style.setProperty('--zx-topbar-h', barH + 'px')
       let margin = 0
       for (const el of document.querySelectorAll<HTMLElement>('[id]')) {
         const v = parseFloat(getComputedStyle(el).scrollMarginTop)

@@ -17,7 +17,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   const [series, setSeries] = useState<'pv' | 'uv'>('pv')
   const [mounted, setMounted] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
-  /** 窄屏(≤820px):定位交给 CSS(左下角),不套用拖拽/存档坐标 */
+  /** 窄屏(≤820px):定位交给 CSS(固定在右上角顶栏之下),不套用桌面拖拽/存档坐标 */
   const [narrow, setNarrow] = useState(false)
   const [popPos, setPopPos] = useState<{ left: number; top: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -56,7 +56,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
   }, [])
 
   // 恢复上次拖动位置(限定在视口内;右侧再扣掉应用栏,免得老位置压住它)。
-  // 窄屏不恢复:坐标改由 CSS(左下角)决定,行内 left/top 会盖过样式表。
+  // 窄屏不恢复:坐标改由 CSS(右上角、顶栏之下)决定,行内 left/top 会盖过样式表。
   useEffect(() => {
     if (narrow) {
       setPos(null)
@@ -231,7 +231,7 @@ export function StatsWidget({ stats }: { stats?: StatsResult }) {
         className={`zx-statswidget-btn${open ? ' is-open' : ''}`}
         style={btnStyle}
         onPointerDown={(e) => {
-          // 窄屏由 CSS 定位,不参与拖拽:拖出来的坐标是桌面系的,会破坏左下角堆叠
+          // 窄屏固定在右上角,不参与拖拽:拖出来的坐标是桌面系的,会在窄屏跑位
           if (narrow) return
           const el = btnRef.current
           if (!el) return

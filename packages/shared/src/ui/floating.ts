@@ -29,10 +29,12 @@ export function rightGutter(): number {
   if (typeof document === 'undefined' || typeof window === 'undefined') return 0
   if (document.documentElement.getAttribute('data-apps') !== '1') return 0
   if (window.innerWidth <= 820) return 0
-  const w = parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue('--zx-dock-w'),
-  )
-  return Number.isFinite(w) && w > 0 ? w + DOCK_GAP : 0
+  const cs = getComputedStyle(document.documentElement)
+  const w = parseFloat(cs.getPropertyValue('--zx-dock-w'))
+  if (!Number.isFinite(w) || w <= 0) return 0
+  // 竖栏自身的内缩(window 布局 22px)也要算进去,否则悬浮件会压住竖栏
+  const inset = parseFloat(cs.getPropertyValue('--zx-dock-inset-r'))
+  return w + DOCK_GAP + (Number.isFinite(inset) && inset > 0 ? inset : 0)
 }
 
 /**
