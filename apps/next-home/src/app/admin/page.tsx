@@ -3,6 +3,7 @@ import { AdminPanel } from "@zx/shared/ui";
 import "@mantine/core/styles.layer.css";
 import { getAllProjectsForStats } from "@/lib/projects-config";
 import { getVisibleVlogSeries } from "@/lib/vlog-config";
+import { getVisibleApps } from "@/lib/app-config";
 
 export const metadata: Metadata = {
   title: "admin · liuzixiang",
@@ -16,5 +17,7 @@ export default async function AdminPage() {
   const projects = await getAllProjectsForStats();
   // 视频ID → 系列/集标题(统计页「视频播放」表用)
   const vlogSeries = getVisibleVlogSeries();
-  return <AdminPanel projects={projects} vlogSeries={vlogSeries} />;
+  // 应用列表(统计页「应用点击」表把 id 显示成名字;应用面板的「绑定埋点」下拉也用它)
+  const apps = getVisibleApps();
+  return <AdminPanel projects={projects} vlogSeries={vlogSeries} apps={apps} />;
 }

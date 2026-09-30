@@ -10,8 +10,9 @@
   - `demoUrl === '/'`(**指向本站,即「本页 · 个人主页」**)的项目:显示**全站访问量(PV)**,不显示链接点击;
   - 其余(外部 demo/repo)项目:N = **链接点击次数**(点「试用/repo」按钮 `project_click` 累计)。
 - **admin「统计」Tab**:`/admin` → 统计,展示 **留言**(总/今日/公开/仅站长可见/留言者)、
-  **简历下载**、**项目点击**(按项目列出)、**联系点击**(按方式列出:邮件/微信/电话/GitHub/留言)、
-  **视频播放**(按视频列出:访客点进播放器的次数,每访客每天每集只计 1 次)、
+   **简历下载**、**项目点击**(按项目列出)、**联系点击**(按方式列出:邮件/微信/电话/GitHub/留言)、
+   **视频播放**(按视频列出:访客点进播放器的次数,每访客每天每集只计 1 次)、
+   **应用点击**(按应用列出:未绑定其它事件的应用被点击的次数)、
   **访客**(PV/UV/今日/在线)、
   **访客明细**(最近活跃的 30 位访客:昵称/匿名 ID、访问/留言/简历/项目点击、最近活跃;
   **新客/回头客**徽标直接显示在折叠行昵称旁;
@@ -26,6 +27,12 @@
 - 项目「试用/repo」链接、简历「下载」按钮点击时上报 `project_click`(target=项目 id)/ `resume_download`。
 - **联系方式**点击上报 `contact_click`(target=`email` / `wechat` / `phone` / `github` / `guestbook`):
   邮件、微信、电话(页脚 compact 与关于页 full 两处)、GitHub、留言按钮。
+- **应用栏点击**按每条应用的「绑定埋点」决定上报成什么(见 `StoredApp.bind` 与 `resolveAppTrack`):
+  - 空 → `app_click`(target=应用 id),即**独立的应用点击**;
+  - `github`/`wechat`/`email`/`phone`/`guestbook` → `contact_click`,与页面对应按钮**合并计数**;
+  - `resume` → `resume_download`,与简历下载按钮**合并**;
+  - 其它(项目 id,如 `proj-8f58rlh81`)→ `project_click`,与项目卡「试用/repo」**合并**。
+  只重真点击(拖动后浏览器补发的那次 click 会被源码里的 `onClickCapture` 吞掉)。
 - **视频播放**上报 `vlog_play`(target=抖音 vid),**只在访客真的点进播放器时**才上报
   —— 打开首页、切换系列/集数、左右箭头、滑动切换都**不**计。抖音 iframe 跨域,收不到它内部的
   点击,也不发播放事件(播放器 3 个 bundle 的 `postMessage` 全是埋点/调试内部用途),因此改为
@@ -61,8 +68,8 @@
 | ts | UTC `YYYY-MM-DD HH:MM:SS` |
 | day | 北京时 `YYYY-MM-DD`(UV/PV 按此聚合) |
 | cid | 访客匿名 ID(UV 依据) |
-| type | `visit` / `leave` / `section_view` / `project_click` / `resume_download` / `contact_click` / `vlog_play` |
-| target | 路径 / 区块(`/#usage`)/ 项目 id / 文件名 / 联系方式 / 抖音 vid |
+| type | `visit` / `leave` / `section_view` / `project_click` / `resume_download` / `contact_click` / `vlog_play` / `app_click` |
+| target | 路径 / 区块(`/#usage`)/ 项目 id / 文件名 / 联系方式 / 抖音 vid / 应用 id |
 | ua | User-Agent(仅用于过滤,不展示) |
 | referrer | 落地来源(document.referrer,仅 admin 可见) |
 | dwell | 停留秒数(`leave` = 整页前台停留;`section_view` = 该区块可见时长) |

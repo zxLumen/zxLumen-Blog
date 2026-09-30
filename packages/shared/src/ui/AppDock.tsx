@@ -6,6 +6,8 @@ import type { AppItem } from '../schema.js'
 import { isSpaRoute, normalizeUrl } from '../content.js'
 import type { LinkComponent } from './types.js'
 import { appsOrderKey } from './identity.js'
+import { resolveAppTrack } from './app-track.js'
+import { trackEvent } from './track.js'
 import { applySavedOrder, groupContiguous, useDragReorder } from './useDragReorder.js'
 
 interface AppDockProps {
@@ -210,6 +212,14 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
           onMouseLeave: hideTip,
           onFocus: (e: ReactFocusEvent) => showTip(app.name, e.currentTarget as HTMLElement),
           onBlur: hideTip,
+          /**
+           * 点击埋点:绑定到项目/联系方式/简历的与对应按钮合并计数,没绑定的记 app_click。
+           * 拖动后浏览器补发的那次 click 会被 handleProps 的 onClickCapture 吃掉,故只有真点击才计。
+           */
+          onClick: () => {
+            const { type, target } = resolveAppTrack(app)
+            trackEvent(type, target)
+          },
           /**
            * <a href> 默认是可拖的:一动就触发浏览器原生 drag,随即给指针序列发
            * pointercancel,自建的拖拽当场断掉(鼠标也一样,不只是触屏)。必须关掉。

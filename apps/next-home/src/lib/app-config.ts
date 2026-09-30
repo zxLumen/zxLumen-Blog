@@ -12,8 +12,8 @@ const ICON_RE = /^\/apps\/[a-z0-9][a-z0-9-]{0,39}\.(?:jpg|jpeg|png|webp)$/i
 
 /** 出厂默认应用(未配置时的初始列表;不落库,保存后才生效) */
 const DEFAULT_APPS: AppItem[] = [
-  { id: 'github', name: 'GitHub', url: 'https://github.com/zxlumen' },
-  { id: 'resume', name: '简历', url: '/resume.pdf' },
+  { id: 'github', name: 'GitHub', url: 'https://github.com/zxlumen', bind: 'github' },
+  { id: 'resume', name: '简历', url: '/resume.pdf', bind: 'resume' },
 ]
 
 /** 规范化单条(过滤非法值,兜底字段);无 id 则丢弃 */
@@ -30,6 +30,8 @@ function normalizeOne(raw: unknown): StoredApp | null {
   // 只认 'self';留空/未知(未来的 'panel' 等)一律按 newtab 落库,不会把老数据搞坏
   const openIn: AppOpenIn = r.openIn === 'self' ? 'self' : 'newtab'
   const group = typeof r.group === 'string' && r.group.trim() ? r.group.trim() : undefined
+  // 点击埋点绑定(纯统计):空/非字符串一律丢弃,交由前端 resolveAppTrack 兜底成 app_click
+  const bind = typeof r.bind === 'string' && r.bind.trim() ? r.bind.trim() : undefined
   return {
     id,
     name,
@@ -37,6 +39,7 @@ function normalizeOne(raw: unknown): StoredApp | null {
     ...(icon ? { icon } : {}),
     openIn,
     ...(group ? { group } : {}),
+    ...(bind ? { bind } : {}),
     deleted: r.deleted === true,
   }
 }

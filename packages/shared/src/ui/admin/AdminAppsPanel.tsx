@@ -14,6 +14,8 @@ import {
 } from '@mantine/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppOpenIn, StoredApp } from '../../schema.js'
+import { CONTACT_BIND_KEYS } from '../app-track.js'
+import type { Project } from '../../content.js'
 import { MantineBridge } from './mantine-bridge.js'
 import { adminFetch } from './admin-fetch.js'
 import type { NotifyMsg } from './admin-types.js'
@@ -31,6 +33,18 @@ const OPEN_OPTIONS = [
   { value: 'newtab', label: '新标签页' },
   { value: 'self', label: '当前页' },
 ]
+
+/** 「绑定埋点」下拉里代表「不绑定」的哨兵值(Mantine Select 空字符串会显示成 placeholder) */
+const BIND_NONE = '__none__'
+
+/** 可与应用点击合并计数的联系方式(键与 CONTACT_BIND_KEYS 一致,这里只补中文名) */
+const CONTACT_BIND_LABEL: Record<string, string> = {
+  github: 'GitHub',
+  wechat: '微信',
+  email: '邮件',
+  phone: '电话',
+  guestbook: '留言',
+}
 
 function newId(): string {
   return `app-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`
@@ -71,11 +85,14 @@ export function AdminAppsPanel({
   showTabs,
   tab,
   onNotify,
+  projects,
 }: {
   active: boolean
   showTabs: boolean
   tab: string
   onNotify?: (m: NotifyMsg) => void
+  /** 项目列表:供「绑定埋点」下拉里选项目 */
+  projects?: Project[]
 }) {
   const [apps, setApps] = useState<StoredApp[]>([])
   const [busy, setBusy] = useState(false)
@@ -136,6 +153,14 @@ export function AdminAppsPanel({
   const visible = apps.filter((a) => !a.deleted)
   const trashed = apps.filter((a) => a.deleted)
   const actionsDisabled = busy || saving
+
+  /** 「绑定埋点」下拉:不绑定 / 常见按钮 / 各项目 */
+  const bindOptions = [
+    { value: BIND_NONE, label: '不绑定(单独记「应用点击」)' },
+    ...CONTACT_BIND_KEYS.map((k) => ({ value: k, label: `${CONTACT_BIND_LABEL[k] ?? k}(并入联系点击)` })),
+    { value: 'resume', label: '简历(并入简历下载)' },
+    ...(projects ?? []).map((p) => ({ value: p.id, label: `项目 · ${p.name}` })),
+  ]
 
   /**
    * 拖拽排序复用访客应用栏那套指针实现(见 useDragReorder)。
@@ -438,6 +463,18 @@ export function AdminAppsPanel({
                       disabled={actionsDisabled}
                       onChange={(e) => patch(a.id, { group: e.target.value })}
                       style={{ width: 120, flex: 'none' }}
+                    />
+                    <Select
+                      size="xs"
+                      label="绑定埋点"
+                      description="点击计入统计;选项目则并入该项目点击"
+                      data={bindOptions}
+                      value={a.bind || BIND_NONE}
+                      allowDeselect={false}
+                      searchable
+                      disabled={actionsDisabled}
+                      onChange={(val) => patch(a.id, { bind: val && val !== BIND_NONE ? val : undefined })}
+                      style={{ width: 170, flex: 'none' }}
                     />
                   </Group>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import type { EventType, VisitorDetail } from '../../schema.js'
+import type { AppItem, EventType, VisitorDetail } from '../../schema.js'
 import { fmtInt } from '../../format.js'
 import { SECTION_LABELS, type Project } from '../../content.js'
 
@@ -12,6 +12,7 @@ const EVENT_LABEL: Record<EventType, string> = {
   section_view: '区块浏览',
   contact_click: '联系点击',
   vlog_play: '视频播放',
+  app_click: '应用点击',
 }
 
 function targetLabel(t: string, projects: Project[]) {
@@ -33,12 +34,15 @@ export function VisitorDetailRow({
   open,
   onToggle,
   projects,
+  apps,
 }: {
   v: VisitorDetail
   open: boolean
   onToggle: () => void
   projects: Project[]
+  apps?: AppItem[]
 }) {
+  const appName = (id: string) => apps?.find((a) => a.id === id)?.name ?? id
   const proj = Object.entries(v.projectClicks)
     .sort((a, b) => b[1] - a[1])
     .map(([t, n]) => `${targetLabel(t, projects)}×${n}`)
@@ -66,6 +70,7 @@ export function VisitorDetailRow({
       return SECTION_LABELS[id] ?? target
     }
     if (type === 'contact_click') return CONTACT_LABEL[target] ?? target
+    if (type === 'app_click') return appName(target)
     return targetLabel(target, projects)
   }
   const ops = v.recent

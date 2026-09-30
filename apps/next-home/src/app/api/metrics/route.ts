@@ -56,6 +56,8 @@ export async function GET(req: Request) {
       `zx_project_clicks ${s.events.projectClicks}`,
       '# TYPE zx_resume_downloads gauge',
       `zx_resume_downloads ${s.events.resumeDownloads}`,
+      '# TYPE zx_app_clicks gauge',
+      `zx_app_clicks ${s.events.appClicks}`,
     ].join('\n')
   } catch {
     /* 数据库异常时仍返回进程指标 */

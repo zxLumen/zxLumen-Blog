@@ -174,7 +174,7 @@ export interface UsageRow {
 
 export type Visibility = 'public' | 'private'
 
-/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击;vlog_play = 点进抖音播放器) */
+/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击;vlog_play = 点进抖音播放器;app_click = 应用栏里未绑定其它事件的应用被点击) */
 export type EventType =
   | 'visit'
   | 'project_click'
@@ -183,6 +183,7 @@ export type EventType =
   | 'section_view'
   | 'contact_click'
   | 'vlog_play'
+  | 'app_click'
 
 /** 联系方式点击的目标(email | wechat | phone | github | guestbook) */
 export type ContactTarget = 'email' | 'wechat' | 'phone' | 'github' | 'guestbook'
@@ -275,6 +276,10 @@ export interface StatsResult {
     vlogPlays: number
     /** 各视频被点开播放的次数(videoId → count) */
     playsByVid: Record<string, number>
+    /** 未绑定其它事件的应用被点击的总次数 */
+    appClicks: number
+    /** 各应用被点击次数(appId → count;仅未绑定其它事件的应用) */
+    appClicksByTarget: Record<string, number>
   }
   /** 访客访问详情(按最近活跃,仅站长接口) */
   visitors: VisitorDetail[]
@@ -429,6 +434,14 @@ export interface StoredApp {
   openIn?: AppOpenIn
   /** 可选分组名:相邻同名之间自动插一条分隔线(纯展示,不影响行为) */
   group?: string
+  /**
+   * 点击埋点绑定(纯统计用,不影响打开行为)。取值:
+   *  - 空 → 记 `app_click`(target = 本应用 id),即「单独的应用点击」
+   *  - `github` / `wechat` / `email` / `phone` / `guestbook` → 记 `contact_click`(与页面上对应按钮合并计数)
+   *  - `resume` → 记 `resume_download`(与简历下载按钮合并)
+   *  - 其它(项目 id,如 `proj-8f58rlh81`)→ 记 `project_click`(与项目卡「试用/repo」合并)
+   */
+  bind?: string
   /** true=在垃圾箱(前端不显示);缺省/false=正常 */
   deleted?: boolean
 }

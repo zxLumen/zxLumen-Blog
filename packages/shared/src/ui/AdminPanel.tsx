@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ArchivedCommentRow, CommentRow, PagedComments, StatsResult, VlogSeries } from '../schema.js'
+import type { AppItem, ArchivedCommentRow, CommentRow, PagedComments, StatsResult, VlogSeries } from '../schema.js'
 import { fmtDateTime, fmtInt } from '../format.js'
 import { PROJECTS, type Project } from '../content.js'
 import { Pagination } from './Pagination.js'
@@ -41,8 +41,10 @@ const CONTACT_LABEL: Record<string, string> = {
   guestbook: '留言',
 }
 
-export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlogSeries?: VlogSeries[] }) {
+export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[]; vlogSeries?: VlogSeries[]; apps?: AppItem[] }) {
   const projList = projects ?? PROJECTS
+  /** 应用 id → 名称(统计里显示应用名而非 id) */
+  const appName = (id: string): string => apps?.find((a) => a.id === id)?.name ?? id
   /** 视频ID → 「系列 · 集标题」,用于统计表展示 */
   const vlogLabel = (vid: string): string => {
     for (const s of vlogSeries ?? []) {
@@ -780,7 +782,7 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
       )}
 
       {tab === 'apps' && (
-        <AdminAppsPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
+        <AdminAppsPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} projects={projList} />
       )}
 
       {tab === 'themes' && (
@@ -1531,6 +1533,38 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
 
           <div className="zx-panel">
             <h3>
+              应用点击 <span>未绑定其它事件的应用</span>
+            </h3>
+            {Object.keys(stats.events.appClicksByTarget ?? {}).length === 0 ? (
+              <div className="zx-c-empty">暂无应用点击</div>
+            ) : (
+              <table className="zx-table">
+                <thead>
+                  <tr>
+                    <th>应用</th>
+                    <th className="num">点击</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(stats.events.appClicksByTarget ?? {})
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([id, count]) => (
+                      <tr key={id}>
+                        <td>{appName(id)}</td>
+                        <td className="num">{fmtInt(count)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+            <p className="zx-muted zx-mono" style={{ fontSize: '0.7rem', margin: '0.7rem 0 0', lineHeight: 1.6 }}>
+              绑定到项目 / 联系方式 / 简历的应用不在此列 —— 它们的点击已并入
+              「项目点击 / 联系点击 / 简历下载」。
+            </p>
+          </div>
+
+          <div className="zx-panel">
+            <h3>
               访客明细 <span>最近活跃 · 点击行展开操作记录</span>
             </h3>
             {(stats.visitors ?? []).length === 0 ? (
@@ -1555,6 +1589,7 @@ export function AdminPanel({ projects, vlogSeries }: { projects?: Project[]; vlo
                       open={statVisitor === v.cid}
                       onToggle={() => setStatVisitor(statVisitor === v.cid ? null : v.cid)}
                       projects={projList}
+                      apps={apps}
                     />
                   ))}
                 </tbody>
