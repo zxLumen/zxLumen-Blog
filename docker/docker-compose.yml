@@ -42,6 +42,25 @@ services:
   #   networks:
   #     - web
 
+  # Opentodo 网页版(独立服务,ghcr 镜像,服务器只 pull)。
+  # 给主站 iframe 嵌进应用栏;与博客共享 admin(SSO)—— 两边配同一个 SESSION_SECRET
+  # (在 docker/.env 里)。Caddy 里一对一 todo.${DOMAIN}。详见 Opentodo 仓库 web/README.md。
+  opentodo:
+    image: ghcr.io/zxlumen/opentodo-web:${OPENTODO_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # 站长数据(单 JSON);访客数据落在同卷的 visitors/
+      OPENTODO_FILE: /data/todos.json
+      # 放行访客使用 AI(走站长配的 provider);=0 关闭
+      OPENTODO_VISITOR_AI: ${OPENTODO_VISITOR_AI:-1}
+    volumes:
+      - opentodo-data:/data
+    expose:
+      - "8787"
+    networks:
+      - web
+
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -172,6 +191,7 @@ volumes:
   caddy-config:
   alloy-data:
   grafana-data:
+  opentodo-data:
 
 networks:
   web:

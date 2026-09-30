@@ -15,9 +15,12 @@ export IMAGE_TAG
 [[ "${EUID}" -eq 0 ]] || SUDO="sudo -n"
 echo "[deploy] IMAGE_TAG=${IMAGE_TAG} (工作目录: $(pwd))"
 
-# sudo 默认 env_reset 会清掉 IMAGE_TAG,用 env 显式传回 compose
-${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose pull app
-${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
+  # sudo 默认 env_reset 会清掉 IMAGE_TAG,用 env 显式传回 compose
+  ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose pull app
+  # Opentodo 网页版:独立镜像(自己的 CI 推 latest);拉不到不阻断(可能还没上)
+  ${SUDO:-} env OPENTODO_TAG="${OPENTODO_TAG:-latest}" docker compose pull opentodo \
+    || echo "[deploy] opentodo 镜像拉取失败(可能尚未推送),跳过"
+  ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
 
 # 服务器侧配置(Caddyfile / compose)由 CI scp 同步过来;`up -d` 不会因挂载文件
 # 内容变化而重启 caddy,这里显式 reload 让它读到新的 Caddyfile(失败不阻断)。
