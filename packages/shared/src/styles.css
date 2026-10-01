@@ -5539,6 +5539,11 @@ html[data-apps='1'] .zxchat {
   border: none;
 }
 
+/* 收起但保持挂载(iframe 不销毁,子应用状态不丢) */
+.zx-apppanel[hidden] {
+  display: none;
+}
+
 .zx-apppanel-bar {
   display: flex;
   align-items: center;

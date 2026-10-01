@@ -79,20 +79,39 @@ function loadRect(): Rect {
 
 /** 全站唯一的浮层宿主:包住 children,并负责渲染当前打开的应用面板。 */
 export function AppPanelProvider({ children }: { children: ReactNode }) {
-  const [app, setApp] = useState<AppItem | null>(null)
+  /**
+   * 打开过的应用**保持挂载**（仅隐藏非当前项），这样点面板外「收起」后再打开，
+   * iframe 不会被销毁重建 —— 子应用（如易经）的临时状态得以保留。
+   */
+  const [apps, setApps] = useState<AppItem[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
   const api = useMemo<AppPanelApi>(
-    () => ({ open: (a) => setApp(a), close: () => setApp(null) }),
+    () => ({
+      open: (a) => {
+        setApps((prev) => {
+          const i = prev.findIndex((p) => p.id === a.id)
+          if (i === -1) return [...prev, a]
+          const next = prev.slice()
+          next[i] = a
+          return next
+        })
+        setActiveId(a.id)
+      },
+      close: () => setActiveId(null),
+    }),
     [],
   )
   return (
     <AppPanelContext.Provider value={api}>
       {children}
-      {app && <AppPanel app={app} onClose={api.close} />}
+      {apps.map((a) => (
+        <AppPanel key={a.id} app={a} active={a.id === activeId} onClose={api.close} />
+      ))}
     </AppPanelContext.Provider>
   )
 }
 
-function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
+function AppPanel({ app, active, onClose }: { app: AppItem; active: boolean; onClose: () => void }) {
   const href = normalizeUrl(app.url)
   const [rect, setRect] = useState<Rect | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -104,6 +123,13 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
   useEffect(() => {
     setRect(loadRect())
     const onWinResize = () => setRect((r) => (r ? clampRect(r) : r))
+    window.addEventListener('resize', onWinResize)
+    return () => window.removeEventListener('resize', onWinResize)
+  }, [])
+
+  // 仅当前面板监听「Esc / 点外部收起」；隐藏面板不挂监听，免得在别处点击时误关当前面板
+  useEffect(() => {
+    if (!active) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
@@ -112,15 +138,13 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
       const el = panelRef.current
       if (el && !el.contains(e.target as Node)) onClose()
     }
-    window.addEventListener('resize', onWinResize)
     window.addEventListener('keydown', onKey)
     window.addEventListener('pointerdown', onDown)
     return () => {
-      window.removeEventListener('resize', onWinResize)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('pointerdown', onDown)
     }
-  }, [onClose])
+  }, [active, onClose])
 
   /**
    * 跨子域应用上报自己的 AI 状态:iframe 里 `postMessage({type:'zx:ai-status',...})`,
@@ -150,12 +174,14 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
       reportAiState(app.id, d.state, typeof d.detail === 'string' ? d.detail.slice(0, 120) : undefined)
     }
     window.addEventListener('message', onMsg)
-    setAiSourceAvailable(app.id, true)
-    return () => {
-      window.removeEventListener('message', onMsg)
-      setAiSourceAvailable(app.id, false)
-    }
+    return () => window.removeEventListener('message', onMsg)
   }, [app.id, href])
+
+  // 可用性跟随「是否当前展开」：收起即熄灭状态灯(应用仍在后台挂载，状态不丢)
+  useEffect(() => {
+    setAiSourceAvailable(app.id, active)
+    return () => setAiSourceAvailable(app.id, false)
+  }, [app.id, active])
 
   // 换应用:重置加载态;迟迟不 onLoad 就提示走「新标签页」兜底
   useEffect(() => {
@@ -226,6 +252,7 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
       ref={panelRef}
       className="zx-apppanel"
       data-narrow={narrow ? '' : undefined}
+      hidden={!active}
       role="dialog"
       aria-label={app.name}
       style={narrow || !rect ? undefined : { left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
