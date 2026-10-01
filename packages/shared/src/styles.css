@@ -2855,6 +2855,11 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
     align-items: center;
     border-right: none;
     border-bottom: 1px solid var(--line);
+    /* 必须清掉 overflow:桌面端那列是 overflow:auto(要能滚),而绝对定位的
+       AI 状态灯挂在 `top:100%`(顶栏盒子之外)——overflow 非 visible 会把它
+       整个裁掉,实测窄屏 sidebar 下灯直接不可见。窄屏顶栏已改为换行自适应、
+       本就没有可滚的内容,清掉无副作用。 */
+    overflow: visible;
   }
 
   [data-layout='sidebar'] .zx-topbar-in {
