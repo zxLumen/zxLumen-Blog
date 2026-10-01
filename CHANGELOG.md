@@ -74,6 +74,8 @@
   - **防滥用**:整站同源蜜罐字段 + 正则拦爬虫(`curl`/`bot` 等静默返回成功、不留库);按 IP 限流 3 条/分钟(`feedback:${ip}`);内容 1–2000 字、联系方式 ≤200、路径 ≤500,防注入防刷屏。
   - **样式**:桌面「?」钉在首图标上方的空带正中(随顶栏高度自适应居中),滚动时随栏顶 sticky;窄屏(≤820px)自动改放底部横条**最右端** 40px 圆钮,不挤兑应用图标。弹窗全屏遮罩、Esc/点空白关闭、送审中的禁用态。
   - **部署**:密钥进 `docker/.env`(`RESEND_API_KEY`),收件地址默认已指向 `service@zxlumen.cn`;compose 无需改动。
+- **新增项目卡「AI 状态灯」(三种形态)**:主页项目区加一张卡,把一路做下来的 AI 状态灯归到一处 —— ESP32-C3 + 玩具红绿灯的**桌面硬件灯**(USB 串口 / BLE,浏览器直连配置)、macOS **菜单栏 App 版**(无硬件,悬浮灯 + Bark 推手机)、以及**本站网页版**(导航栏常驻三色灯 + 跨子域 `zx:ai-status` 协议,嵌进应用栏的子应用如 Opentodo 把状态实时上报)。repo 指向 `github.com/zxLumen/AI-Status-Light`。
+- **新增 `sync:projects` 脚本:把项目卡同步到线上**:项目卡存在线上库 `meta.projects_config`(admin 覆盖值),**只改 `content.local.ts` 不会让它出现在线上**。新脚本登录线上后用站点自己的 `GET/POST /api/admin/projects` 按 id 合并(**只加不减**,线上独有的条目与 admin 改过的字段都留着),可 `--dry-run` 先看差异、`--update` 覆盖、`--after <id>` 指定插入位置。走应用接口而不是 SSH 直写 SQLite:线上库属容器内 uid 10001,root 直写会把 db/-wal/-shm 变成 root 所有,之后应用就写不进去了。
 
 ### 修复
 

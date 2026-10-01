@@ -28,6 +28,11 @@ cd packages/shared && npm run cover:vlog -- --list    # 本地清单(来源/尺�
 cd packages/shared && npm run cover:vlog              # 只生成本地兜底首帧(不推线上)
 cd packages/shared && npm run cover:vlog -- --force   # 连已有的兜底图也重抓(不碰 <vid>.user.*)
 
+# 项目卡同步到线上(按 id 只加不减;需 packages/shared/.env.local 配 ZX_ADMIN_PASSWORD)
+cd packages/shared && npm run export:content          # 先把 content.local.ts 导出到 content.json
+cd packages/shared && npm run sync:projects -- --dry-run  # 只看线上会加什么
+cd packages/shared && npm run sync:projects           # 真正同步(走线上 /api/admin/projects)
+
 # 本地开发
 cd apps/next-home && npm run dev      # http://localhost:3000
 
@@ -164,6 +169,21 @@ cd apps/next-home && npm run lint && npm run build
    `sudo chown -R 10001:10001 ~/zxLumen-Blog/docker/site-content/apps`
 5. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
    改了邮箱/联系方式要**同时更新线上库**(线上 `/admin → 个人信息`,或直接改 `meta`)。
+6. **项目卡**(`meta.projects_config`)也是 admin 覆盖值 —— **只把新项目写进
+   `content.local.ts` 不会让它出现在线上**:线上库只要有过 `projects_config`
+   (用过 admin「项目」面板就会有),就以库为准,`content.json` 的 `PROJECTS`
+   只是「从未配置过」时的初始值。上线时跑一次脚本即可(它按 id **只加不减**,
+   线上独有的条目、admin 改过的字段都留着):
+
+   ```bash
+   cd packages/shared && npm run export:content   # 1) 导出 content.json
+   cd packages/shared && npm run sync:projects -- --dry-run   # 2) 先看会加什么
+   cd packages/shared && npm run sync:projects                # 3) 真正同步(走线上 admin API)
+   # 只同步某一张 / 指定插入位置:
+   #   npm run sync:projects -- ai-status-light --after yijing
+   ```
+
+   需要 `packages/shared/.env.local` 里配 `ZX_ADMIN_PASSWORD`(线上站长的 admin 密码)。
 
 > `docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` / `docker/ci-run.sh` /
 > `docker/observability/` **无需手动传**:服务器 `ci-run.sh` 会在部署前从公开仓库自动 `git fetch` 同步(见上)。

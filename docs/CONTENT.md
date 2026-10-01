@@ -55,3 +55,7 @@ scp docker/site-content/content.json zx@服务器:~/zxLumen-Blog/docker/site-con
 - admin 后台的「联系方式 / 项目 / 昵称」等**存数据库 `meta`**,是**覆盖值**;
   内容 JSON 只是默认值。改了内容 JSON 但 DB 里有旧覆盖时,以 DB 为准(admin 里可删/改)。
 - 邮箱假设「改了 `content.local.ts` → 上线后邮箱没变」,多半是 admin 里存了 `contact_email`。
+- **项目卡**同理,而且多一条命令:改完 `content.local.ts` 后 `npm run export:content`,
+  再 `npm run sync:projects` 把卡片按 id 推到线上(只加不减,线上独有与 admin 改过的字段都留着)。
+  加一张卡的完整流程:`cd packages/shared && npm run export:content && npm run sync:projects -- --dry-run && npm run sync:projects`。
+  需要 `packages/shared/.env.local` 配 `ZX_ADMIN_PASSWORD`。
