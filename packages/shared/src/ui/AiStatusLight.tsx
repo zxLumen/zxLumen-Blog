@@ -16,7 +16,7 @@ const HOVER_CLOSE_DELAY = 180
  *
  * **悬浮展开逐源明细**:`onMouseEnter` 即浮出各 AI 服务当前状态,访客与站长都能看
  * —— 访客看到的只有自己那几个源(`ownerOnly` 的全局源对他们不可见),这本来就是
- * 「你自己的灯」。旁边的状态文字仍只给站长,免得导航栏上多一行常驻文案。
+ * 「你自己的灯」。灯旁边的状态文字同样人人可见(字号与顶栏导航项相同)。
  * 触屏没有悬浮,靠点击;键盘用聚焦。
  *
  * 摆放由 CSS 决定,同一个节点三种形态:
@@ -164,7 +164,7 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
   return (
     <div
       ref={wrapRef}
-      className={`zx-aistatus-wrap${admin ? ' is-admin' : ''}`}
+      className="zx-aistatus-wrap"
       role="button"
       tabIndex={0}
       aria-label={`AI 状态:${AI_LABEL[state]}`}
@@ -190,7 +190,7 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
         <i className="zx-aistatus-lamp is-y" />
         <i className="zx-aistatus-lamp is-g" />
       </div>
-      {admin && <span className="zx-aistatus-label">{AI_LABEL[state]}</span>}
+      <span className="zx-aistatus-label">{AI_LABEL[state]}</span>
       {popover}
     </div>
   )
