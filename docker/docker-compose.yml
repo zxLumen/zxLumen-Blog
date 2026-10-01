@@ -63,6 +63,28 @@ services:
     networks:
       - web
 
+  # 易经六十四卦网页版(独立服务,ghcr 镜像,服务器只 pull)。
+  # 与 Opentodo 同一套模式:给主站 iframe 嵌进应用栏;与博客共享 admin(SSO)——
+  # 两边配同一个 SESSION_SECRET(在 docker/.env 里)。详见 yijing64 仓库 web/README.md。
+  yijing:
+    image: ghcr.io/zxlumen/yijing64-web:${YIJING_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      YIJING_PORT: 8788
+      # 运行期数据目录(记录 / AI 配置 / Key / owner token)指到卷上
+      # —— 否则落在容器可写层,重建即丢
+      YIJING_DATA_DIR: /data
+      # 放行访客使用 AI(走站长配的 provider);=0 关闭
+      YIJING_VISITOR_AI: ${YIJING_VISITOR_AI:-1}
+      # SESSION_SECRET 由上面的 env_file 带入(与博客同一个):已登录博客即视为站长
+    volumes:
+      - yijing-data:/data
+    expose:
+      - "8788"
+    networks:
+      - web
+
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -194,6 +216,7 @@ volumes:
   alloy-data:
   grafana-data:
   opentodo-data:
+  yijing-data:
 
 networks:
   web:

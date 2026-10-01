@@ -89,11 +89,13 @@ export interface AiSourceDef {
 /**
  * 站内 AI 源注册表(决定站长的明细面板里列出谁、顺序如何)。
  * **加一个源 = 在这里登记一行 + 在那个组件里 `useReportAiState(id)` 一行**。
- * yijing64 的前端写完后,在这里加第三行即可(它会照 docs/AI-STATUS.md 的协议上报)。
+ * 跨子域应用(Opentodo / 易经)不需要本仓库改代码,它们照 docs/AI-STATUS.md 的
+ * 协议从 iframe 里 postMessage 上报即可;这里登记 id 只是为了让灯认识这个名字。
  */
 export const AI_SOURCES: readonly AiSourceDef[] = [
   { id: 'avatar', label: 'AI 分身' },
   { id: 'opentodo', label: 'Opentodo' },
+  { id: 'yijing', label: '易经' },
 ]
 
 export interface AiSource {
