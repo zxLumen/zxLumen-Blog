@@ -76,7 +76,7 @@ export function Shell({
         <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />
         <ChatWidget />
         {/* 应用「页内浮层」宿主:挂在应用栏同层,AppDock 通过 context 打开 */}
-        <AppPanelProvider>
+        <AppPanelProvider apps={apps}>
           <AppDock apps={apps} link={link} mockId={mockId} />
         </AppPanelProvider>
       </div>

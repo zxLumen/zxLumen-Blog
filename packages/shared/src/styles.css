@@ -5547,9 +5547,11 @@ html[data-apps='1'] .zxchat {
   border: none;
 }
 
-/* 收起但保持挂载(iframe 不销毁,子应用状态不丢) */
-.zx-apppanel[hidden] {
-  display: none;
+/* 收起/预热的面板保持挂载(iframe 不销毁,子应用状态不丢)。
+   用 visibility(而非 display:none):应用首帧仍能量到布局尺寸,初始化更稳。 */
+.zx-apppanel:not([data-active]) {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .zx-apppanel-bar {

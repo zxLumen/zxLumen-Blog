@@ -77,18 +77,49 @@ function loadRect(): Rect {
   return defaultRect()
 }
 
-/** 全站唯一的浮层宿主:包住 children,并负责渲染当前打开的应用面板。 */
-export function AppPanelProvider({ children }: { children: ReactNode }) {
-  /**
-   * 打开过的应用**保持挂载**（仅隐藏非当前项），这样点面板外「收起」后再打开，
-   * iframe 不会被销毁重建 —— 子应用（如易经）的临时状态得以保留。
-   */
-  const [apps, setApps] = useState<AppItem[]>([])
+/** 宽屏空闲预热:上车后再慢慢加载 panel 应用,点开即用(窄屏全屏面板跳过省流量)。 */
+function scheduleIdle(run: () => void): () => void {
+  const w = window as unknown as {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+    cancelIdleCallback?: (id: number) => void
+  }
+  if (typeof w.requestIdleCallback === 'function') {
+    const id = w.requestIdleCallback(run, { timeout: 3000 })
+    return () => w.cancelIdleCallback?.(id)
+  }
+  const t = window.setTimeout(run, 1500)
+  return () => window.clearTimeout(t)
+}
+
+/**
+ * 全站唯一的浮层宿主:包住 children,并负责渲染应用面板。
+ *
+ * 两条**通用**(与具体应用无关)的策略,新加 `openIn:'panel'` 的应用自动享受:
+ *  - **保活**:打开过的应用保持挂载、仅隐藏非当前项 → 收起再开不销毁 iframe,
+ *    子应用临时状态不丢。
+ *  - **预热**:宽屏空闲时把 panel 应用的 iframe 提前隐藏加载 → 点开即用,免转圈。
+ *
+ * 跨「整页刷新」的状态保持由**子应用自己**负责(会话约定见 docs/APP-EMBED.md),
+ * 宿主会在重开的 iframe 里拿到它自恢复后的界面。
+ */
+export function AppPanelProvider({ apps, children }: { apps?: AppItem[]; children: ReactNode }) {
+  const panelApps = useMemo(() => (apps ?? []).filter((a) => (a.openIn ?? 'newtab') === 'panel'), [apps])
+  const [opened, setOpened] = useState<AppItem[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [preload, setPreload] = useState(false)
+
+  // 渲染列表 = 预热的 panel 应用 ∪ 已打开的应用(已打开的取最新配置)
+  const rendered = useMemo(() => {
+    const map = new Map<string, AppItem>()
+    if (preload) for (const a of panelApps) map.set(a.id, a)
+    for (const a of opened) map.set(a.id, a)
+    return [...map.values()]
+  }, [preload, panelApps, opened])
+
   const api = useMemo<AppPanelApi>(
     () => ({
       open: (a) => {
-        setApps((prev) => {
+        setOpened((prev) => {
           const i = prev.findIndex((p) => p.id === a.id)
           if (i === -1) return [...prev, a]
           const next = prev.slice()
@@ -101,10 +132,16 @@ export function AppPanelProvider({ children }: { children: ReactNode }) {
     }),
     [],
   )
+
+  useEffect(() => {
+    if (!panelApps.length || isNarrow()) return
+    return scheduleIdle(() => setPreload(true))
+  }, [panelApps.length])
+
   return (
     <AppPanelContext.Provider value={api}>
       {children}
-      {apps.map((a) => (
+      {rendered.map((a) => (
         <AppPanel key={a.id} app={a} active={a.id === activeId} onClose={api.close} />
       ))}
     </AppPanelContext.Provider>
@@ -252,7 +289,8 @@ function AppPanel({ app, active, onClose }: { app: AppItem; active: boolean; onC
       ref={panelRef}
       className="zx-apppanel"
       data-narrow={narrow ? '' : undefined}
-      hidden={!active}
+      data-active={active ? '' : undefined}
+      aria-hidden={!active}
       role="dialog"
       aria-label={app.name}
       style={narrow || !rect ? undefined : { left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
