@@ -4,19 +4,25 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import { AI_COLOR, AI_LABEL, useAiStatus, type AiState } from './ai-status.js'
 
+/** 鼠标从灯移向浮窗要跨过浮窗上方那道缝,给一点宽限,否则会「一离开就消失」 */
+const HOVER_CLOSE_DELAY = 180
+
 /**
  * 导航栏常驻的 AI 状态灯(横版/竖版三灯)。
  *
  * 形态与动画移植自 AI-Status-Light 的网页虚拟灯(`web/control.html` 的 VIR 表):
- * 三盏红/黄/绿,未亮的 opacity .07 + 凹槽阴影,亮哪盏看哪盏。
+ * 三盏红/黄/绿,未亮的 opacity .07 + 凹槽阴影,亮哪盏看哪盏。尺寸按视口宽度
+ * 分档(横版 B 档 / 竖版 C 档),详见 styles.css 的「AI 状态灯」段。
  *
- * **访客只看到灯本身**:无文字、无 title、无悬停、无展开 —— 只知道「AI 在忙」。
- * 站长额外有状态文字与逐源明细。
+ * **悬浮展开逐源明细**:`onMouseEnter` 即浮出各 AI 服务当前状态,访客与站长都能看
+ * —— 访客看到的只有自己那几个源(`ownerOnly` 的全局源对他们不可见),这本来就是
+ * 「你自己的灯」。旁边的状态文字仍只给站长,免得导航栏上多一行常驻文案。
+ * 触屏没有悬浮,靠点击;键盘用聚焦。
  *
  * 摆放由 CSS 决定,同一个节点三种形态:
- *  - sidebar 布局 + 桌面:左侧列底部,**竖排**(`margin-top:auto`)
- *  - 顶栏布局:导航栏下沿正中,**横排**(绝对定位,不占高度)
- *  - 手机(≤820px):换行后的导航栏正下方,横排且更小
+ *  - sidebar 布局 + 桌面:左侧列底部,**竖排**(C 档,更大)
+ *  - 顶栏布局:导航栏下沿正中,**横排**(B 档,绝对定位不占高度)
+ *  - 手机(≤820px):换行后的导航栏正下方,横排
  */
 export function AiStatusLight({ admin }: { admin?: boolean }) {
   const { state, sources } = useAiStatus(!!admin)
@@ -25,8 +31,29 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => setMounted(true), [])
+
+  const clearHover = useCallback(() => {
+    if (hoverTimer.current !== null) {
+      clearTimeout(hoverTimer.current)
+      hoverTimer.current = null
+    }
+  }, [])
+
+  const show = useCallback(() => {
+    clearHover()
+    setOpen(true)
+  }, [clearHover])
+
+  /** 延迟关闭:指针还要穿过灯与浮窗之间那道 10px 缝 */
+  const hideSoon = useCallback(() => {
+    clearHover()
+    hoverTimer.current = setTimeout(() => setOpen(false), HOVER_CLOSE_DELAY)
+  }, [clearHover])
+
+  useEffect(() => clearHover, [clearHover])
 
   const place = useCallback(() => {
     const el = wrapRef.current
@@ -82,12 +109,20 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
 
   const rows = sources.filter((s) => admin || !s.ownerOnly)
   const popover =
-    admin && open && mounted && pos
+    open && mounted && pos
       ? createPortal(
           <div
             ref={popRef}
             className="zx-pop zx-pop-fixed zx-aistatus-pop"
-            style={{ position: 'fixed', top: pos.top, left: pos.left, right: 'auto', width: Math.min(248, window.innerWidth - 24) }}
+            style={{
+              position: 'fixed',
+              top: pos.top,
+              left: pos.left,
+              right: 'auto',
+              width: Math.min(248, window.innerWidth - 24),
+            }}
+            onMouseEnter={show}
+            onMouseLeave={hideSoon}
           >
             <div className="zx-aistatus-pop-head">
               站内 AI · {AI_LABEL[state]}
@@ -100,9 +135,7 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
               </div>
             ))}
             {rows.some((s) => s.detail) && (
-              <div className="zx-aistatus-pop-foot">
-                {rows.find((s) => s.detail)?.detail}
-              </div>
+              <div className="zx-aistatus-pop-foot">{rows.find((s) => s.detail)?.detail}</div>
             )}
           </div>,
           document.body,
@@ -113,21 +146,26 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
     <div
       ref={wrapRef}
       className={`zx-aistatus-wrap${admin ? ' is-admin' : ''}`}
-      {...(admin
-        ? {
-            role: 'button',
-            tabIndex: 0,
-            'aria-label': `AI 状态:${AI_LABEL[state]}`,
-            'aria-expanded': open,
-            onClick: () => setOpen((o) => !o),
-            onKeyDown: (e: React.KeyboardEvent) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                setOpen((o) => !o)
-              }
-            },
-          }
-        : { 'aria-hidden': true })}
+      role="button"
+      tabIndex={0}
+      aria-label={`AI 状态:${AI_LABEL[state]}`}
+      aria-expanded={open}
+      onMouseEnter={show}
+      onMouseLeave={hideSoon}
+      onFocus={show}
+      onBlur={hideSoon}
+      onClick={() => {
+        // 有悬浮能力的设备上,开关交给 hover,点击只负责「打开」—— 否则鼠标还停在
+        // 灯上却被点击关掉,观感别扭。触屏没有 hover,点击才当开关用。
+        const canHover = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover)').matches
+        setOpen(canHover ? true : (o) => !o)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          setOpen((o) => !o)
+        }
+      }}
     >
       <div className={`zx-aistatus is-${state}`}>
         <i className="zx-aistatus-lamp is-r" />

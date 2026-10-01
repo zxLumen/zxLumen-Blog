@@ -702,47 +702,87 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
  * (web/control.html 的 VIR 表):三盏常驻外壳,未亮的 opacity .07 + 凹槽阴影,
  * 亮哪盏由 `.is-<状态>` 决定。
  *
- * **访客只看到灯**:文字、明细、悬停反馈全部只给 admin(见组件里的 aria-hidden)。
+ * **悬浮展开逐源明细**:鼠标移上去(或键盘聚焦)即浮出各 AI 服务当前状态;
+ * 触屏没有悬浮,靠点击。旁边的状态文字仍只给站长。
+ *
  * 摆放同一个节点走三种形态:
  *   - sidebar 桌面 → 左侧列底部竖排(margin-top:auto)
  *   - 其他顶栏布局 → 绝对定位挂在导航栏下沿正中(出流,不占高度)
- *   - ≤820px → 跟随顶栏换行后居中横排,灯更小
+ *   - ≤820px → 跟随顶栏换行后居中横排
  */
 .zx-aistatus-wrap {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.zx-aistatus-wrap.is-admin {
-  position: relative;
   padding: 0.25rem 0.45rem;
   border-radius: var(--radius);
   cursor: pointer;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.zx-aistatus-wrap.is-admin:hover,
-.zx-aistatus-wrap.is-admin[aria-expanded='true'] {
+.zx-aistatus-wrap:hover,
+.zx-aistatus-wrap:focus-visible,
+.zx-aistatus-wrap[aria-expanded='true'] {
   background: var(--bg-2);
   box-shadow: inset 0 0 0 1px var(--line);
+  outline: none;
 }
 
-/* 外壳:深色胶体盒 + 三盏灯。尺寸随摆放形态分档,故走变量 */
+/*
+ * 外壳:深色胶体盒 + 三盏灯。
+ *
+ * 尺寸按**视口宽度分档**,不是固定值 —— 同一份代码在小手机上是 18px 的小灯,
+ * 在 4K 上是 40px 的大灯。横版(B 档)与竖版(C 档)是两套不同的阶梯:
+ * 竖版约为横版的 1.24 倍(22/18、26/21、31/25、36/29、42/34、50/40),
+ * 故只写一套阶梯 + 一个摆放系数,避免同一档位在两个选择器里各写一遍。
+ *
+ * 外壳的间距 / 内边距 / 圆角全部按灯径的**比例**派生:只放大 `--zx-lamp-s`
+ * 而不管这三样,灯一大壳就显挤(这是先前 10/11/13/15px 那版的老毛病)。
+ */
 .zx-aistatus {
-  --zx-lamp-s: 11px;
+  --zx-lamp-s: 18px; /* B 档阶梯的最小一档(<480px),见下方递进 @media */
+  --zx-lamp-scale: 1; /* 竖版由 [data-layout='sidebar'] 改成 1.24 */
+  --zx-lamp: calc(var(--zx-lamp-s) * var(--zx-lamp-scale));
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 4px 3px;
-  border-radius: 5px;
+  gap: calc(var(--zx-lamp) * 0.2);
+  padding: calc(var(--zx-lamp) * 0.28) calc(var(--zx-lamp) * 0.22);
+  border-radius: calc(var(--zx-lamp) * 0.42);
   background: linear-gradient(180deg, #17191e, #0d0e11);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+/* B 档阶梯:视口宽每越一档抬一级(同特异度,靠源序后者覆盖前者) */
+@media (min-width: 480px) {
+  .zx-aistatus {
+    --zx-lamp-s: 21px;
+  }
+}
+@media (min-width: 820px) {
+  .zx-aistatus {
+    --zx-lamp-s: 25px;
+  }
+}
+@media (min-width: 1440px) {
+  .zx-aistatus {
+    --zx-lamp-s: 29px;
+  }
+}
+@media (min-width: 1920px) {
+  .zx-aistatus {
+    --zx-lamp-s: 34px;
+  }
+}
+@media (min-width: 2560px) {
+  .zx-aistatus {
+    --zx-lamp-s: 40px;
+  }
+}
+
 .zx-aistatus-lamp {
-  width: var(--zx-lamp-s);
-  height: var(--zx-lamp-s);
+  width: var(--zx-lamp);
+  height: var(--zx-lamp);
   border-radius: 50%;
   /* 灯色不跟主题走:红绿灯就该是红绿灯 */
   background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55), transparent 45%),
@@ -864,7 +904,6 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
-  --zx-lamp-s: 13px;
   flex-direction: row;
 }
 
@@ -878,8 +917,10 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   padding-top: 1.2rem;
 }
 
+/* 竖版用 C 档(B 档 ×1.24):侧栏那列只有 208px 宽,但纵向有整列高度可用,
+   所以竖着摆反而能比横排更大 —— 22/26/31/36/42/50。 */
 [data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
-  --zx-lamp-s: 11px;
+  --zx-lamp-scale: 1.24;
   flex-direction: column;
 }
 
@@ -907,8 +948,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 .zx-aistatus-mini {
   flex: none;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
 }
 
@@ -2895,11 +2936,9 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   }
 
   [data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
+    /* 竖版尺寸是给左栏的;窄屏退回顶部横条,必须一并还原成横版的阶梯 */
+    --zx-lamp-scale: 1;
     flex-direction: row;
-  }
-
-  .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
-    --zx-lamp-s: 10px;
   }
 }
 
@@ -2990,15 +3029,6 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 @media (min-width: 1920px) {
-  /* 大屏上灯随视口放大一档(与整站的大屏分档同步) */
-  .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
-    --zx-lamp-s: 15px;
-  }
-
-  [data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
-    --zx-lamp-s: 13px;
-  }
-
   :root,
   [data-layout='classic'],
   [data-layout='sidebar'],
