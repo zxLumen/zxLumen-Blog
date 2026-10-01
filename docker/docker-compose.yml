@@ -15,6 +15,9 @@ services:
       CONTENT_FILE: /srv/site/content.json
       # 机器人目录(corpus/persona/faq/knowledge);不设则应用找不到、蒸馏失效
       CHATBOT_DIR: /srv/site/chatbot
+      # SSO:让 zx_admin 会话 cookie 覆盖所有子域(如 yijing.${DOMAIN})。不设则 cookie
+      # host-only,嵌在应用栏里的易经 / Opentodo 收不到登录态、无法判定站长。
+      ADMIN_COOKIE_DOMAIN: ${ADMIN_COOKIE_DOMAIN:-.${DOMAIN}}
     volumes:
       - zx-data:/data
       # 站点内容 + 简历 PDF / 二维码(不入镜像,由 Caddy 静态服务)
