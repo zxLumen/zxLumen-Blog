@@ -108,6 +108,25 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
   }, [open])
 
   const rows = sources.filter((s) => admin || !s.ownerOnly)
+
+  /*
+   * 按输入方式分开,别让三套处理器互相打架。
+   *
+   * 手机上「点一下」浏览器补发的是一整串兼容鼠标事件(实测顺序:
+   * mouseover → mouseenter → mousedown → focus → mouseup → click)。若三套都响应,
+   * 就是悬浮刚打开、focus 又打开、然后 click 的 toggle 又关掉 —— 用户看到的表现是
+   * 「得点好几下才出得来状态」(实测第二下才出来,真机还可能更多)。
+   * 所以:能悬浮的设备走 hover / 聚焦,触屏只认 click。
+   */
+  const canHover = useCallback(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover)').matches,
+    [],
+  )
+  const finePointer = useCallback(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: fine)').matches,
+    [],
+  )
+
   const popover =
     open && mounted && pos
       ? createPortal(
@@ -121,8 +140,8 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
               right: 'auto',
               width: Math.min(248, window.innerWidth - 24),
             }}
-            onMouseEnter={show}
-            onMouseLeave={hideSoon}
+            onMouseEnter={canHover() ? show : undefined}
+            onMouseLeave={canHover() ? hideSoon : undefined}
           >
             <div className="zx-aistatus-pop-head">
               站内 AI · {AI_LABEL[state]}
@@ -150,15 +169,14 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
       tabIndex={0}
       aria-label={`AI 状态:${AI_LABEL[state]}`}
       aria-expanded={open}
-      onMouseEnter={show}
-      onMouseLeave={hideSoon}
-      onFocus={show}
-      onBlur={hideSoon}
+      onMouseEnter={canHover() ? show : undefined}
+      onMouseLeave={canHover() ? hideSoon : undefined}
+      onFocus={finePointer() ? show : undefined}
+      onBlur={finePointer() ? hideSoon : undefined}
       onClick={() => {
-        // 有悬浮能力的设备上,开关交给 hover,点击只负责「打开」—— 否则鼠标还停在
-        // 灯上却被点击关掉,观感别扭。触屏没有 hover,点击才当开关用。
-        const canHover = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover)').matches
-        setOpen(canHover ? true : (o) => !o)
+        // 桌面:开关交给 hover,点击只负责「打开」—— 否则鼠标还停在灯上却被点击
+        // 关掉,观感别扭。触屏:只有点击这一条路,故按开关处理。
+        setOpen(canHover() ? true : (o) => !o)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

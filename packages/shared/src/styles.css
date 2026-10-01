@@ -893,6 +893,13 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   white-space: nowrap;
 }
 
+/* 竖版那行状态文字放大一倍(0.7rem → 1.4rem):左栏有整列高度可用,0.7rem 在
+   208px 宽的列里小到几乎看不清。竖排时文字在灯下方,加宽不影响 208px 的列宽。 */
+[data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap .zx-aistatus-label {
+  font-size: 1.4rem;
+  line-height: 1.15;
+}
+
 /* 顶栏布局:挂在导航栏下沿正中。绝对定位出流,故不占高度、--zx-topbar-h 不变,
    StatsWidget / StatusWidget 的 top 偏移与导航高亮都不受影响。
    .zx-topbar 是 sticky(已定位),此处即以它为包含块。 */
