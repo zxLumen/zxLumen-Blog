@@ -63,6 +63,9 @@
   --glow-2: rgba(61, 252, 255, 0.14);
   --font-body: var(--font-mono);
   --font-display: var(--font-mono);
+  /* 区块大标题(「项目」等)的字号。竖版 AI 状态文字也用它,见 .zx-aistatus-label。
+     这是基础值;≥1440px 与 magazine 布局会逐级覆盖这个变量。 */
+  --zx-sec-title-size: clamp(1.4rem, 3vw, 2rem);
   --radius: 8px;
   --title-shadow: 0 0 22px var(--glow);
 }
@@ -893,10 +896,11 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   white-space: nowrap;
 }
 
-/* 竖版那行状态文字放大一倍(0.7rem → 1.4rem):左栏有整列高度可用,0.7rem 在
-   208px 宽的列里小到几乎看不清。竖排时文字在灯下方,加宽不影响 208px 的列宽。 */
+/* 竖版那行状态文字(「空闲」「思考中」…)跟**主页各区块的大标题**(如「项目」)
+   同号 —— 左栏有整列高度可用,0.7rem 在 208px 宽的列里小到看不清,而这个尺寸
+   在整站已经用了一整套,不必另发明一个。共用 --zx-sec-title-size,两处永远一致。 */
 [data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap .zx-aistatus-label {
-  font-size: 1.4rem;
+  font-size: var(--zx-sec-title-size);
   line-height: 1.15;
 }
 
@@ -1586,7 +1590,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 .zx-sec-title {
-  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-size: var(--zx-sec-title-size);
 }
 
 /* ---------- 网格 & 卡片 ---------- */
@@ -2638,9 +2642,14 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   line-height: 0.8;
 }
 
+/* magazine 布局的标题更大。同样落到变量上,让竖版状态文字跟齐;
+   `[data-layout] :root` 是 (0,2,0),压得住 ≥1440px 那条 (0,1,0) 的 :root。 */
+[data-layout='magazine']:root {
+  --zx-sec-title-size: clamp(2rem, 5vw, 3.2rem);
+}
+
 [data-layout='magazine'] .zx-sec-title {
   font-family: var(--font-display);
-  font-size: clamp(2rem, 5vw, 3.2rem);
 }
 
 /* ---------- 布局:fullbleed ---------- */
@@ -3023,8 +3032,11 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
     padding: clamp(4.5rem, 6vh, 6.5rem) 0;
   }
 
-  .zx-sec-title {
-    font-size: clamp(2rem, 1.6vw, 2.5rem);
+  /* 区块大标题在 ≥1440px 放大一档。写成覆盖**变量**而不是覆盖 .zx-sec-title,
+     竖版 AI 状态文字(共用同一个变量)才跟得上,否则 2560px 上标题 40px、
+     状态文字还停在 32px。 */
+  :root {
+    --zx-sec-title-size: clamp(2rem, 1.6vw, 2.5rem);
   }
 
   /* bento 的内层网格原先被强制单列,宽屏下每张卡会拉到近 1000px。
