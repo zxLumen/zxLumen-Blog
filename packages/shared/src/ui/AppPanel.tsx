@@ -275,7 +275,14 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
           src={href}
           title={app.name}
           onLoad={() => setLoaded(true)}
-          referrerPolicy="no-referrer"
+          /*
+           * 必须是 `origin`,不能是 `no-referrer`:跨源 iframe 要靠
+           * `document.referrer` 反推宿主 origin 才知道 postMessage 该发给谁
+           * (见 docs/AI-STATUS.md)。`no-referrer` 会让它拿到空串,于是
+           * `HOST_ORIGIN` 为空、应用直接不上报 —— 表现为「AI 状态灯死活不变」。
+           * `origin` 只透出 origin(不含路径与查询串),够用又不泄漏具体页面。
+           */
+          referrerPolicy="origin"
           allow="clipboard-write; fullscreen"
         />
       </div>
