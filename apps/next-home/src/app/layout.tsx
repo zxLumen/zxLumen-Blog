@@ -82,6 +82,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           defaultTheme={appearance.defaultTheme}
           defaultLayout={appearance.defaultLayout}
           mockId={mockCid || undefined}
+          admin={admin && !mockCid}
           extra={adminTools}
         >
           {children}

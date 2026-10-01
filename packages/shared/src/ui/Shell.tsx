@@ -6,6 +6,7 @@ import { Footer } from './Footer.js'
 import { ChatWidget } from './ChatWidget.js'
 import { AppDock } from './AppDock.js'
 import { AppPanelProvider } from './AppPanel.js'
+import { AiStatusLight } from './AiStatusLight.js'
 import type { AppItem } from '../schema.js'
 import type { Contacts, Profile } from '../content.js'
 import type { LayoutId } from '../theme.js'
@@ -29,6 +30,8 @@ interface ShellProps {
   defaultLayout?: LayoutId
   /** 模拟访客身份:主题等偏好按身份分键(等价于一台独立设备) */
   mockId?: string
+  /** 当前访问者是站长:AI 状态灯额外显示状态文字与逐源明细 */
+  admin?: boolean
   extra?: React.ReactNode
   children: React.ReactNode
 }
@@ -47,6 +50,7 @@ export function Shell({
   defaultTheme,
   defaultLayout,
   mockId,
+  admin,
   extra,
   children,
 }: ShellProps) {
@@ -59,7 +63,15 @@ export function Shell({
       mockId={mockId}
     >
       <div className="zx-app">
-        <Topbar nav={nav} activeHref={activeHref} pathname={pathname} link={link} shell={profile?.shell} extra={extra} />
+        <Topbar
+          nav={nav}
+          activeHref={activeHref}
+          pathname={pathname}
+          link={link}
+          shell={profile?.shell}
+          extra={extra}
+          bottom={<AiStatusLight admin={admin} />}
+        />
         <main className="zx-main">{children}</main>
         <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />
         <ChatWidget />

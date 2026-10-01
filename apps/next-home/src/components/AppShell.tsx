@@ -18,6 +18,7 @@ export function AppShell({
   defaultTheme,
   defaultLayout,
   mockId,
+  admin,
   extra,
   children,
 }: {
@@ -33,6 +34,8 @@ export function AppShell({
   defaultLayout?: LayoutId
   /** 模拟访客身份:主题等偏好按身份分键 */
   mockId?: string
+  /** 当前访问者是站长:AI 状态灯额外显示状态文字与逐源明细 */
+  admin?: boolean
   extra?: React.ReactNode
   children: React.ReactNode
 }) {
@@ -50,6 +53,7 @@ export function AppShell({
       defaultTheme={defaultTheme}
       defaultLayout={defaultLayout}
       mockId={mockId}
+      admin={admin}
       extra={extra}
     >
       {children}

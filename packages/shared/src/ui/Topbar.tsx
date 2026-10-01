@@ -15,6 +15,15 @@ interface TopbarProps {
   /** 顶栏 logo 文本(服务端注入;缺省用占位 PROFILE.shell) */
   shell?: string
   extra?: React.ReactNode
+  /**
+   * 底部插槽(AI 状态灯)。
+   *
+   * 刻意渲染为 `.zx-topbar-in` 的**兄弟**而不是它的子元素:`.zx-topbar` 在 sidebar
+   * 布局下是 `flex-direction:column`(整列左栏),在顶栏布局下是默认 row。同一个
+   * 节点挂外层才能让两种形态各走一套 CSS —— sidebar 靠 `margin-top:auto` 顶到列底,
+   * 顶栏靠绝对定位出流、居中挂在导航栏下沿(不占高度,`--zx-topbar-h` 不变)。
+   */
+  bottom?: React.ReactNode
 }
 
 /** 由 href 推导航标识:home / projects / usage / about / guestbook / admin */
@@ -45,6 +54,7 @@ export function Topbar({
   link,
   shell,
   extra,
+  bottom,
 }: TopbarProps) {
   const [winPath, setWinPath] = useState(activeHref)
   const [activeHash, setActiveHash] = useState('')
@@ -241,6 +251,7 @@ export function Topbar({
           {extra}
           <ThemePicker />
         </div>
+        {bottom}
       </header>
       <script dangerouslySetInnerHTML={{ __html: TOPBAR_H_INIT }} />
     </>

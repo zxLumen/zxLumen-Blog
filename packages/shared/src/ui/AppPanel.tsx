@@ -17,6 +17,7 @@ import { createPortal } from 'react-dom'
 import type { AppItem } from '../schema.js'
 import { normalizeUrl } from '../content.js'
 import { bottomGutter, isNarrow, rightGutter } from './floating.js'
+import { isAiState, reportAiState, setAiSourceAvailable } from './ai-status.js'
 
 interface Rect {
   x: number
@@ -120,6 +121,41 @@ function AppPanel({ app, onClose }: { app: AppItem; onClose: () => void }) {
       window.removeEventListener('pointerdown', onDown)
     }
   }, [onClose])
+
+  /**
+   * 跨子域应用上报自己的 AI 状态:iframe 里 `postMessage({type:'zx:ai-status',...})`,
+   * 这里校验 origin 与 app.id 后并入状态总线(协议见 docs/AI-STATUS.md)。
+   *
+   * 校验 origin 是必须的:任何页面都能给我们发 message,不加校验等于让任意站点
+   * 点亮站内的灯。来源 id 直接用 app.id,与 ai-status.ts 的 AI_SOURCES 对齐,
+   * 这样新增应用只需在注册表登记一行,博客侧零改动。
+   *
+   * 面板挂载 = 该应用此刻可用;关掉即置 unavailable(灯熄灭、退出合并),
+   * 免得留一盏黄灯空转到 TTL 结束。
+   */
+  useEffect(() => {
+    let origin = ''
+    try {
+      origin = new URL(href).origin
+    } catch {
+      return
+    }
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== origin) return
+      const d = e.data as { type?: string; app?: string; state?: unknown; detail?: string } | null
+      if (!d || typeof d !== 'object') return
+      if (d.type !== 'zx:ai-status' || d.app !== app.id) return
+      if (!isAiState(d.state)) return
+      // detail 来自跨子域来源,截断防超长文本撑爆浮窗
+      reportAiState(app.id, d.state, typeof d.detail === 'string' ? d.detail.slice(0, 120) : undefined)
+    }
+    window.addEventListener('message', onMsg)
+    setAiSourceAvailable(app.id, true)
+    return () => {
+      window.removeEventListener('message', onMsg)
+      setAiSourceAvailable(app.id, false)
+    }
+  }, [app.id, href])
 
   // 换应用:重置加载态;迟迟不 onLoad 就提示走「新标签页」兜底
   useEffect(() => {

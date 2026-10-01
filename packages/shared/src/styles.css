@@ -695,6 +695,244 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   background: var(--bg-2);
 }
 
+/* ---------- AI 状态灯(导航栏常驻) ---------- */
+
+/*
+ * 三盏红/黄/绿交通信号灯。形态与动画移植自 AI-Status-Light 的网页虚拟灯
+ * (web/control.html 的 VIR 表):三盏常驻外壳,未亮的 opacity .07 + 凹槽阴影,
+ * 亮哪盏由 `.is-<状态>` 决定。
+ *
+ * **访客只看到灯**:文字、明细、悬停反馈全部只给 admin(见组件里的 aria-hidden)。
+ * 摆放同一个节点走三种形态:
+ *   - sidebar 桌面 → 左侧列底部竖排(margin-top:auto)
+ *   - 其他顶栏布局 → 绝对定位挂在导航栏下沿正中(出流,不占高度)
+ *   - ≤820px → 跟随顶栏换行后居中横排,灯更小
+ */
+.zx-aistatus-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.zx-aistatus-wrap.is-admin {
+  position: relative;
+  padding: 0.25rem 0.45rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.zx-aistatus-wrap.is-admin:hover,
+.zx-aistatus-wrap.is-admin[aria-expanded='true'] {
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* 外壳:深色胶体盒 + 三盏灯。尺寸随摆放形态分档,故走变量 */
+.zx-aistatus {
+  --zx-lamp-s: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 3px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #17191e, #0d0e11);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.zx-aistatus-lamp {
+  width: var(--zx-lamp-s);
+  height: var(--zx-lamp-s);
+  border-radius: 50%;
+  /* 灯色不跟主题走:红绿灯就该是红绿灯 */
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55), transparent 45%),
+    var(--zx-lamp-c, #555);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.75);
+  opacity: 0.07;
+  transition: opacity 0.25s ease;
+}
+
+.zx-aistatus-lamp.is-r {
+  --zx-lamp-c: #e8453c;
+}
+.zx-aistatus-lamp.is-y {
+  --zx-lamp-c: #f4c20d;
+}
+.zx-aistatus-lamp.is-g {
+  --zx-lamp-c: #1faa59;
+}
+
+/* idle:绿灯暗常亮 —— "在,但没在动" */
+.zx-aistatus.is-idle .zx-aistatus-lamp.is-g {
+  opacity: 0.16;
+}
+/* thinking / working:黄灯呼吸(working 更急促) */
+.zx-aistatus.is-thinking .zx-aistatus-lamp.is-y,
+.zx-aistatus.is-working .zx-aistatus-lamp.is-y {
+  opacity: 1;
+  animation: zx-ai-breathe 3s ease-in-out infinite;
+}
+.zx-aistatus.is-working .zx-aistatus-lamp.is-y {
+  animation-duration: 1.4s;
+}
+/* busy:黄灯快闪 */
+.zx-aistatus.is-busy .zx-aistatus-lamp.is-y {
+  opacity: 1;
+  animation: zx-ai-blink 0.6s steps(1, end) infinite;
+}
+/* success:绿灯辉光,停 25s 后自行熄灭(见 ai-status.ts 的 TTL) */
+.zx-aistatus.is-success .zx-aistatus-lamp.is-g {
+  opacity: 1;
+  animation: zx-ai-glow 1.6s ease-in-out infinite;
+}
+/* error:红灯快闪 */
+.zx-aistatus.is-error .zx-aistatus-lamp.is-r {
+  opacity: 1;
+  animation: zx-ai-blink 0.35s steps(1, end) infinite;
+}
+/* blocked:红黄交替 —— 该你出场了 */
+.zx-aistatus.is-blocked .zx-aistatus-lamp.is-r {
+  opacity: 1;
+  animation: zx-ai-blink 0.6s steps(1, end) infinite;
+}
+.zx-aistatus.is-blocked .zx-aistatus-lamp.is-y {
+  opacity: 1;
+  animation: zx-ai-blink 0.6s steps(1, end) 0.3s infinite;
+}
+
+@keyframes zx-ai-breathe {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes zx-ai-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.1;
+  }
+}
+@keyframes zx-ai-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 仍要能看出"在忙":改成定点亮,只是不闪 */
+  .zx-aistatus-lamp {
+    animation: none !important;
+    opacity: 0.07;
+  }
+  .zx-aistatus.is-thinking .zx-aistatus-lamp.is-y,
+  .zx-aistatus.is-working .zx-aistatus-lamp.is-y,
+  .zx-aistatus.is-busy .zx-aistatus-lamp.is-y,
+  .zx-aistatus.is-success .zx-aistatus-lamp.is-g,
+  .zx-aistatus.is-error .zx-aistatus-lamp.is-r,
+  .zx-aistatus.is-blocked .zx-aistatus-lamp.is-r,
+  .zx-aistatus.is-blocked .zx-aistatus-lamp.is-y {
+    opacity: 1;
+  }
+}
+
+.zx-aistatus-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+/* 顶栏布局:挂在导航栏下沿正中。绝对定位出流,故不占高度、--zx-topbar-h 不变,
+   StatsWidget / StatusWidget 的 top 偏移与导航高亮都不受影响。
+   .zx-topbar 是 sticky(已定位),此处即以它为包含块。 */
+.zx-topbar > .zx-aistatus-wrap {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+}
+
+.zx-topbar > .zx-aistatus-wrap .zx-aistatus {
+  --zx-lamp-s: 13px;
+  flex-direction: row;
+}
+
+/* sidebar 桌面:顶栏是整列左栏(flex-direction:column),灯回到流内、顶到列底竖排 */
+[data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+  margin-top: auto;
+  padding-top: 1.2rem;
+}
+
+[data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
+  --zx-lamp-s: 11px;
+  flex-direction: column;
+}
+
+/* 明细浮窗:portal 到 body(左栏 overflow:auto 会裁掉内部绝对定位弹层),
+   定位沿用 ThemePicker 的 .zx-pop + .zx-pop-fixed + 内联 fixed 坐标 */
+.zx-aistatus-pop-head {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.zx-aistatus-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+}
+
+.zx-aistatus-row.is-off {
+  opacity: 0.45;
+}
+
+.zx-aistatus-mini {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.zx-aistatus-row-label {
+  color: var(--fg);
+}
+
+.zx-aistatus-row-state {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+}
+
+.zx-aistatus-pop-foot {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  word-break: break-word;
+}
+
 /* ---------- 选择器(顶栏弹出) ---------- */
 
 .zx-picker {
@@ -2639,6 +2877,25 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   [data-layout='window'] {
     --zx-window-pad: 8px;
   }
+
+  /* AI 状态灯:sidebar 在窄屏已退回「顶部横条」,把灯也还原成顶栏形态
+     (居中横排挂在换行后的导航栏下沿),并调小一号。 */
+  [data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap {
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    margin-top: 0;
+    padding-top: 0;
+  }
+
+  [data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
+    flex-direction: row;
+  }
+
+  .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
+    --zx-lamp-s: 10px;
+  }
 }
 
 /* ---------- 响应式:大屏分档(≥1440 / ≥1920) ----------
@@ -2728,6 +2985,15 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 @media (min-width: 1920px) {
+  /* 大屏上灯随视口放大一档(与整站的大屏分档同步) */
+  .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
+    --zx-lamp-s: 15px;
+  }
+
+  [data-layout='sidebar'] .zx-topbar > .zx-aistatus-wrap .zx-aistatus {
+    --zx-lamp-s: 13px;
+  }
+
   :root,
   [data-layout='classic'],
   [data-layout='sidebar'],

@@ -28,6 +28,17 @@ export { Footer } from './Footer.js'
 export { Shell } from './Shell.js'
 export { ChatWidget } from './ChatWidget.js'
 export { AppDock } from './AppDock.js'
+export { AiStatusLight } from './AiStatusLight.js'
+export {
+  AI_SOURCES,
+  AI_LABEL,
+  reportAiState,
+  setAiSourceAvailable,
+  isAiState,
+  useAiStatus,
+  useReportAiState,
+} from './ai-status.js'
+export type { AiState, AiSource } from './ai-status.js'
 export { AppPanelProvider, useAppPanel } from './AppPanel.js'
 export { WeChatIcon, GitHubIcon, MailIcon, PhoneIcon, MessageIcon } from './icons.js'
 export type { NavItem, LinkProps, LinkComponent } from './types.js'

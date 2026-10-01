@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { MessageIcon } from './icons.js'
+import { setAiSourceAvailable, useReportAiState } from './ai-status.js'
 import { bottomGutter, maxX, rightGutter } from './floating.js'
 
 interface ChatConfig {
@@ -226,6 +227,10 @@ export function ChatWidget() {
   const [rect, setRect] = useState<Rect | null>(null)
 
   const sessionRef = useRef<string>('')
+  /* busy 的 ref 镜像:send() 读的是闭包里的 busy(渲染快照),同一次事件里连发两次
+     会在 setBusy 提交前两次都读到 false,并发闸形同虚设。ref 是同步可读的。 */
+  const busyRef = useRef(false)
+  const reportAi = useReportAiState('avatar')
   const listRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const teaserShownRef = useRef(false)
@@ -362,6 +367,11 @@ export function ChatWidget() {
     if (open) scrollToBottom()
   }, [open, messages.length, greeting, cfg])
 
+  // AI 分身是否可叫号:配置未开时不算可用源,状态灯不把它算进去
+  useEffect(() => {
+    setAiSourceAvailable('avatar', !!cfg?.enabled)
+  }, [cfg?.enabled])
+
   // 首次打开、且无记忆几何时:按浮标就近推导初始矩形(右下锚定)
   useEffect(() => {
     if (!open || !pos) return
@@ -372,12 +382,14 @@ export function ChatWidget() {
 
   const send = async (text: string) => {
     const q = text.trim()
-    if (!q || busy) return
+    if (!q || busyRef.current) return
     setError('')
     const next: Msg[] = [...messages, { role: 'user', content: q }]
     setMessages(next)
     setInput('')
     setBusy(true)
+    busyRef.current = true
+    reportAi('thinking')
     // 客户端超时:连接建立后卡住时,避免界面永久停在「正在输入…」
     const ac = new AbortController()
     const timeout = setTimeout(() => ac.abort(), 120_000)
@@ -421,12 +433,15 @@ export function ChatWidget() {
         if (copy.length) copy[copy.length - 1] = { role: 'assistant', content: acc }
         return copy
       })
+      reportAi('success')
     } catch (e) {
       const aborted = e instanceof DOMException && e.name === 'AbortError'
       setError(aborted ? '响应超时,请重试' : e instanceof Error ? e.message : '出错了')
+      reportAi('error')
       scrollToBottom()
     } finally {
       clearTimeout(timeout)
+      busyRef.current = false
       setBusy(false)
     }
   }
