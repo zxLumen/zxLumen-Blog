@@ -58,6 +58,12 @@
 - **首页服务器状态悬浮件 + 导航「监控」入口**:右上角新增**可拖动**的状态浮件(CPU / 内存 / 磁盘 / 负载 / 运行时长 / 站点在线 + **近 7 天 CPU 日均趋势**),悬停展开、移出收起(与访客统计一致);数据由新接口 `GET /api/status` 只读查询 Grafana Cloud(60s 缓存,失败时显示降级「状态异常」气泡、可展开看错误,不再自动隐藏);**所有悬浮件(访客统计 + 服务器状态)拖动后靠近视口边缘自动吸附**;顶栏导航在「留言板」下新增「监控」外链,直达 Node Exporter Full 面板
 - **悬浮件失败态可见**:服务器状态浮件在数据源不可用(token 缺失 / 网络失败等)时**不再整体消失**,改为显示红色降级气泡(「状态异常」,悬停可查看 `error` 文案),每 60s 自动重试;本地 dev 通过 `apps/next-home/.env.local`(已 gitignore)固定 `GRAFANA_READ_TOKEN`,避免裸 `npm run dev` 丢失 token
 - **邮件服务器运维文档 `docs/MAIL.md`**:邮件服务(PostE.io)单独跑在服务器 `~/mail/`,配置**不入库**,此前完全没有文档。现记录现状速览、端口与 `nftables` 收窄规则(含"别改成 ufw default deny"的原因:Caddy 回源走 `br-*` 而非 loopback、`xray` 是 host 网络)、compose 的 `entrypoint` 包装(残留 pid 与 DKIM 软链两个故障的来龙去脉)、认证链路真相(**签名由 Haraka 的 `mailauth/dkim_sign` 完成,`rspamd` 的 `enabled=false` 属正常;出站经 Resend 中继,外链看到的是 Resend 那把钥匙**)与 DNS 对照表、重建后必查清单与"别做的事"
+- **「?」反馈入口(直达站长邮箱)**:应用栏最上方(`github` 上方空白处居中)新增 `?` 圆钮,访客可在站内弹窗写反馈并提交,**内容直接发到站长邮箱**(默认 `service@zxlumen.cn`),不做「留言板」需要留身份、也不占应用图标槽位。发送走 **Resend HTTP API**(零新依赖,`fetch` 一把梭,10s 超时),目标是普通访客也敢提意见。
+  - **发信地址**:收件顺序 `FEEDBACK_TO` env → 网站联系邮箱 → 兜底 `service@zxlumen.cn`;发件人 `FEEDBACK_FROM` → `feedback@<域名>` → 兜底 `feedback@zxlumen.cn`(域名在 Resend 已验证 DKIM,出站不落垃圾箱)。
+  - **本地兜底存库**:邮件发失败(如本地无 `RESEND_API_KEY`)时反馈仍**落 SQLite `feedback` 表**(`status='failed'`,成功后改 `sent`),不丢数据。
+  - **防滥用**:整站同源蜜罐字段 + 正则拦爬虫(`curl`/`bot` 等静默返回成功、不留库);按 IP 限流 3 条/分钟(`feedback:${ip}`);内容 1–2000 字、联系方式 ≤200、路径 ≤500,防注入防刷屏。
+  - **样式**:桌面「?」钉在首图标上方的空带正中(随顶栏高度自适应居中),滚动时随栏顶 sticky;窄屏(≤820px)自动改放底部横条**最右端** 40px 圆钮,不挤兑应用图标。弹窗全屏遮罩、Esc/点空白关闭、送审中的禁用态。
+  - **部署**:密钥进 `docker/.env`(`RESEND_API_KEY`),收件地址默认已指向 `service@zxlumen.cn`;compose 无需改动。
 
 ### 修复
 

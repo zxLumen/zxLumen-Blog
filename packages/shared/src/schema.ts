@@ -49,6 +49,21 @@ CREATE TABLE IF NOT EXISTS events (
   dwell    INTEGER DEFAULT 0         -- 前台停留秒数(leave = 整页;section_view = 该区块可见时长)
 );
 
+-- 访客反馈(应用栏「?」按钮 → 站长邮箱;入库兜底,发信失败也不丢)
+CREATE TABLE IF NOT EXISTS feedback (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  cid        TEXT DEFAULT '',        -- 访客匿名 ID
+  message    TEXT NOT NULL,
+  contact    TEXT DEFAULT '',        -- 选填联系方式(方便回复)
+  path       TEXT DEFAULT '',        -- 反馈时所在页面
+  ua         TEXT DEFAULT '',
+  ip         TEXT DEFAULT '',
+  status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(created_at);
+
 CREATE INDEX IF NOT EXISTS idx_events_day_type ON events(day, type);
 CREATE INDEX IF NOT EXISTS idx_events_cid ON events(cid);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
@@ -454,3 +469,16 @@ export interface StoredApp {
 
 /** 展示用应用条目(去掉 deleted) */
 export type AppItem = Omit<StoredApp, 'deleted'>
+
+/** 访客反馈行(status: pending 入库=发信未定;sent=已发 mail;failed=发信失败、留库兜底) */
+export interface FeedbackRow {
+  id: number
+  cid: string
+  message: string
+  contact: string
+  path: string
+  ua: string
+  ip: string
+  status: 'pending' | 'sent' | 'failed'
+  created_at: string
+}

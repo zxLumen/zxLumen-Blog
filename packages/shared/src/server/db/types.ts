@@ -38,6 +38,16 @@ export interface NewUsageInput {
   source?: string
 }
 
+export interface NewFeedbackInput {
+  cid?: string
+  message: string
+  contact?: string
+  path?: string
+  ua?: string
+  ip?: string
+  status?: 'pending' | 'sent' | 'failed'
+}
+
 export interface Db {
   listPublicComments(limit?: number): CommentRow[]
   listAllComments(limit?: number): CommentRow[]
@@ -65,6 +75,10 @@ export interface Db {
   listUsage(days?: number): UsageRow[]
   allUsage(): UsageRow[]
   addUsage(input: NewUsageInput): UsageRow
+  /** 入库一条访客反馈,返回新行 id */
+  addFeedback(input: NewFeedbackInput): number
+  /** 更新反馈的发信状态(pending→sent/failed) */
+  setFeedbackStatus(id: number, status: 'pending' | 'sent' | 'failed'): void
   /** 记录埋点事件(访问/项目点击/简历下载) */
   addEvent(input: NewEventInput): void
   /** 同上但按 (cid, day, type, target) 去重(同一人同一天同一目标只记一次),返回是否真的写入 */
@@ -139,6 +153,7 @@ export type CommentStore = Pick<
 >
 
 export type UsageStore = Pick<Db, 'listUsage' | 'allUsage' | 'addUsage'>
+export type FeedbackStore = Pick<Db, 'addFeedback' | 'setFeedbackStatus'>
 export type EventStore = Pick<Db, 'addEvent' | 'addEventOnce'>
 export type StatsStore = Pick<Db, 'stats'>
 export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta' | 'listMetaKeys'>

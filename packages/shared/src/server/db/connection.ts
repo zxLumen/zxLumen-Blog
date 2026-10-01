@@ -3,6 +3,7 @@ import { SCHEMA_SQL } from '../../schema.js'
 import { chatStore } from './chat.js'
 import { commentStore } from './comments.js'
 import { eventStore } from './events.js'
+import { feedbackStore } from './feedback.js'
 import { kbStore } from './kb.js'
 import { metaStore } from './meta.js'
 import { statsStore } from './stats.js'
@@ -45,6 +46,7 @@ export function openDb(path: string): Db {
     ...commentStore(db),
     ...usageStore(db),
     ...eventStore(db),
+    ...feedbackStore(db),
     ...statsStore(db),
     ...metaStore(db),
     ...chatStore(db),

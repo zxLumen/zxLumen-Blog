@@ -4568,8 +4568,8 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   flex-direction: column;
   align-items: center;
   gap: 0.45rem;
-  /* 顶部让开固定顶栏(sidebar 布局下顶栏是整列高) */
-  padding: 4.4rem 0 1rem;
+  /* 顶部空白由 .zx-appdock-top 承担(高度 4.4rem,滚动时粘在栏顶) */
+  padding: 0 0 1rem;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -4578,6 +4578,52 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   transition: background-color 0.35s ease, border-color 0.35s ease;
+}
+
+/* 「?」反馈入口所在顶部空带:占满栏宽、滚动时粘在栏顶,图标从它底下滚过也被遮住 */
+.zx-appdock-top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 100%;
+  height: 4.4rem;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* 「?」按钮:居中的小圆钮,不占应用槽位。垂直位置——
+   顶栏通栏时(--zx-topbar-h>0)落在「顶栏下沿 ↔ 首个应用」正中间;
+   顶栏是侧栏时(h=0)落在整段空带正中。 */
+.zx-appdock-feedback {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  margin-top: calc(var(--zx-topbar-h, 0px) / 2);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-2) 70%, transparent);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 0.18s, border-color 0.18s, background-color 0.18s, transform 0.18s;
+}
+
+.zx-appdock-feedback:hover,
+.zx-appdock-feedback:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--bg-2) 90%, transparent);
+  transform: scale(1.12);
 }
 
 .zx-appdock::-webkit-scrollbar {
@@ -4771,6 +4817,185 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   transform: scale(1.06);
 }
 
+/* ===========================================================================
+   访客反馈弹窗(「?」按钮):portal 挂 body,居中覆盖全屏
+   =========================================================================== */
+
+.zx-feedback {
+  position: fixed;
+  inset: 0;
+  z-index: 1600; /* 高于应用栏(380)/统计浮层(401)/页内浮层 */
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.45);
+  animation: zx-feedback-in 0.15s ease;
+}
+
+.zx-feedback-card {
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  max-height: calc(100vh - 2rem);
+}
+
+.zx-feedback-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.zx-feedback-title {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.zx-feedback-sub {
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+}
+
+.zx-feedback-close {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.zx-feedback-close:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+}
+
+.zx-feedback-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.zx-feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.zx-feedback-field > span {
+  font-size: 0.78rem;
+  color: var(--fg-dim);
+}
+
+.zx-feedback-field textarea,
+.zx-feedback-field input {
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.zx-feedback-field textarea {
+  min-height: 110px;
+}
+
+.zx-feedback-field textarea:focus,
+.zx-feedback-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* 蜜罐:移到视口外,对真人不可见、不可聚焦 */
+.zx-feedback-honeypot {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.zx-feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.zx-feedback-btn {
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.zx-feedback-btn:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+.zx-feedback-btn-primary {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--fg);
+}
+
+.zx-feedback-btn-primary:hover {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.zx-feedback-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.zx-feedback-error {
+  font-size: 0.78rem;
+  color: #e5484d;
+}
+
+.zx-feedback-done {
+  display: grid;
+  place-items: center;
+  padding: 2.4rem 1rem;
+  font-size: 0.95rem;
+  color: var(--fg);
+}
+
+@keyframes zx-feedback-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* ---------- 让开右边缘:占位 + 右下角悬浮件 ---------- */
 
 html[data-apps='1'] .zx-main,
@@ -4837,6 +5062,24 @@ html[data-apps='1'] .zxchat {
   .zx-appdock-item {
     width: 40px;
     height: 40px;
+  }
+
+  /* 窄带:横条,「?」移到最右端(用 order 挪到末尾 + margin-left:auto 顶到右缘) */
+  .zx-appdock-top {
+    position: static;
+    order: 999;
+    width: auto;
+    height: auto;
+    margin-left: auto;
+    background: none;
+    backdrop-filter: none;
+    z-index: auto;
+  }
+
+  .zx-appdock-feedback {
+    width: 40px;
+    height: 40px;
+    margin-top: 0;
   }
 
   /* 窄屏方块缩到 40px,图标容器跟着缩,否则 44px 的图标会溢出 */

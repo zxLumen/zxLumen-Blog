@@ -52,6 +52,8 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
   const [customized, setCustomized] = useState(false)
   /** 悬停/聚焦时的名称气泡。位置在事件里按图标 rect 现算,portal 到 body —— 见下方注释 */
   const [tip, setTip] = useState<{ text: string; top: number; left: number; side: 'left' | 'top' } | null>(null)
+  /** 「?」反馈弹窗是否打开 */
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   const storageKey = appsOrderKey(mockId)
   /** openIn='panel' 的应用:用站内浮层打开(没有 Provider 时为 null,降级成普通链接) */
@@ -186,6 +188,20 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
       ref={navRef}
       data-dragging-active={dragId ? '' : undefined}
     >
+      {/* 「?」反馈入口:固定在应用栏顶部空带,不进应用列表、不占应用槽位。
+          宽带居中(顶栏通栏时在其下沿与首个应用的正中间);窄带移到横条最右端(CSS)。 */}
+      <div className="zx-appdock-top">
+        <button
+          type="button"
+          className="zx-appdock-feedback"
+          title="反馈问题"
+          aria-label="反馈问题(bug report)"
+          onClick={() => setFeedbackOpen(true)}
+        >
+          ?
+        </button>
+      </div>
+
       {list.map((app) => {
         const href = normalizeUrl(app.url)
         if (!href) return null
@@ -275,6 +291,8 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
         </button>
       )}
 
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
+
       {tip &&
         createPortal(
           <div
@@ -292,6 +310,145 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
 }
 
 const EMPTY: AppItem[] = []
+
+/**
+ * 访客反馈弹窗:内容直接走 POST /api/feedback → 站长邮箱(入库兜底)。
+ * portal 到 body(应用栏有 overflow,浮层挂外面才不被裁剪),Esc / 点遮罩关闭。
+ */
+function FeedbackModal({ onClose }: { onClose: () => void }) {
+  const [message, setMessage] = useState('')
+  const [contact, setContact] = useState('')
+  /** 蜜罐:真人看不到也填不了,机器人才会往里塞 */
+  const [website, setWebsite] = useState('')
+  const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+  const [error, setError] = useState('')
+  const cardRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    const onDown = (e: PointerEvent) => {
+      const el = cardRef.current
+      if (el && !el.contains(e.target as Node)) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
+    }
+  }, [onClose])
+
+  const submit = useCallback(async () => {
+    if (state === 'sending') return
+    const msg = message.trim()
+    if (!msg) {
+      setError('请先写点内容')
+      setState('error')
+      return
+    }
+    setState('sending')
+    setError('')
+    try {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: msg,
+          contact: contact.trim(),
+          path: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+          website,
+        }),
+      })
+      if (res.ok) {
+        setState('done')
+      } else {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null
+        setError(j?.error || '发送失败,请稍后再试')
+        setState('error')
+      }
+    } catch {
+      setError('网络异常,请稍后再试')
+      setState('error')
+    }
+  }, [state, message, contact, website])
+
+  return createPortal(
+    <div className="zx-feedback" role="dialog" aria-modal="true" aria-label="反馈问题">
+      <div className="zx-feedback-card" ref={cardRef}>
+        <div className="zx-feedback-head">
+          <span className="zx-feedback-title">反馈问题</span>
+          <span className="zx-feedback-sub">直达站长邮箱</span>
+          <button
+            type="button"
+            className="zx-feedback-close"
+            onClick={onClose}
+            aria-label="关闭 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+
+        {state === 'done' ? (
+          <div className="zx-feedback-done">已收到,谢谢反馈!</div>
+        ) : (
+          <div className="zx-feedback-body">
+            <label className="zx-feedback-field">
+              <span>遇到什么问题了?</span>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                maxLength={2000}
+                placeholder="例如:xxx 在手机上看是错位的 / 某功能打不开…"
+                autoFocus
+              />
+            </label>
+
+            <label className="zx-feedback-field">
+              <span>联系方式(选填,方便回复)</span>
+              <input
+                type="text"
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                maxLength={200}
+                placeholder="邮箱 / 微信"
+              />
+            </label>
+
+            {/* 蜜罐:藏到视口外,真人不碰 */}
+            <div className="zx-feedback-honeypot" aria-hidden="true">
+              <input
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="website"
+              />
+            </div>
+
+            <div className="zx-feedback-actions">
+              <button type="button" className="zx-feedback-btn" onClick={onClose}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="zx-feedback-btn zx-feedback-btn-primary"
+                onClick={submit}
+                disabled={state === 'sending'}
+              >
+                {state === 'sending' ? '发送中…' : '发送'}
+              </button>
+            </div>
+
+            {error && <div className="zx-feedback-error">{error}</div>}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  )
+}
 
 /**
  * 图标本体:有 icon 且加载成功时显示图片,否则回退到名称首字
