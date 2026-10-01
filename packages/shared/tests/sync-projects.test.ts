@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { mergeProjects } from '../scripts/lib/sync-projects-core.mjs'
+import { mergeProjects, parseArgs } from '../scripts/lib/sync-projects-core.mjs'
 
 const card = (id: string, name = id) => ({ id, name, status: 'online', kind: 'personal' })
 
@@ -108,4 +108,35 @@ test('空线上 → 全部新增,顺序即本地顺序', () => {
     ['x', 'y'],
   )
   assert.equal(added.length, 2)
+})
+
+test('parseArgs:位置参数不会被当成 --after 的值丢掉', () => {
+  // 回归:早先没 --after 时 `i !== afterIdx + 1` 等于 `i !== 0`,argv[0] 被误丢,
+  // `-- ai-status-light` 静默退化成「同步全部」(线上干跑时抓到)
+  assert.deepEqual(parseArgs(['ai-status-light']).onlyIds, ['ai-status-light'])
+  assert.deepEqual(parseArgs(['ai-status-light', '--dry-run']).onlyIds, ['ai-status-light'])
+  assert.deepEqual(parseArgs(['--dry-run', 'ai-status-light']).onlyIds, ['ai-status-light'])
+})
+
+test('parseArgs:--after 的值不算位置参数,且各标志解析正确', () => {
+  const a = parseArgs(['ai-status-light', '--after', 'yijing', '--update'])
+  assert.deepEqual(a.onlyIds, ['ai-status-light'])
+  assert.equal(a.after, 'yijing')
+  assert.equal(a.update, true)
+  assert.equal(a.dryRun, false)
+
+  const b = parseArgs(['--after', 'yijing', 'x', 'y'])
+  assert.deepEqual(b.onlyIds, ['x', 'y'])
+  assert.equal(b.after, 'yijing')
+})
+
+test('parseArgs:不传位置参数 → 空数组(调用方据此决定「同步全部」)', () => {
+  assert.deepEqual(parseArgs([]).onlyIds, [])
+  assert.deepEqual(parseArgs(['--dry-run']).onlyIds, [])
+})
+
+test('parseArgs:--after 没给值时不炸', () => {
+  const a = parseArgs(['--after'])
+  assert.equal(a.after, '')
+  assert.deepEqual(a.onlyIds, [])
 })

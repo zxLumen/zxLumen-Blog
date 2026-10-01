@@ -24,7 +24,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { mergeProjects } from './lib/sync-projects-core.mjs'
+import { mergeProjects, parseArgs } from './lib/sync-projects-core.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '..', '..', '..')
@@ -45,13 +45,7 @@ function loadEnvLocal() {
 loadEnvLocal()
 
 // ---------------------------------------------------------------- 参数
-const argv = process.argv.slice(2)
-const dryRun = argv.includes('--dry-run')
-const update = argv.includes('--update')
-const afterIdx = argv.indexOf('--after')
-const after = afterIdx >= 0 ? argv[afterIdx + 1] : ''
-/** 位置参数 = 只同步这些 id;不传 = content.json 里全部 */
-const onlyIds = argv.filter((a, i) => !a.startsWith('--') && i !== afterIdx + 1)
+const { dryRun, update, after, onlyIds } = parseArgs(process.argv.slice(2))
 
 const SITE = (process.env.ZX_SITE || 'https://zxlumen.cn').replace(/\/+$/, '')
 const PASSWORD = process.env.ZX_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || ''
