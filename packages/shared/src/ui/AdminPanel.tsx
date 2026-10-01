@@ -1413,8 +1413,8 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       </p>
       {!stats && <div className="zx-c-empty">暂无数据</div>}
       {stats && (
-        <>
-          <div className="zx-grid-stats" style={{ marginBottom: '1.2rem' }}>
+        <div className="zx-admin-stack">
+          <div className="zx-grid-stats">
             <div className="zx-stat">
               <div className="zx-stat-now">{fmtInt(stats.comments.total)}</div>
               <div className="zx-stat-label">留言总数</div>
@@ -1617,7 +1617,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
               </table>
             )}
           </div>
-        </>
+        </div>
       )}
       </>
       )}

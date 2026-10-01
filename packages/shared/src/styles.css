@@ -1918,6 +1918,14 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 
 /* ---------- 图表 ---------- */
 
+/* 统计页各模块之间的间隔:指标 Grid 与下面多个 .zx-panel 竖排。
+   原先它们是紧挨着的,信息一多就糊成一片。 */
+.zx-admin-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
 .zx-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
