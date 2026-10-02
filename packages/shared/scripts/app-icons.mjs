@@ -43,6 +43,25 @@ const SW = 14 // 字形描边
 /** 每个候选:底色 + 字形 SVG(内容大致占 110~155px,居中) */
 const ICONS = [
   {
+    name: 'github',
+    bg: '#24292F',
+    desc: 'GitHub 猫标(与既有 github.png 同款;重新导出以修正字形偏心)',
+    glyph: `
+      <path d="M128 44 a84 84 0 0 0 -26.6 163.7 c4.2 .8 5.7 -1.8 5.7 -4 v-15.4 c-23.4 5.1 -28.3 -10 -28.3 -10 -3.8 -9.7 -9.3 -12.3 -9.3 -12.3 -7.6 -5.2 .6 -5.1 .6 -5.1 8.4 .6 12.8 8.6 12.8 8.6 7.5 12.8 19.6 9.1 24.4 7 .8 -5.4 2.9 -9.1 5.3 -11.2 -18.7 -2.1 -38.3 -9.3 -38.3 -41.5 0 -9.2 3.3 -16.7 8.6 -22.6 -.9 -2.1 -3.8 -10.7 .8 -22.3 0 0 7.1 -2.3 23.2 8.6 a80 80 0 0 1 42.3 0 c16.1 -10.9 23.1 -8.6 23.1 -8.6 4.6 11.6 1.7 20.2 .8 22.3 5.4 5.9 8.6 13.4 8.6 22.6 0 32.3 -19.7 39.4 -38.4 41.4 3 2.6 5.7 7.7 5.7 15.6 v23.1 c0 2.2 1.5 4.9 5.7 4 A84 84 0 0 0 128 44 Z" fill="#fff" stroke="none"/>`,
+  },
+  {
+    name: 'resume',
+    bg: '#0F766E',
+    desc: '简历文档(与既有 resume.png 同款;重新导出以修正字形偏心)',
+    glyph: `
+      <path d="M86 56 H138 L168 86 V196 a10 10 0 0 1 -10 10 H86 a10 10 0 0 1 -10 -10 V66 a10 10 0 0 1 10 -10 Z" fill="#fff" stroke="none"/>
+      <path d="M138 56 L168 86 H146 a8 8 0 0 1 -8 -8 Z" fill="#0F766E" stroke="none"/>
+      <path d="M92 112 H142" stroke="#0F766E" stroke-width="11"/>
+      <path d="M92 132 H150" stroke="#0F766E" stroke-width="11"/>
+      <path d="M92 152 H134" stroke="#0F766E" stroke-width="11"/>
+      <path d="M92 172 H144" stroke="#0F766E" stroke-width="11"/>`,
+  },
+  {
     name: 'doc-search',
     bg: '#0F766E',
     desc: '文档 + 放大镜 —— 检索(Retrieval)最直白的说法',
@@ -162,10 +181,41 @@ const NO_SHEET = ARGS.includes('--no-sheet')
 const SCALE = scaleArg ? Math.max(0.6, Math.min(1.6, parseFloat(scaleArg.slice(8)) || 1)) : 1
 const PREFIX = outArg ? outArg.slice(6) : 'cand-'
 
-const svg = (ic) => `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+const svg = (ic, extra = '') => `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
 <rect width="256" height="256" rx="${R}" fill="${ic.bg}"/>
 <g fill="none" stroke="#fff" stroke-width="${SW}" stroke-linecap="round" stroke-linejoin="round"
-   transform="translate(${ic.tx || 0},${ic.ty || 0}) translate(128,128) scale(${SCALE}) translate(-128,-128)">${ic.glyph.replace(/BG/g, ic.bg)}</g></svg>`
+   transform="translate(${ic.tx || 0},${ic.ty || 0}) translate(128,128) scale(${SCALE}) translate(-128,-128)${extra}">${ic.glyph.replace(/BG/g, ic.bg)}</g></svg>`
+
+/** 只画字形(透明底),用来量字形的像素包围盒 */
+const glyphOnlySvg = (ic) => `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<g fill="none" stroke="#fff" stroke-width="${SW}" stroke-linecap="round" stroke-linejoin="round"
+   transform="translate(${ic.tx || 0},${ic.ty || 0}) translate(128,128) scale(${SCALE}) translate(-128,-128)">${ic.glyph.replace(/BG/g, '#000')}</g></svg>`
+
+/**
+ * 量字形的像素包围盒(不看那层圆角底),返回它相对画布中心的偏移。
+ * 用它把字形**精确**挪到正中 —— 不靠手算 tx/ty。
+ */
+async function glyphCenterOffset(ic) {
+  const { data, info } = await sharp(Buffer.from(glyphOnlySvg(ic)))
+    .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  let minX = info.width, minY = info.height, maxX = -1, maxY = -1
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      if (data[(y * info.width + x) * 4 + 3] > 20) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+    }
+  }
+  if (maxX < 0) return { dx: 0, dy: 0 }
+  // 包围盒中心相对画布中心的偏差,取反即「挪回正中」所需的平移
+  return { dx: 128 - (minX + maxX + 1) / 2, dy: 128 - (minY + maxY + 1) / 2 }
+}
 
 /* ---------- 1) 图标本体:sharp 直接把 SVG 栅格化 ---------- */
 
@@ -179,12 +229,15 @@ if (only.length && picked.length !== only.length) {
 mkdirSync(OUT, { recursive: true })
 for (const ic of picked) {
   const file = path.join(OUT, `${PREFIX}${ic.name}.png`)
-  await sharp(Buffer.from(svg(ic)))
+  // 先量字形偏了多少,再生成时补上这点平移 → 字形像素级居中
+  const { dx, dy } = await glyphCenterOffset(ic)
+  await sharp(Buffer.from(svg(ic, ` translate(${dx.toFixed(2)},${dy.toFixed(2)})`)))
     .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png({ compressionLevel: 9 })
     .toFile(file)
   const kb = (await import('node:fs')).statSync(file).size / 1024
-  console.log(`  ✓ ${PREFIX}${ic.name}.png  ${ic.bg}  ${kb.toFixed(1)}KB  ${ic.desc}`)
+  const fix = Math.abs(dx) < 0.15 && Math.abs(dy) < 0.15 ? '已居中' : `居中修正 ${dx.toFixed(1)},${dy.toFixed(1)}`
+  console.log(`  ✓ ${PREFIX}${ic.name}.png  ${ic.bg}  ${kb.toFixed(1)}KB  ${fix}  ${ic.desc}`)
 }
 
 /* ---------- 2) 对照表:要排文字,才拉本机 Chrome 整页截一张 ---------- */
