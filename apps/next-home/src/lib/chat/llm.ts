@@ -10,32 +10,6 @@ export interface ChatMessage {
   content: string
 }
 
-/**
- * 多模态消息(图片理解用)。
- *
- * 只在「图片自检」等少数场景用,所以**没有**把它并进 `ChatMessage` ——
- * 那会改动所有既有调用点与类型收窄。OpenAI 兼容协议里图片是 content 数组的一个 part,
- * 这里直接按该形状构造即可(见 `imageMessage`)。
- */
-export interface ImageMessage {
-  role: 'user'
-  content: Array<
-    | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string } }
-  >
-}
-
-/** 构造一条「文本 + 一张 data URL 图」的用户消息 */
-export function imageMessage(text: string, imageDataUrl: string): ImageMessage {
-  return {
-    role: 'user',
-    content: [
-      { type: 'text', text },
-      { type: 'image_url', image_url: { url: imageDataUrl } },
-    ],
-  }
-}
-
 export interface StreamChatOpts {
   protocol: 'openai' | 'ollama'
   baseUrl: string
@@ -234,57 +208,6 @@ export async function completeChat(
   opts: Omit<StreamChatOpts, 'maxTokens' | 'temperature'> & { temperature?: number; maxTokens?: number },
 ): Promise<string> {
   return (await completeChatFull(opts)).text
-}
-
-/**
- * 带图片的单轮补全(图片理解/视觉自检)。
- *
- * 只走 OpenAI 兼容协议 —— 当前支持读图的 DeepSeek V4.1-Flash / 智谱 GLM-4V 等都在这条协议下;
- * Ollama 的多模态消息形状不同,这里直接不支持(抛错让调用方兜底),比静默发出去被拒更清楚。
- */
-export async function completeChatWithImage(opts: {
-  protocol: 'openai' | 'ollama'
-  baseUrl: string
-  apiKey: string
-  model: string
-  prompt: string
-  imageDataUrl: string
-  maxTokens?: number
-  temperature?: number
-  signal?: AbortSignal
-  /** provider 预设 id / 会话 id:OpenCode Go 必须带 `x-opencode-session`,否则 400 */
-  provider?: string
-  sessionId?: string
-}): Promise<string> {
-  if (opts.protocol !== 'openai') throw new Error('图片理解当前仅支持 OpenAI 兼容端点')
-  const url = `${ensureUrl(opts.baseUrl)}/chat/completions`
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${opts.apiKey}`,
-  }
-  // 与文本链路共用同一套「特殊头」判定,否则 OpenCode Go 会以 MissingSessionID 拒掉
-  if (isOpenCodeGo(opts)) {
-    headers['x-opencode-session'] = opts.sessionId || randomUUID()
-    headers['User-Agent'] = UA
-  }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: opts.model,
-      messages: [imageMessage(opts.prompt, opts.imageDataUrl)],
-      stream: false,
-      temperature: opts.temperature ?? 0.2,
-      max_tokens: opts.maxTokens ?? 512,
-    }),
-    signal: opts.signal ?? AbortSignal.timeout(60_000),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`图片模型 HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`)
-  }
-  const j = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
-  return j.choices?.[0]?.message?.content ?? ''
 }
 
 /* ---------- embedding ---------- */

@@ -125,10 +125,13 @@ export function buildGenerateMessages(descr: string, retryHint?: string) {
 /**
  * 生成用的 max_tokens 阶梯。
  *
- * 推理模型(deepseek-v4.1-flash)会先写几千 token 的思维链再产出正文,预算给小了
- * 就会出现「思考完但正文被截断」——表现为耗时很久、返回空。所以从大预算起,失败再降。
+ * 推理模型(deepseek-v4.1-flash)会先写几千 token 的思维链再产出正文。实测:同一段
+ * 完整 prompt 下,思维链+正文经常到 6~8k,偶尔更多 —— 预算卡在 8192 时会**正好被截断**,
+ * 正文成半截 JSON(表现为耗时很久、然后 422)。
+ *
+ * 所以首档直接给到 20000(多出来的额度不用不花钱),再留一档退路。
  */
-export const GENERATE_BUDGETS = [8192, 6000, 4000] as const
+export const GENERATE_BUDGETS = [20_000, 12_000] as const
 
 /* ------------------------------------------------------------------ */
 /* 退路:结构化「种类库」提示词                                          */

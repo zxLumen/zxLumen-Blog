@@ -1,13 +1,13 @@
 'use client'
 
 /**
- * 物种实验室 —— 「像不像」的试验台。
+ * 物种实验室 —— 「像不像 + 独特性」的试验台。
  *
- * 现在的主路径是 **LLM 现场生成骨架**:输入描述 → 模型产出部件树 + DNA → 编译成 rig →
- * 渲染 → 视觉自检(低分自动重捏一次)。
+ * 主路径是 **LLM 现场生成骨架**:输入描述 → 模型产出部件树 + DNA → 编译成 rig → 渲染。
+ * 每只生物用**本地启发式**打分(配色/特质/运动/叙事/描述契合),零额外调用;
+ * 每次生成都记入本会话历史,并排看「同一句描述每次都不一样」。
  *
- * 手写的 `butterfly` / `fox` **保留为兜底**:模型不可用 / 超时 / 返回非法 JSON 时,
- * 至少还能展示一只像样的生物,而不是空白。
+ * 手写的 `butterfly` / `fox` **保留为兜底**:模型彻底失败时至少展示一只像样的生物。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -24,6 +24,15 @@ const STRIP_DAYS = [0, 2, 4, 7, 10, 14, 19, 25, 34, 45, 60]
 /** 手写物种的定型天数;生成物种用 blueprint 自己的 matureDay */
 const RIG_MATURE_DAY = 34
 
+/** 分项中文名(展示用) */
+const SCORE_LABELS: Record<string, string> = {
+  palette: '配色',
+  traits: '特质',
+  motion: '动效',
+  narrative: '叙事',
+  match: '契合',
+}
+
 export function SpeciesLab() {
   const day = useLabDay()
   const [input, setInput] = useState<string>(PRESET_DESCRIPTIONS[0])
@@ -31,7 +40,7 @@ export function SpeciesLab() {
   const [auto, setAuto] = useState(true)
   const stageRef = useRef<HTMLDivElement | null>(null)
 
-  const { compiled, state, generateWithCheck } = useCreatureGen()
+  const { compiled, state, history, generate } = useCreatureGen()
 
   /** 兜底:模型没给出可用骨架时用手写物种 + fallbackDna */
   const fallback = useMemo(() => {
@@ -39,6 +48,7 @@ export function SpeciesLab() {
     return { rig, dna: fallbackDna(committed), matureDay: RIG_MATURE_DAY }
   }, [committed])
 
+  /** 只有「确实生成了骨架」才用它;临时错误(限流)保留上一次成功的生物 */
   const usingGenerated = compiled !== null && !state.fallback
   const dna: CreatureDna = usingGenerated ? compiled.dna : fallback.dna
   const rig = usingGenerated ? compiled.rig : fallback.rig
@@ -50,39 +60,35 @@ export function SpeciesLab() {
       const d = descr.trim()
       if (!d) return
       setCommitted(d)
-      void generateWithCheck(d, () => stageRef.current?.querySelector('svg') ?? null)
+      void generate(d)
     },
-    [generateWithCheck],
+    [generate],
   )
 
-  /**
-   * 自动模式:每次 `committed` 变化生成一次。
-   *
-   * 依赖里**不放 `generateWithCheck`** —— 它每次渲染都是新引用,会导致「描述没变也重生成」,
-   * 之前就是这样把接口调了三次。用 ref 拿最新函数,语义才等于「描述变了才生成」。
-   */
-  const genRef = useRef(generateWithCheck)
+  // 自动模式:每次 committed 变化生成一次。用 ref 拿最新函数,避免「描述没变也重生成」
+  const genRef = useRef(generate)
   useEffect(() => {
-    genRef.current = generateWithCheck
-  }, [generateWithCheck])
+    genRef.current = generate
+  }, [generate])
 
   const autoRanFor = useRef<string | null>(null)
   useEffect(() => {
     if (!auto) return
     if (autoRanFor.current === committed) return
     autoRanFor.current = committed
-    void genRef.current(committed, () => stageRef.current?.querySelector('svg') ?? null)
+    void genRef.current(committed)
   }, [committed, auto])
 
-  const judge = state.judge
+  const score = state.score
+  const verdict = score ? (score.total >= 75 ? 'ok' : score.total >= 55 ? 'mid' : 'bad') : undefined
 
   return (
     <div className="cl-root sp-root">
       <header className="cl-head">
         <h1>物种实验室</h1>
         <p>
-          描述任意生物,由**大模型现场生成骨架与 DNA**(部件树 + 配色 + 运动),
-          再渲染 + 视觉自检。对照 <a href="/lab/creature">六渲染技术版</a>。
+          描述任意生物,由**大模型现场生成骨架与 DNA**(部件树 + 配色 + 运动),再渲染并用本地启发式打分。
+          对照 <a href="/lab/creature">六渲染技术版</a>。
         </p>
       </header>
 
@@ -121,22 +127,37 @@ export function SpeciesLab() {
         <span data-stage="grow">成长 {growthPct}%</span>
         <span>第 {day.toFixed(1)} 天</span>
         {state.cached && <span className="sp-chip">缓存</span>}
-        {state.ms > 0 && <span className="sp-chip">{state.ms}ms</span>}
-        {state.attempts > 1 && <span className="sp-chip">重试 ×{state.attempts}</span>}
-        {judge && (
-          <span className="sp-chip" data-score={judge.score >= 6 ? 'ok' : 'bad'}>
-            自检 {judge.score}/10{judge.looksLike ? ` · 像${judge.looksLike}` : ''}
+        {state.ms > 0 && <span className="sp-chip">{(state.ms / 1000).toFixed(1)}s</span>}
+        {score && (
+          <span className="sp-chip" data-score={verdict} title="本地启发式评分,满分 100">
+            评分 {score.total.toFixed(0)}
           </span>
         )}
         <span className="cl-fact-note">{rig.hint}</span>
       </section>
 
-      {(state.loading || state.error || judge) && (
+      {/* 评分明细 + 生成状态 */}
+      {(score || state.loading || state.error) && (
         <div className="sp-status" data-bad={state.error ? '1' : '0'}>
           {state.loading && <span>⏳ {state.phase || '处理中…'}</span>}
-          {!state.loading && state.error && <span>⚠ {state.error}(已用兜底物种)</span>}
-          {!state.loading && !state.error && judge && judge.score < 6 && judge.issues.length > 0 && (
-            <span>模型自评:{judge.issues.join(' / ')}</span>
+          {!state.loading && state.error && (
+            <span>
+              ⚠ {state.error}
+              {state.fallback ? '(已用兜底物种)' : '(保留上一只)'}
+            </span>
+          )}
+          {!state.loading && score && (
+            <span className="sp-breakdown">
+              {(['palette', 'traits', 'motion', 'narrative', 'match'] as const).map((k) => (
+                <span key={k} className="sp-meter">
+                  <em>{SCORE_LABELS[k]}</em>
+                  <i>
+                    <b style={{ width: `${Math.round(score[k] * 100)}%` }} />
+                  </i>
+                  <u>{Math.round(score[k] * 100)}</u>
+                </span>
+              ))}
+            </span>
           )}
         </div>
       )}
@@ -146,6 +167,30 @@ export function SpeciesLab() {
       </div>
 
       <Timeline fullDays={matureDay} showStage={false} />
+
+      {/* 本会话生成历史:一眼看出「同一句描述每次都不一样」+ 各自得分 */}
+      {history.length > 0 && (
+        <section className="sp-history" aria-label="本次生成记录">
+          <h2>本次生成 · {history.length} 只</h2>
+          <div className="sp-history-row">
+            {history.map((h, i) => {
+              const v = h.score.total >= 75 ? 'ok' : h.score.total >= 55 ? 'mid' : 'bad'
+              return (
+                <div key={`${h.at}-${i}`} className="sp-history-cell">
+                  <span className="sp-history-name">{h.name}</span>
+                  <span className="sp-history-score" data-score={v}>
+                    {h.score.total.toFixed(0)}
+                  </span>
+                  <span className="sp-history-meta">
+                    {h.family} · {h.parts}件 · {h.matureDay}天
+                  </span>
+                  <span className="sp-history-descr">{h.descr}</span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="sp-strip" aria-label="成长条带">
         <h2>成长条带 · 同一天只看一眼就能比</h2>

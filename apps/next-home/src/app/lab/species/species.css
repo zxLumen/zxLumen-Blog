@@ -140,7 +140,125 @@
   color: #7fe0a8;
 }
 
+.sp-chip[data-score='mid'] {
+  border-color: #6b5f2f;
+  color: #e8d48a;
+}
+
 .sp-chip[data-score='bad'] {
   border-color: #6b3a3a;
   color: #ffb0b0;
+}
+
+/* 评分明细:五条细进度条 */
+.sp-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.sp-meter {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.sp-meter em {
+  width: 2em;
+  color: var(--cl-dim);
+  font-style: normal;
+}
+
+.sp-meter i {
+  display: inline-block;
+  width: 62px;
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cl-fg) 12%, transparent);
+  overflow: hidden;
+}
+
+.sp-meter b {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--cl-accent);
+}
+
+.sp-meter u {
+  width: 1.9em;
+  color: var(--cl-fg);
+  font-size: 11px;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 本次生成历史 */
+.sp-history {
+  margin-top: 22px;
+}
+
+.sp-history h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cl-dim);
+  letter-spacing: 0.02em;
+}
+
+.sp-history-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.sp-history-cell {
+  flex: 0 0 auto;
+  width: 128px;
+  padding: 8px 10px;
+  border: 1px solid var(--cl-line);
+  border-radius: 10px;
+  background: var(--cl-card);
+  font-size: 11px;
+}
+
+.sp-history-name {
+  display: block;
+  font-size: 13px;
+  color: var(--cl-fg);
+}
+
+.sp-history-score {
+  display: inline-block;
+  margin: 3px 0;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-history-score[data-score='ok'] {
+  color: #7fe0a8;
+}
+
+.sp-history-score[data-score='mid'] {
+  color: #e8d48a;
+}
+
+.sp-history-score[data-score='bad'] {
+  color: #ffb0b0;
+}
+
+.sp-history-meta {
+  display: block;
+  color: var(--cl-dim);
+}
+
+.sp-history-descr {
+  display: block;
+  margin-top: 3px;
+  color: color-mix(in srgb, var(--cl-dim) 80%, transparent);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
