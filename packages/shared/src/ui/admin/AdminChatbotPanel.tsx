@@ -1,9 +1,12 @@
 'use client'
 
 // 机器人后台面板:对话/provider 配置 + 检索(embedding)配置 + 灵魂蒸馏 + 对话日志。
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown, { type Components } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { MantineBridge } from './mantine-bridge.js'
 import { adminFetch } from './admin-fetch.js'
+import { useBarTooltip } from '../BarTooltip.js'
 import type { NotifyMsg } from './admin-types.js'
 
 interface ProviderOption {
@@ -121,6 +124,7 @@ interface DistillStatus {
 
 interface LogRow {
   id: number
+  session_id: string
   role: string
   content: string
   cid: string
@@ -131,6 +135,52 @@ interface LogRow {
   out_tokens: number
   latency_ms: number
   created_at: string
+}
+
+/** 一次对话(按 session_id 归并);接口把该会话的消息内嵌在 messages 里 */
+interface ChatSession {
+  session_id: string
+  cid: string
+  day: string
+  started_at: string
+  last_at: string
+  turns: number
+  msg_count: number
+  in_tokens: number
+  out_tokens: number
+  latency_ms: number
+  models: string
+  first_question: string
+  messages: LogRow[]
+}
+
+interface VisitorAlias {
+  cid: string
+  alias: string
+}
+
+/** 正文截断长度;超过就显示「展开」 */
+const LOG_CLAMP = 400
+/** 日统计柱状图的窗口天数 */
+const LOG_DAYS = 14
+/** 单个会话最多渲染多少条消息(超出的折叠,避免一条几十轮的长会话把页面撑爆) */
+const LOG_MAX_MSGS = 100
+
+/** 外链新窗口打开(同前台 ChatWidget) */
+const mdComponents: Components = {
+  a({ node, ...props }) {
+    void node
+    return <a {...props} target="_blank" rel="noreferrer noopener" />
+  },
+}
+
+/** `2026-10-01 11:28:05` → `10-01 11:28`;跨天时首条补上日期 */
+const fmtWhen = (ts: string): string => (ts.length >= 16 ? `${ts.slice(5, 10)} ${ts.slice(11, 16)}` : ts)
+
+/** 停留时长:毫秒 → 「4.2s」/「1分12秒」 */
+function fmtDur(ms: number): string {
+  if (!ms || ms < 0) return ''
+  return ms < 60000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.floor(ms / 60000)}分${Math.round((ms % 60000) / 1000)}秒`
 }
 
 function gate(showTabs: boolean, tab: string): boolean {
@@ -529,9 +579,35 @@ export function AdminChatbotPanel({
   const [viewState, setViewState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [viewText, setViewText] = useState('')
 
-  const [logs, setLogs] = useState<LogRow[]>([])
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [logTotal, setLogTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const [dayCounts, setDayCounts] = useState<Array<{ day: string; count: number }>>([])
   const [logsBusy, setLogsBusy] = useState(false)
+  const [logQ, setLogQ] = useState('')
+  const [logDay, setLogDay] = useState('')
+  /** 访客筛选(空 = 不限);选项来自 visitor_aliases,与日志接口解耦 */
+  const [logCid, setLogCid] = useState('')
+  const [aliases, setAliases] = useState<Record<string, string>>({})
+  /** 展开的会话(默认只展开最新一条);展开的正文(超过 LOG_CLAMP 的) */
+  const [openSids, setOpenSids] = useState<string[]>([])
+  const [openMsgs, setOpenMsgs] = useState<number[]>([])
+  const barTip = useBarTooltip()
+  const PAGE = 10
+  /**
+   * 「加载更多」的下一页偏移。用 ref 而不是 `sessions.length`:
+   * 若让 loadLogs 依赖 sessions.length,加载更多会改变它的身份 → 挂载 effect 跟着
+   * 重跑 → 又把第一页拉回来覆盖掉追加的结果,表现为「点了没反应」。
+   * 改成 ref 后 loadLogs 只随筛选变化,加载更多不会触发重载。
+   */
+  const nextOffset = useRef(0)
+
+  /** 访客下拉选项:昵称优先,没有昵称的退回 cid 前 8 位 */
+  const cidOptions = useMemo(() => {
+    const seen = new Set<string>()
+    for (const s of sessions) if (s.cid) seen.add(s.cid)
+    return [...seen].map((cid) => ({ cid, name: aliases[cid] || `${cid.slice(0, 8)}…` }))
+  }, [sessions, aliases])
 
   const [chatModels, setChatModels] = useState<string[]>([])
   const [embedModels, setEmbedModels] = useState<string[]>([])
@@ -593,23 +669,61 @@ export function AdminChatbotPanel({
     }
   }, [])
 
-  const loadLogs = useCallback(async () => {
-    setLogsBusy(true)
-    try {
-      const r = await adminFetch('/api/admin/chatbot/logs?limit=30&days=14', {
-        cache: 'no-store',
-      })
-      if (r.ok) {
-        const d = (await r.json()) as { logs: LogRow[]; dayCounts: Array<{ day: string; count: number }> }
-        setLogs(d.logs ?? [])
-        setDayCounts(d.dayCounts ?? [])
+const [logQDebounced, setLogQDebounced] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setLogQDebounced(logQ.trim()), 350)
+    return () => clearTimeout(t)
+  }, [logQ])
+
+  /**
+   * 取对话日志。`append` 为 true 时是「加载更多」——把本页会话接在已有列表后面。
+   * 搜索用 `logQDebounced` 而不是 logQ 本体,免得每敲一个字打一次接口。
+   */
+  const loadLogs = useCallback(
+    async (opts: { append?: boolean } = {}) => {
+      const offset = opts.append ? nextOffset.current : 0
+      setLogsBusy(true)
+      try {
+        const q = new URLSearchParams({ days: String(LOG_DAYS), limit: String(PAGE), offset: String(offset) })
+        if (logQDebounced) q.set('q', logQDebounced)
+        if (logDay) q.set('day', logDay)
+        if (logCid) q.set('cid', logCid)
+        const [r, ar] = await Promise.all([
+          adminFetch(`/api/admin/chatbot/logs?${q.toString()}`, { cache: 'no-store' }),
+          // 访客昵称:日志接口不带,单独取一次(失败不影响主列表;翻页不用重复取)
+          opts.append
+            ? Promise.resolve(null)
+            : adminFetch('/api/admin/visitor-alias', { cache: 'no-store' }).catch(() => null),
+        ])
+        if (!r.ok) return
+        const d = (await r.json()) as {
+          sessions?: ChatSession[]
+          total?: number
+          hasMore?: boolean
+          dayCounts?: Array<{ day: string; count: number }>
+        }
+        const got = d.sessions ?? []
+        nextOffset.current = offset + got.length
+        setSessions((prev) => (opts.append ? [...prev, ...got] : got))
+        setLogTotal(d.total ?? 0)
+        setHasMore(!!d.hasMore)
+        if (d.dayCounts) setDayCounts(d.dayCounts)
+        // 首次载入时展开最新一条,其余折叠
+        if (!opts.append) setOpenSids(got.slice(0, 1).map((x) => x.session_id))
+        if (ar?.ok) {
+          const ad = (await ar.json().catch(() => ({ aliases: [] }))) as { aliases?: VisitorAlias[] }
+          const map: Record<string, string> = {}
+          for (const a of ad.aliases ?? []) if (a.alias) map[a.cid] = a.alias
+          setAliases(map)
+        }
+      } catch {
+        /* 忽略 */
+      } finally {
+        setLogsBusy(false)
       }
-    } catch {
-      /* 忽略 */
-    } finally {
-      setLogsBusy(false)
-    }
-  }, [])
+    },
+    [logQDebounced, logDay, logCid],
+  )
 
   useEffect(() => {
     if (gated && active) {
@@ -810,11 +924,67 @@ export function AdminChatbotPanel({
     }
   }
 
-  const clearLogs = async () => {
-    if (!confirm('清空全部对话日志?')) return
-    const r = await adminFetch('/api/admin/chatbot/logs', { method: 'DELETE' })
+  /** 删一次对话(卡片右上角);成功后从本地列表摘掉,不用整页重拉 */
+const deleteSession = async (s: ChatSession) => {
+    if (!confirm(`删除 ${fmtWhen(s.started_at)} 这次对话?\n共 ${s.msg_count} 条消息(访客 ${aliases[s.cid] || s.cid.slice(0, 8)}),删了不可恢复。`))
+      return
+    const r = await adminFetch('/api/admin/chatbot/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete-session', session_id: s.session_id }),
+    })
+    const d = (await r.json().catch(() => ({}))) as { error?: string; deleted?: number }
+    if (!r.ok) {
+      notify('err', d.error || '删除失败')
+      return
+    }
+    setSessions((prev) => prev.filter((x) => x.session_id !== s.session_id))
+    setLogTotal((n) => Math.max(0, n - 1))
+    // 柱状图按「提问条数」统计,删掉这次对话要把当天的提问数一起减掉
+    setDayCounts((prev) =>
+      prev.map((d) => (d.day === s.day ? { ...d, count: Math.max(0, d.count - s.turns) } : d)),
+    )
+    setOpenSids((prev) => prev.filter((x) => x !== s.session_id))
+    notify('ok', `已删除该次对话(${d.deleted ?? 0} 条)`)
+  }
+
+  /** 只保留最近 N 天;先问一次删多少,再动手 */
+const pruneLogs = async (keepDays: number) => {
+    if (!confirm(`只保留最近 ${keepDays} 天的对话日志?\n更早的记录会被永久删除,不可恢复。`)) return
+    const r = await adminFetch('/api/admin/chatbot/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'prune', keep_days: keepDays }),
+    })
+    const d = (await r.json().catch(() => ({}))) as { error?: string; deleted?: number }
+    if (!r.ok) {
+      notify('err', d.error || '清理失败')
+      return
+    }
+    notify('ok', `已清理 ${d.deleted ?? 0} 条旧日志`)
+    void loadLogs()
+  }
+
+  /** 全清:先不带 confirm 探一次待删条数,把影响范围摆出来再确认 */
+const clearLogs = async () => {
+    const probe = await adminFetch('/api/admin/chatbot/logs', { method: 'DELETE' })
+    const pd = (await probe.json().catch(() => ({}))) as { total?: number }
+    const n = pd.total ?? 0
+    if (!n) {
+      notify('ok', '没有可清理的对话日志')
+      return
+    }
+    if (!confirm(`清空全部对话日志?\n共 ${n} 次对话,永久删除、不可恢复。\n如果只是想清理旧记录,用「只保留最近 N 天」更合适。`))
+      return
+    const r = await adminFetch('/api/admin/chatbot/logs?confirm=1', { method: 'DELETE' })
     if (r.ok) {
-      setLogs([])
+      setSessions([])
+      setLogTotal(0)
+      setHasMore(false)
+      setOpenSids([])
+      // 柱状图也一并归零,否则会留着清空前的计数误导人
+      setDayCounts((prev) => prev.map((d) => ({ ...d, count: 0 })))
+      nextOffset.current = 0
       notify('ok', '日志已清空')
     }
   }
@@ -1214,33 +1384,198 @@ export function AdminChatbotPanel({
       </div>
 
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
-        <h3>对话日志 <span>近 14 天每日提问 · 最近会话</span></h3>
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
-          {dayCounts.map((d) => (
-            <span key={d.day} className="zx-stat" style={{ fontSize: '0.72rem', padding: '4px 8px' }}>
-              {d.day.slice(5)}:{d.count}
-            </span>
-          ))}
+        <h3>
+          对话日志{' '}
+          <span>
+            {logTotal} 次对话 · 近 {dayCounts.length} 天共 {dayCounts.reduce((a, d) => a + d.count, 0)} 次提问
+          </span>
+        </h3>
+
+        {/* 日统计:点柱子即筛选当天,再点取消。以前是一排 "09-19:0" 的 chip,
+            既看不出高低也点不动。 */}
+        <div className="zx-chatlog-chart" onMouseMove={barTip.onMouseMove} onMouseLeave={barTip.onMouseLeave}>
+          {dayCounts.map((d) => {
+            const max = Math.max(1, ...dayCounts.map((x) => x.count))
+            return (
+              <div
+                key={d.day}
+                className={`zx-bar${d.count === 0 ? ' is-zero' : ''}${logDay === d.day ? ' is-sel' : ''}`}
+                data-label={`${d.day} · ${d.count} 次提问${logDay === d.day ? ' ·(已筛选,点击取消)' : ' ·(点击只看这天)'}`}
+                style={{ height: `${Math.max(4, (d.count / max) * 100)}%` }}
+                onClick={() => setLogDay((cur) => (cur === d.day ? '' : d.day))}
+              />
+            )
+          })}
         </div>
-        {logs.length === 0 && !logsBusy && <div className="zx-c-empty">暂无对话</div>}
-        {logs.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {logs.slice(0, 20).map((l) => (
-              <div key={l.id} className="zx-comment">
-                <div className="zx-c-head">
-                  <span className="zx-c-author">{l.role === 'user' ? '访客' : '分身'}</span>
-                  <span className="zx-c-time">#{l.id} · {l.cid.slice(0, 8)} · {l.created_at}</span>
-                  {l.role === 'assistant' && <span className="zx-c-time">in {l.in_tokens} / out {l.out_tokens}</span>}
-                  <span className="zx-c-time" style={{ marginLeft: 'auto' }}>{l.model || l.provider}</span>
-                </div>
-                <div className="zx-c-body">{l.content.slice(0, 400)}{l.content.length > 400 ? '…' : ''}</div>
-              </div>
+        {barTip.node}
+
+        <div className="zx-chatlog-toolbar" style={{ marginTop: '0.5rem' }}>
+          <input
+            type="search"
+            placeholder="搜索问题 / 回答 / 会话 id"
+            value={logQ}
+            onChange={(e) => setLogQ(e.target.value)}
+          />
+          {logDay && (
+            <button className="zx-btn zx-btn-sm zx-btn-ghost" onClick={() => setLogDay('')}>
+              取消日期筛选({logDay.slice(5)})
+            </button>
+          )}
+          <select value={logCid} onChange={(e) => setLogCid(e.target.value)} title="只看某个访客的对话">
+            <option value="">全部访客</option>
+            {cidOptions.map((o) => (
+              <option key={o.cid} value={o.cid}>
+                {o.name}
+              </option>
             ))}
-          </div>
+          </select>
+          {logCid && (
+            <button className="zx-btn zx-btn-sm zx-btn-ghost" onClick={() => setLogCid('')}>
+              取消访客筛选
+            </button>
+          )}
+          {(logQ || logDay || logCid) && (
+            <span className="zx-muted zx-mono" style={{ fontSize: '0.68rem' }}>
+              命中 {logTotal} 次对话
+            </span>
+          )}
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem' }}>
+            <select
+              value=""
+              title="只保留最近 N 天的日志"
+              onChange={(e) => {
+                if (e.target.value) void pruneLogs(Number(e.target.value))
+                e.target.value = ''
+              }}
+            >
+              <option value="">只保留最近 N 天…</option>
+              <option value="7">保留 7 天</option>
+              <option value="30">保留 30 天</option>
+              <option value="90">保留 90 天</option>
+            </select>
+            <button className="zx-btn zx-btn-sm zx-btn-ghost" onClick={() => void clearLogs()}>
+              清空全部
+            </button>
+          </span>
+        </div>
+
+        {sessions.length === 0 && !logsBusy && (
+          <div className="zx-c-empty">{logQ || logDay || logCid ? '没有匹配的对话' : '暂无对话'}</div>
         )}
-        <button className="zx-btn zx-btn-sm zx-btn-ghost" style={{ marginTop: '0.6rem' }} onClick={() => void clearLogs()}>
-          清空日志
-        </button>
+
+        {sessions.map((s) => {
+          const open = openSids.includes(s.session_id)
+          const who = aliases[s.cid] || s.cid.slice(0, 8) || '(未知访客)'
+          const token = s.in_tokens + s.out_tokens
+          // 超长会话只渲染末尾一段,免得几十轮把页面撑到几千像素
+          const msgs = s.messages ?? []
+          const shown = msgs.length > LOG_MAX_MSGS ? msgs.slice(-LOG_MAX_MSGS) : msgs
+          return (
+            <div key={s.session_id} className="zx-chatsess">
+              <button
+                className="zx-chatsess-head"
+                onClick={() =>
+                  setOpenSids((prev) =>
+                    prev.includes(s.session_id)
+                      ? prev.filter((x) => x !== s.session_id)
+                      : [...prev, s.session_id],
+                  )
+                }
+              >
+                <span className="zx-chatsess-caret">{open ? '\u25be' : '\u25b8'}</span>
+                <span className="zx-chatsess-when">{fmtWhen(s.started_at)}</span>
+                <span className="zx-chatsess-who">{who}</span>
+                <span className="zx-chatsess-meta">
+                  {s.turns} 轮 · {s.msg_count} 条
+                  {s.models ? ` · ${s.models}` : ''}
+                  {token ? ` · in ${s.in_tokens}/out ${s.out_tokens}` : ''}
+                  {s.latency_ms ? ` · ${fmtDur(s.latency_ms)}` : ''}
+                </span>
+                {!open && <span className="zx-chatsess-sum">首问「{s.first_question}」</span>}
+              </button>
+              {open && shown.length < msgs.length && (
+                <div className="zx-chatsess-note">
+                  共 {msgs.length} 条,只显示最近 {shown.length} 条(统计口径仍按全部 {s.msg_count} 条)
+                </div>
+              )}
+              {open && (
+                <div className="zx-chatsess-body">
+                  {shown.map((l) => {
+                    const long = l.content.length > LOG_CLAMP
+                    const expanded = openMsgs.includes(l.id)
+                    const isUser = l.role === 'user'
+                    return (
+                      <div
+                        key={l.id}
+                        className={`zx-chatsess-msg${isUser ? '' : ' is-assistant'}${!isUser && /^\[模型出错了\]/.test(l.content) ? ' is-error' : ''}`}
+                      >
+                        <div className="zx-chatsess-role">
+                          {isUser ? '访客' : '分身'} · {fmtWhen(l.created_at)}
+                          {!isUser && l.model ? ` · ${l.model}` : ''}
+                          {!isUser && l.latency_ms ? ` · ${fmtDur(l.latency_ms)}` : ''}
+                          {!isUser && (l.in_tokens || l.out_tokens) ? ` · in ${l.in_tokens}/out ${l.out_tokens}` : ''}
+                        </div>
+                        {isUser ? (
+                          <div className="zx-chatsess-text">{l.content}</div>
+                        ) : (
+                          <>
+                            {long && !expanded ? (
+                              <>
+                                <div className="zx-chatsess-text zxchat-md">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                                    {l.content.slice(0, LOG_CLAMP)}
+                                  </ReactMarkdown>
+                                </div>
+                                <button
+                                  className="zx-chatsess-more"
+                                  onClick={() => setOpenMsgs((prev) => [...prev, l.id])}
+                                >
+                                  展开全文({l.content.length} 字)
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <div className="zx-chatsess-text zxchat-md">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                                    {l.content}
+                                  </ReactMarkdown>
+                                </div>
+                                {long && (
+                                  <button
+                                    className="zx-chatsess-more"
+                                    onClick={() => setOpenMsgs((prev) => prev.filter((x) => x !== l.id))}
+                                  >
+                                    收起
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button className="zx-chatsess-del" onClick={() => void deleteSession(s)}>
+                      删本次对话
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        <div className="zx-chatlog-foot" style={{ marginTop: '0.6rem' }}>
+          <span>
+            已显示 {sessions.length} / {logTotal} 次对话
+          </span>
+          {hasMore && (
+            <button className="zx-btn zx-btn-sm zx-btn-ghost" disabled={logsBusy} onClick={() => void loadLogs({ append: true })}>
+              {logsBusy ? '加载中…' : '加载更多'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>

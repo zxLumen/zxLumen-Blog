@@ -2,6 +2,8 @@ import type Database from 'better-sqlite3'
 import type {
   ChatDayCount,
   ChatLogRow,
+  ChatSessionPage,
+  ChatSessionRow,
   CommentRow,
   KbChunkRow,
   KbDocRow,
@@ -106,7 +108,27 @@ export interface Db {
   /** 某 cid 在指定北京日(YYYY-MM-DD)的提问条数(每日上限用) */
   countChatByCidDay(cid: string, day: string): number
   chatDayCounts(days?: number): ChatDayCount[]
-  deleteAllChatLogs(): void
+  /**
+   * 会话列表:按 `session_id` 归并,按最后一条消息时间倒序 + offset 分页。
+   * `q` 命中 content(也会匹配 session_id,方便直接粘 id 查),`cid`/`day` 精确匹配。
+   * 筛选先圈出命中的 session_id,再对这些会话的**全部**消息做聚合 ——
+   * 否则「搜到一个词」会让该会话的轮数/token 只统计到命中的那几条。
+   */
+  listChatSessions(opts?: {
+    limit?: number
+    offset?: number
+    q?: string
+    cid?: string
+    day?: string
+  }): ChatSessionPage
+  /** 批量取这些会话的完整消息(一次查询,避免 N+1);按 id 升序 */
+  listChatLogsBySessions(sessionIds: string[]): ChatLogRow[]
+  /** 删除一次对话的全部消息;返回删除条数 */
+  deleteChatSession(sessionId: string): number
+  /** 只保留最近 `keepDays` 个北京日(含今天)的日志;返回删除条数 */
+  pruneChatLogs(keepDays: number): number
+  deleteAllChatLogs(): number
+  countChatLogs(): number
 
   // 知识库
   upsertKbDoc(input: {
@@ -165,7 +187,19 @@ export type EventStore = Pick<Db, 'addEvent' | 'addEventOnce'>
 export type StatsStore = Pick<Db, 'stats'>
 export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta' | 'listMetaKeys'>
 export type VisitorStore = Pick<Db, 'getVisitorAlias' | 'listVisitorAliases' | 'setVisitorAlias'>
-export type ChatStore = Pick<Db, 'addChatLog' | 'listChatLogs' | 'countChatByCidDay' | 'chatDayCounts' | 'deleteAllChatLogs'>
+export type ChatStore = Pick<
+  Db,
+  | 'addChatLog'
+  | 'listChatLogs'
+  | 'listChatSessions'
+  | 'listChatLogsBySessions'
+  | 'deleteChatSession'
+  | 'pruneChatLogs'
+  | 'countChatByCidDay'
+  | 'chatDayCounts'
+  | 'deleteAllChatLogs'
+  | 'countChatLogs'
+>
 export type KbStore = Pick<
   Db,
   | 'upsertKbDoc'

@@ -355,6 +355,41 @@ export interface ChatDayCount {
   count: number
 }
 
+/**
+ * 一次对话(按 `session_id` 归并)的摘要。
+ *
+ * 为什么要有这一层:admin 的对话日志原先直接把消息流当列表渲染,一问一答被拆成
+ * 两张卡片、不同访客的对话交错混排,标题写着「最近会话」给的却是「最近消息」。
+ * 归并成会话后才谈得上「一次对话讲了什么」。
+ */
+export interface ChatSessionRow {
+  /** 会话键 = `session_id`;历史空值行会并成同一组(见 chat.ts 的说明) */
+  session_id: string
+  /** 访客匿名 ID(MOCK 时是 mock 身份);展示时优先用 visitor_aliases 的备注 */
+  cid: string
+  /** 会话首条消息的北京日 */
+  day: string
+  started_at: string
+  last_at: string
+  /** 提问轮数(role='user' 的条数) */
+  turns: number
+  /** 消息总条数(叫 msg_count 而不是 messages,是为了让 `messages` 留给消息数组本身) */
+  msg_count: number
+  in_tokens: number
+  out_tokens: number
+  latency_ms: number
+  /** 去重后的模型列表(逗号分隔;历史行可能为空) */
+  models: string
+  /** 首问摘要,列表里一眼看出这次聊了什么 */
+  first_question: string
+}
+
+export interface ChatSessionPage {
+  sessions: ChatSessionRow[]
+  /** 命中筛选的会话总数(不受 limit/offset 影响,用于「已显示 x / y」) */
+  total: number
+}
+
 /** 知识库文档(一份源文件的元信息 + 分类 + 处理状态) */
 export interface KbDocRow {
   id: number

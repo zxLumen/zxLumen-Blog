@@ -104,7 +104,19 @@ docker compose 已为 `app` 服务配置:
 - `POST /api/chat`:`{ message, history?, session_id? }` → `text/plain` 流;按 IP 限流 + 每人每日上限(`meta.chatbot_config.dailyCap`),记录进 `chat_logs`(cid 含 MOCK 身份)。
 - `GET /api/chat/config`:公开,仅返回 `{ enabled, name, greeting, suggestions, ready }`,不含密钥。
 - `GET/POST /api/admin/chatbot`:完整配置 + 掩码密钥 + provider 列表(仅站长)。
-- `GET/POST/DELETE /api/admin/chatbot/logs`:对话日志 / 日统计 / 清空。
+- `GET/POST/DELETE /api/admin/chatbot/logs`:对话日志(**按 `session_id` 归并成「一次对话」**)/ 日统计 / 三种粒度清理。
+
+  - `GET`:`?days=&limit=&offset=&q=&cid=&day=` → `{ sessions, total, offset, limit, hasMore, dayCounts }`。
+    每条 session 带 `turns/msg_count/in_tokens/out_tokens/latency_ms/models/first_question` 与内嵌的
+    `messages`。`q` 先圈出命中会话再聚合该会话**全部**消息(否则搜到一个词时轮数/token 只统计到
+    命中的那几条);数字参数一律 clamp 兜底(`NaN` 会静默废掉分页)。`dayCounts` 按 `role='user'`
+    统计每天**提问条数**,不受 `q/cid/day` 影响。
+  - `POST`:`{action:'delete-session', session_id}` / `{action:'prune', keep_days}`。
+    `prune` 保留**最近 N 个北京日(含今天)**,`day` 为空的历史行一并清掉。
+  - `DELETE`:**不带 `confirm=1` 只回报 `{needConfirm,total,messages}`**,面板据此弹确认并说明影响
+    范围;带 `confirm=1` 才真删。`total`/`sessions` 是会话数,`messages`/`deleted` 是消息行数,
+    两者不是一个量,别混用。
+  - 访客昵称走 `GET /api/admin/visitor-alias` 单独取,本接口不与之耦合。
 - `GET/POST /api/admin/chatbot/distill`:`process`(后台扫描蒸馏,`force` 全量;立即返回 `{started}`)、`persona`(后台生成人格;立即返回 `{started}`)、`cancel`(请求取消正在跑的蒸馏/人格)、`clear`(清库)、`set-kind`、`set-sensitive-allow`(按文件放行/恢复脱敏)、`set-ignored`(按文件恢复入库/恢复自动过滤);后三者**只重跑该单文件**。GET 返回 `sensitiveAllowed`/`sanitized`、每文件的 `junk`/`nokeep`、`progress`(蒸馏进度)、`persona`(人格生成状态)与 `personaAt`/`faqAt`(产物最后写入时间)。
 - `GET/POST/DELETE /api/admin/chatbot/corpus`:上传(返回每文件命中敏感类别)/删除(顺带清知识块与放行记录)。
 
@@ -115,6 +127,16 @@ docker compose 已为 `app` 服务配置:
   向量存 `kb_chunks.vector`(float32 LE BLOB),JS 内余弦;关键词用 SQLite FTS5。
 - 前端:`packages/shared/src/ui/ChatWidget.tsx`(挂在 `Shell`),流式读取渲染。
 - admin 面板:`packages/shared/src/ui/admin/AdminChatbotPanel.tsx`(后台「机器人」Tab)。
+  「对话日志」区块的行为:
+  - **一次对话一张卡**:折叠时显示时间/访客昵称/轮数/模型/token/耗时 + 首问摘要,默认只展开最新一条。
+  - **日统计柱状图**:近 14 天提问条数,悬停看数值,**点某天即筛选那天,再点取消**。
+  - **筛选**:搜索(350ms 防抖,问题/回答/会话 id)、访客下拉、日期,可叠加;**加载更多**逐页追加
+    (偏移量存在 ref 里 —— 若让加载函数依赖 `sessions.length`,追加会改变它的身份并触发重载,
+    把第一页拉回来盖掉追加结果,表现为「点了没反应」)。
+  - **长回答**默认截断 400 字,可展开/收起,Markdown 渲染(`react-markdown` + `remark-gfm`,
+    **不开 `rehype-raw`**)。
+  - **清理三档**:删本次对话 / 只保留最近 N 天 / 清空全部(先探询条数再确认)。
+    清空与删会话会同步归零柱状图计数。**不做自动保留策略**,清理全靠手动。
 
 ## 上线注意
 

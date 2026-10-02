@@ -4917,6 +4917,209 @@ tr:hover .zx-alias-btn {
 }
 
 /* ===========================================================================
+   admin「机器人 → 对话日志」
+   一次对话 = 一张卡(按 session_id 归并),原先是把消息流平铺,一问一答被拆成
+   两张卡片、不同访客的对话交错混排。日统计柱状图复用 .zx-bars / .zx-bar /
+   .zx-bartip(见上方统计区块),回答正文复用 .zxchat-md 的排版。
+   =========================================================================== */
+
+.zx-chatlog-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.zx-chatlog-toolbar input[type='search'],
+.zx-chatlog-toolbar select {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  padding: 0.28rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.zx-chatlog-toolbar input[type='search'] {
+  flex: 1 1 11rem;
+  min-width: 8rem;
+}
+
+.zx-chatlog-toolbar input[type='search']:focus,
+.zx-chatlog-toolbar select:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* 日统计柱状图:可点选某天做筛选(再次点击取消) */
+.zx-chatlog-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 54px;
+  margin-bottom: 0.3rem;
+}
+
+.zx-chatlog-chart .zx-bar {
+  cursor: pointer;
+  min-width: 6px;
+}
+
+.zx-chatlog-chart .zx-bar.is-sel {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.zx-chatlog-foot {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.zx-chatsess {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 0.4rem;
+}
+
+.zx-chatsess-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.zx-chatsess-head:hover {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+
+.zx-chatsess-caret {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  flex: 0 0 auto;
+}
+
+.zx-chatsess-who {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.zx-chatsess-when {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  flex: 0 0 auto;
+}
+
+.zx-chatsess-meta {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.zx-chatsess-sum {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.zx-chatsess-del {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.zx-chatsess-del:hover {
+  color: var(--zx-danger, #e5484d);
+  border-color: var(--zx-danger, #e5484d);
+}
+
+.zx-chatsess-note {
+  padding: 0.15rem 0.55rem 0.35rem 1.5rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.zx-chatsess-body {
+  padding: 0.1rem 0.55rem 0.55rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.zx-chatsess-msg {
+  border-left: 2px solid var(--line-strong);
+  padding-left: 0.5rem;
+}
+
+.zx-chatsess-msg.is-assistant {
+  border-left-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.zx-chatsess-msg.is-error {
+  border-left-color: var(--zx-danger, #e5484d);
+}
+
+.zx-chatsess-role {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.15rem;
+}
+
+.zx-chatsess-text {
+  font-size: 0.85rem;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 展开后的回答正文:直接套前台的 markdown 排版(.zxchat-md 只依赖主题级变量,
+   不含气泡私有色),避免在 admin 侧再抄一份 */
+.zx-chatsess-text.zxchat-md {
+  white-space: normal;
+  font-size: 0.85rem;
+}
+
+.zx-chatsess-more {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0.15rem 0 0;
+  cursor: pointer;
+}
+
+/* ===========================================================================
    右侧应用栏(macOS Dock 竖置版)
    由 <html data-apps="1">(server 端按应用数量下发)决定是否渲染 / 占位,
    所以首帧就有边距,不随内容高度抖动。窄屏见文末 @media。
