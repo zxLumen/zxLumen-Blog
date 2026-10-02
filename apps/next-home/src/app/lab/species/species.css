@@ -1,0 +1,73 @@
+/*
+ * `/lab/species` 专用样式。主题变量沿用 lab.css 里的 `.cl-root`
+ * (这个页面也包在 `.cl-root` 里),这里只加物种页独有的排布。
+ */
+
+.sp-root .cl-head a {
+  color: var(--cl-accent);
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+}
+
+/* 大舞台:一只会动的,居中、有网格底,方便看比例与位移 */
+.sp-stage {
+  display: grid;
+  place-items: center;
+  /* 别铺满整行 —— 生物只有 360 的舞台,拉太宽会显得空 */
+  max-width: 560px;
+  margin: 14px auto 6px;
+  padding: 8px;
+  border: 1px solid var(--cl-line);
+  border-radius: 14px;
+  background-color: #0e1420;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--cl-fg) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--cl-fg) 5%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.sp-stage .rig-svg {
+  filter: drop-shadow(0 10px 26px rgba(79, 214, 255, 0.12));
+}
+
+/* 成长条带:小图横排,溢出可横向滚动 */
+.sp-strip {
+  margin-top: 22px;
+}
+
+.sp-strip h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cl-dim);
+  letter-spacing: 0.02em;
+}
+
+.sp-strip-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.sp-strip-cell {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--cl-line);
+  border-radius: 12px;
+  background: var(--cl-card);
+  text-align: center;
+}
+
+.sp-strip-cell figcaption {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--cl-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.rig-svg {
+  display: block;
+  overflow: visible;
+}
