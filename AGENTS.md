@@ -22,22 +22,37 @@
 > # 备份(推荐;不需要停服务)
 > sqlite3 apps/next-home/data/zx.db ".backup '/tmp/zxdb-snap.db'"
 >
-> # 恢复:先停 dev(否则它仍持有旧文件句柄),还原,再起 dev
+> # 恢复:先停 dev(否则它仍持有旧文件句柄),清掉旧旁路文件,还原,再起 dev
 > pkill -f "next dev"; sleep 2
-> cp /tmp/zxdb-snap.db apps/next-home/data/zx.db   # 快照本身是完整的,这里 cp 才安全
+> rm -f apps/next-home/data/zx.db-wal apps/next-home/data/zx.db-shm  # 见下方说明
+> cp /tmp/zxdb-snap.db apps/next-home/data/zx.db   # 快照自包含,这里 cp 才安全
 > cd apps/next-home && nohup npm run dev > /tmp/zxdev.log 2>&1 &
 > ```
+>
+> 那行 `rm -f` 在 delete 模式下其实没文件可删(没有旁路文件);留着是为了**万一**
+> 手上是个 WAL 模式的库(老库 / 线上尚未转换 / 从别处手工拷来的):旧 `-wal` 会被
+> 当成新主库的一部分回放,那才是真的坏库。**快照与主库必须作为整体替换。**
 >
 > 仓库里已有的正确范例:`docker/backup.sh` 与 `apps/next-home/scripts/backup.mjs`,
 > 两者都用 SQLite 的 **online backup API**(`db.backup()`),不停服务、不依赖
 > journal_mode、结果一定完整。做破坏性测试(清库 / prune / 删记录)前务必先 `.backup`。
 >
-> **为什么禁用 WAL(血的教训,别改回去)**:WAL 模式下「已提交」只等于写进了 `-wal`,
-> 主库文件可能还是旧值。此时 `-wal` 一旦被丢弃 —— 第二进程打开同一个库再干净关闭
-> (SQLite 会 checkpoint 并删掉 `-wal`)、dev server 重启、手滑 `rm zx.db-wal` ——
-> SQLite 就回退到上次 checkpoint 的状态,**整库静默回滚,不留任何 API 调用记录**。
-> 2026-10-02 本地项目卡就是这么丢的:12 项只存在于 `-wal`,主库文件里还是 10 项。
-> 本库是单机单文件单用户,WAL 的并发读收益为零,换成 DELETE 后最坏只丢最后一次事务。
+> **为什么禁用 WAL(别改回去)**:WAL 模式下,一次提交先**追加进 `-wal`**(主库
+> 文件滞留在上次 checkpoint 的状态),靠后续 checkpoint 合并回去。**已提交的数据
+> 本身不会自己「回滚」**:只要 `-wal` 还在,SQLite 就读得全;即使是最后一个连接
+> 干净关闭而触发 checkpoint + 删掉 `-wal`,那也是把内容**并进主库**,数据不丢。
+>
+> 真正的风险是**旁路文件被当成临时文件处置**:`rm zx.db-wal`、用裸 `cp` 只拷主库
+> (备份里就永远缺着没 checkpoint 的那部分)、或恢复时把旧 `-wal` 留在新主库旁边。
+> WAL 只是让数据「住在旁路文件里」从而**可以被这样弄丢**,杀手是这几个操作本身。
+>
+> 2026-10-02 本地丢项目卡,已确认是两个动作叠加:① 当时乐观锁还没上,整表覆盖把
+> 陈旧的 10 条写回了 `projects_config`;② 备份用了裸 `cp`,恢复时又删掉了
+> `-wal`/`-shm`,旁路文件里那两条记录就此消失。(时间线没完全查清:13:53 的快照
+> 已经是陈旧的 10 项,说明 ① 发生在它之前。)
+>
+> DELETE 模式每次提交直接改主库文件,没有旁路文件可丢,最坏只丢最后一次事务。
+> 本库是单机单文件单用户,WAL 的并发读收益为零。
 
 ```bash
 # 改 shared 后必须重新编译

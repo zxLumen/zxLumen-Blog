@@ -99,8 +99,8 @@
   - **切 Tab 不再静默丢编辑**:项目面板把 `dirty` 上报,`AdminPanel` 在「项目 → 其它 Tab」时弹确认(面板是条件挂载的,切走即 unmount,原先编辑无声消失)。
   - `sync:projects` 也带上 `rev`,读完之后若线上被别人改过就中止而不是静默整表覆盖。
 
-- **项目卡丢了两张,真正的原因不是「整表覆盖」而是 SQLite 的 WAL 静默回滚**:12 项当时只存在于 `zx.db-wal`,主库文件里还是老的 10 项 —— WAL 模式下「已提交」只等于写进了 `-wal`。此后 `-wal` 一旦被丢弃(第二进程打开同一个库再干净关闭时 SQLite 会 checkpoint 并删掉 `-wal`、dev server 重启、手滑 `rm zx.db-wal`),SQLite 就回退到上次 checkpoint 的状态,**整库静默回滚,不留任何 API 调用记录**,查半天也查不到是谁干的(埋点 `events` 也一起丢了两条)。所以上面那套乐观锁挡不住这一类丢失 —— 回滚的是整个库。
-  - **`journal_mode` 由 WAL 改为 DELETE**(`packages/shared/src/server/db/connection.ts`):本库是单机单文件单用户,WAL 的并发读收益为零,却带来「已提交但只在旁路文件里」的幽灵状态。DELETE 模式下每次提交直接改主库文件,最坏只丢最后一次事务。旧库首次打开时自动转换并删掉残留的 `-wal`/`-shm`。`synchronous` 同时从 `NORMAL` 提到 `FULL`(DELETE 下 NORMAL 遇强杀可能损坏库,写入量很小换稳定更值)。
+- **项目卡丢了两张:整表覆盖 + 裸 `cp` 备份,两个动作叠加**(WAL 只是让第 ② 条变得容易发生,并**不会自己回滚**):本地库的 `projects_config` 里那两项当时已提交但滞留在 `zx.db-wal` 里,主库文件仍是老的 10 项;随后备份用了裸 `cp`(只拷走主库文件),恢复时又把 `-wal`/`-shm` 删掉 —— 于是旁路文件里那两条记录消失,埋点 `events` 也一起丢了两条,且不留任何 API 调用记录。**WAL 模式下已提交的数据不会自己「回滚」**:只要 `-wal` 还在就读得全,连最后一个连接干净关闭触发 checkpoint 也是把内容并进主库。真正的杀手是**把旁路文件当临时文件处置**(`rm zx.db-wal` / 裸 `cp` / 恢复时留下旧 `-wal` 让它被回放)。上面那套乐观锁挡不住的是第 ① 条,下面的 DELETE 也挡不住第 ② 条 —— 后者只能靠备份规范,故已一并写入 `AGENTS.md`。
+  - **`journal_mode` 由 WAL 改为 DELETE**(`packages/shared/src/server/db/connection.ts`):本库是单机单文件单用户,WAL 的并发读收益为零,而它的代价是让已提交数据「住在旁路文件里」、可以被误删。DELETE 模式下每次提交直接改主库文件,没有旁路文件可丢,最坏只丢最后一次事务。旧库首次打开时自动转换并删掉残留的 `-wal`/`-shm`。`synchronous` 同时从 `NORMAL` 提到 `FULL`(DELETE 下 NORMAL 遇强杀可能损坏库,写入量很小换稳定更值)。**注意:这只消除第 ② 条的放大器,不替代备份规范。**
   - **备份改用 SQLite 的 online backup API**(`db.backup()`,见 `docker/backup.sh` 与 `apps/next-home/scripts/backup.mjs`):原先是 `wal_checkpoint(TRUNCATE)` + 拷文件,一旦漏了 `-wal` 就是一份**静默残缺**的备份;新写法走 SQLite 自己的页级复制,不停服务、不依赖 journal_mode、结果一定完整。
 
 - **应用浮层通用「保活 + 宽屏空闲预热」**:打开过的 `openIn:'panel'` 应用保持挂载、仅以 `visibility:hidden` 隐藏(不是 `display:none`,应用首帧仍能量到布局),收起再开不销毁 iframe;宽屏且页面空闲时把**所有** panel 应用的 iframe 提前隐藏加载,点开即用、不再转圈(窄屏全屏面板跳过预热省流量)。两者都**与具体应用无关,新加应用零改动**自动生效。
