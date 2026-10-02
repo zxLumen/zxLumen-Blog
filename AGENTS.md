@@ -12,6 +12,23 @@
 
 ## 常用命令
 
+> **备份 / 恢复本地库必须用 SQLite 自己的方式,禁止裸 `cp`**。本地库是 **WAL 模式**
+> (`journal_mode=wal`),裸 `cp` 只拷走主库文件,**已提交进 `-wal` 的数据会被静默丢弃**;
+> 再手工删掉 `-wal`/`-shm` 就等于永久丢失。正确做法(等价于 checkpoint + 拷一个完整快照):
+>
+> ```bash
+> # 备份(推荐;不需要停服务)
+> sqlite3 apps/next-home/data/zx.db ".backup '/tmp/zxdb-snap.db'"
+>
+> # 恢复:先停 dev(否则它仍持有旧文件句柄),还原,再起 dev
+> pkill -f "next dev"; sleep 2
+> cp /tmp/zxdb-snap.db apps/next-home/data/zx.db   # 快照本身是完整的,这里 cp 才安全
+> cd apps/next-home && nohup npm run dev > /tmp/zxdev.log 2>&1 &
+> ```
+>
+> 仓库里已有的正确范例:`docker/backup.sh`(先 `wal_checkpoint(TRUNCATE)` 再拷文件),
+> **线上备份不受影响**。做破坏性测试(清库 / prune / 删记录)前务必先 `.backup`。
+
 ```bash
 # 改 shared 后必须重新编译
 cd packages/shared && npm run build
