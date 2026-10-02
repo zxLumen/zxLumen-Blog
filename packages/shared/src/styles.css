@@ -987,27 +987,35 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 /* 播报开关。整行可点(这是个真开关,不是装饰),状态用颜色区分 */
+/* 播报开关:紧挨状态文字的一枚小图标按钮(浮层里不再放第二份)。
+   要点得中但不能喧宾夺主,故用透明底 + 只在 hover/开启时给颜色。 */
 .zx-aistatus-voice {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  width: 100%;
-  margin-top: 0.45rem;
-  padding: 0.3rem 0.2rem 0;
-  border: 0;
-  border-top: 1px solid var(--line);
-  background: none;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--fg-muted);
-  cursor: pointer;
-  text-align: left;
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ flex: none;
+ width: 1.35rem;
+ height: 1.35rem;
+ margin-left: -0.15rem; /* 收掉 wrap 的 gap,让它贴住状态文字 */
+ padding: 0;
+ border: 0;
+ border-radius: 50%;
+ background: none;
+ font-size: 0.78rem;
+ line-height: 1;
+ color: var(--fg-muted);
+ opacity: 0.55;
+ cursor: pointer;
+ transition: opacity 0.2s ease, color 0.2s ease, background-color 0.2s ease;
 }
 .zx-aistatus-voice:hover {
-  color: var(--fg);
+ color: var(--fg);
+ opacity: 1;
+ background: var(--bg-2);
 }
 .zx-aistatus-voice[aria-pressed='true'] {
-  color: var(--fg);
+ color: var(--fg);
+ opacity: 1;
 }
 .zx-aistatus-voice:focus-visible {
   outline: 1px solid var(--fg-muted);

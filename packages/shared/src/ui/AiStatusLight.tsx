@@ -71,8 +71,8 @@ export function AiStatusLight({ admin, mockId }: { admin?: boolean; mockId?: str
     const left = r.left < 160
       ? r.right + gap
       : r.left + r.width / 2 - width / 2
-    // 高度算上「念一句」那一行,否则底部按钮会被视口裁掉
-    const height = 46 + sources.length * 30 + 34
+    // 高度按「标题 + 逐源行 + 可能存在的详情脚注」估算
+    const height = 46 + sources.length * 30 + 10
     let top = r.bottom + gap
     if (top + height > vh - 12) top = Math.max(12, r.top - gap - height)
     setPos({
@@ -160,20 +160,6 @@ export function AiStatusLight({ admin, mockId }: { admin?: boolean; mockId?: str
             {rows.some((s) => s.detail) && (
               <div className="zx-aistatus-pop-foot">{rows.find((s) => s.detail)?.detail}</div>
             )}
-            {/* 播报开关。浮层是 portal 出去的,但 React 事件仍沿组件树冒泡到灯的
-                onClick —— 不 stopPropagation 的话点它会顺手把浮层也 toggle 掉 */}
-            <button
-              type="button"
-              className="zx-aistatus-voice"
-              aria-pressed={voice.enabled}
-              onClick={(e) => {
-                e.stopPropagation()
-                voice.toggle()
-              }}
-            >
-              <span aria-hidden>{voice.enabled ? '🔔' : '🔇'}</span>
-              <span>念一句{voice.enabled ? '已开启' : '静音中'}</span>
-            </button>
           </div>,
           document.body,
         )
@@ -209,6 +195,24 @@ export function AiStatusLight({ admin, mockId }: { admin?: boolean; mockId?: str
         <i className="zx-aistatus-lamp is-g" />
       </div>
       <span className="zx-aistatus-label">{AI_LABEL[state]}</span>
+      {/* 播报开关:紧挨状态文字,一眼就能看见当前是不是静音。
+          浮层是 portal 出去的、这个按钮却在灯的 DOM 里,所以 click / keydown
+          都要 stopPropagation —— 否则点它会顺手把灯的 onClick 也带起来,
+          顺手把明细浮层 toggle 掉(Enter/Space 同理,会冒到 wrap 的 onKeyDown) */}
+      <button
+        type="button"
+        className="zx-aistatus-voice"
+        aria-pressed={voice.enabled}
+        aria-label={voice.enabled ? '关闭 AI 状态播报' : '开启 AI 状态播报'}
+        title={voice.enabled ? '状态播报已开启' : '状态播报已静音'}
+        onClick={(e) => {
+          e.stopPropagation()
+          voice.toggle()
+        }}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <span aria-hidden>{voice.enabled ? '🔔' : '🔇'}</span>
+      </button>
       {popover}
     </div>
   )

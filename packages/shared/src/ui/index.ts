@@ -43,9 +43,8 @@ export {
   AI_VOICE_EVENTS,
   AI_VOICE_FILES,
   AI_VOICE_FOR_STATE,
-  AI_VOICE_MIN_GAP_MS,
-  AI_VOICE_VOLUME,
-  planVoice,
+AI_VOICE_MIN_GAP_MS,
+ planVoice,
   pickVoiceFile,
   useAiVoice,
 } from './ai-voice.js'

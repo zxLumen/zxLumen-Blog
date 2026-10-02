@@ -47,9 +47,6 @@ export const AI_VOICE_FILES: Record<AiVoiceEvent, readonly string[]> = {
 /** 两次播报之间的最小间隔(ms) —— 压制多源抖动 */
 export const AI_VOICE_MIN_GAP_MS = 4000
 
-/** 音量:提醒性但不刺耳 */
-export const AI_VOICE_VOLUME = 0.55
-
 /**
  * 这次跳变要不要出声。**纯函数**,不碰 DOM —— `tests/ai-voice.test.ts` 直接测它。
  *
@@ -109,7 +106,7 @@ export function writeAiVoicePref(key: string, on: boolean): void {
  * `prev` 在每次判定后**无条件**推进 —— 包括「因为静音/后台而没播」的那些跳变。
  * 否则访客关掉声音逛一圈再打开,或从后台切回前台,会一次性补播积压的所有跳变。
  *
- * 解锁:开启的那一刻就是一次用户手势(点了开关),借它把 <audio> 播一下(音量 0)
+ * 解锁:开启的那一刻就是一次用户手势(点了开关),借它把 <audio> 播一下
  * 让浏览器解除自动播放限制,之后无手势触发的播报也能出声。
  */
 export function useAiVoice(
@@ -133,19 +130,18 @@ export function useAiVoice(
     return audioRef.current
   }, [])
 
+  /** 按事件取一条音频,避开刚播过的那条。**一律按音频原始音量播**,不做增减 */
   const play = useCallback(
-    (event: AiVoiceEvent, gain: number) => {
+    (event: AiVoiceEvent) => {
       const el = audio()
       if (!el) return
-      const file = pickVoiceFile(event, gain > 0 ? lastFile.current : null)
+      const file = pickVoiceFile(event, lastFile.current)
       el.src = file
-      el.volume = gain
+      el.volume = 1
       // 被自动播放策略拒绝是常态(没手势):静默吞掉,不重试不报错
       el.play().catch(() => {})
-      if (gain > 0) {
-        lastFile.current = file
-        lastPlayedAt.current = Date.now()
-      }
+      lastFile.current = file
+      lastPlayedAt.current = Date.now()
     },
     [audio],
   )
@@ -157,8 +153,8 @@ export function useAiVoice(
     writeAiVoicePref(key, next)
     setEnabled(next)
     if (next) {
-      // 这次点击是用户手势,借它解除自动播放限制,并让访客立刻听到效果
-      play('success', 0)
+      // 这次点击就是用户手势,借它解除自动播放限制,并让访客立刻听到效果
+      play('success')
     } else if (audioRef.current) {
       audioRef.current.pause()
     }
@@ -174,7 +170,7 @@ export function useAiVoice(
       now: Date.now(),
     })
     prev.current = state // 无论出不出声,这次跳变都被消费掉
-    if (event) play(event, AI_VOICE_VOLUME)
+    if (event) play(event)
   }, [state, enabled, play])
 
   return { enabled, toggle }
