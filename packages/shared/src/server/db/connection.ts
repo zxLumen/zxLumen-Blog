@@ -14,9 +14,22 @@ import type { Db } from './types.js'
 /** 打开(必要时创建)SQLite 数据库并初始化 schema + 轻量迁移 */
 export function openDb(path: string): Db {
   const db = new Database(path)
-  db.pragma('journal_mode = WAL')
+  // journal_mode 必须是 DELETE(默认),**不要**改回 WAL。
+  //
+  // 本库是单机单文件单用户,WAL 带来的并发读收益为零,却引入了一个致命故障:
+  // WAL 模式下「已提交」只代表写进了 `-wal`,主库文件可能还是旧值。此时若
+  // `-wal` 被丢弃(第二进程打开后干净关闭会 checkpoint+删掉 WAL、dev server
+  // 重启、手滑 `rm zx.db-wal`),SQLite 就回退到上次 checkpoint 的状态 ——
+  // **整库静默回滚**,没有任何 API 调用记录,查不到人。
+  // (2026-10-02 本地项目卡就是这么丢的:12 项只存在于 -wal,主库文件里还是 10 项。)
+  //
+  // DELETE 模式下每次提交直接改主库文件,不存在「已提交但只在旁路文件里」的
+  // 幽灵状态;最坏情况只丢最后一次事务。旧库首次打开时会自动从 WAL 转换过来
+  // 并删除残留的 -wal/-shm。
+  db.pragma('journal_mode = DELETE')
   db.pragma('busy_timeout = 30000')
-  db.pragma('synchronous = NORMAL')
+  // DELETE 模式下 NORMAL 在断电/强杀时可能损坏数据库;写入量很小,换 FULL 更稳。
+  db.pragma('synchronous = FULL')
   db.exec(SCHEMA_SQL)
 
   // 迁移:老库补列

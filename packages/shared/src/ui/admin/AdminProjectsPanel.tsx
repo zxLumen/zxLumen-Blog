@@ -169,6 +169,7 @@ export function AdminProjectsPanel({
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [showTrash, setShowTrash] = useState(false)
+  /** 每次自增都触发重新读取;「刷新」按钮靠它绕过"只在挂载/切 Tab 时加载"的限制 */
   const [loadKey, setLoadKey] = useState(0)
 
   const gated = gate(showTabs, tab)
@@ -445,7 +446,7 @@ const r = await adminFetch('/api/admin/projects', { method: 'DELETE' })
               title="重新读取服务端列表(会丢弃本页未保存的修改)"
               onClick={() => {
                 if (dirty && !confirm('刷新会丢弃本页未保存的修改,继续?')) return
-                void load()
+                setLoadKey((k) => k + 1)
               }}
             >
               刷新

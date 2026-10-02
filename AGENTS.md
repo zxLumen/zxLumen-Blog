@@ -12,9 +12,11 @@
 
 ## 常用命令
 
-> **备份 / 恢复本地库必须用 SQLite 自己的方式,禁止裸 `cp`**。本地库是 **WAL 模式**
-> (`journal_mode=wal`),裸 `cp` 只拷走主库文件,**已提交进 `-wal` 的数据会被静默丢弃**;
-> 再手工删掉 `-wal`/`-shm` 就等于永久丢失。正确做法(等价于 checkpoint + 拷一个完整快照):
+> **备份 / 恢复本地库一律用 SQLite 自己的方式,不要自己拷文件。**
+>
+> 库现在是 **`journal_mode = delete`**(见 `packages/shared/src/server/db/connection.ts`;
+> **不要改回 WAL** —— 理由见下面「为什么禁用 WAL」)。每次提交直接写进 `zx.db`,
+> 所以拷主库文件此刻确实是完整的,但仍请用 SQLite 的方式,避免以后再有人踩坑:
 >
 > ```bash
 > # 备份(推荐;不需要停服务)
@@ -26,8 +28,16 @@
 > cd apps/next-home && nohup npm run dev > /tmp/zxdev.log 2>&1 &
 > ```
 >
-> 仓库里已有的正确范例:`docker/backup.sh`(先 `wal_checkpoint(TRUNCATE)` 再拷文件),
-> **线上备份不受影响**。做破坏性测试(清库 / prune / 删记录)前务必先 `.backup`。
+> 仓库里已有的正确范例:`docker/backup.sh` 与 `apps/next-home/scripts/backup.mjs`,
+> 两者都用 SQLite 的 **online backup API**(`db.backup()`),不停服务、不依赖
+> journal_mode、结果一定完整。做破坏性测试(清库 / prune / 删记录)前务必先 `.backup`。
+>
+> **为什么禁用 WAL(血的教训,别改回去)**:WAL 模式下「已提交」只等于写进了 `-wal`,
+> 主库文件可能还是旧值。此时 `-wal` 一旦被丢弃 —— 第二进程打开同一个库再干净关闭
+> (SQLite 会 checkpoint 并删掉 `-wal`)、dev server 重启、手滑 `rm zx.db-wal` ——
+> SQLite 就回退到上次 checkpoint 的状态,**整库静默回滚,不留任何 API 调用记录**。
+> 2026-10-02 本地项目卡就是这么丢的:12 项只存在于 `-wal`,主库文件里还是 10 项。
+> 本库是单机单文件单用户,WAL 的并发读收益为零,换成 DELETE 后最坏只丢最后一次事务。
 
 ```bash
 # 改 shared 后必须重新编译

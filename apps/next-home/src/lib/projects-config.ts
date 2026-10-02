@@ -6,8 +6,6 @@ import { getRuntimeContent } from '@zx/shared/server'
 import { getDb } from './db'
 
 const META_KEY = 'projects_config'
-/** 并发保护:整表覆盖时的乐观锁版本戳键(与 META_KEY 分开存,不参与表内容) */
-const META_REV_KEY = 'projects_config_rev'
 
 const STATUSES: Project['status'][] = ['online', 'demo', 'building', 'archived']
 const KINDS: NonNullable<Project['kind']>[] = ['personal', 'work']
@@ -118,11 +116,16 @@ function fingerprint(raw: string | null): string {
 
 /**
  * 当前版本戳(GET 返回给前端;POST 带回做校验)。
+ *
+ * **每次都现算,不单独存一个 rev 键。** 之前版本把版本戳存在
+ * `meta.projects_config_rev`,存的值一直是对的,但**结构上有盲区**:任何绕过
+ * 本模块的写入(直接 sqlite、恢复脚本、外部工具)只改表不改 rev,于是旧页面拿着
+ * 那个"仍然有效"的 rev 保存时照样 200 整表覆盖 —— 锁对这一整类改动完全失效。
+ * 现算则任何改表动作(不论从哪条路进来)都会改变指纹。
+ *
  * 从未配置过时返回 undefined —— 表示「这张表尚不存在」,与空表区分开。
  */
 export function getProjectsRev(): string | undefined {
-  const stored = getDb().getMeta(META_REV_KEY)
-  if (stored) return stored
   const raw = getDb().getMeta(META_KEY)
   return raw === null ? undefined : fingerprint(raw)
 }
@@ -147,14 +150,12 @@ export function saveStoredProjects(input: unknown, expectedRev?: string): Stored
     : []
   const raw = JSON.stringify(list)
   db.setMeta(META_KEY, raw)
-  db.setMeta(META_REV_KEY, fingerprint(raw))
   return list
 }
 
 /** 恢复为静态默认(删除配置) */
 export async function resetStoredProjects(): Promise<StoredProject[]> {
   getDb().delMeta(META_KEY)
-  getDb().delMeta(META_REV_KEY)
   return fromStatic()
 }
 

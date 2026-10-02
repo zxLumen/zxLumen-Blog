@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
   // 仅产出运行时所需文件(含被 trace 的最小 node_modules),镜像大幅瘦身;见 docker/Dockerfile
   output: "standalone",
+  // 注:本地 `next build` 会把 data/zx.db 复制进 .next/standalone —— 它是被
+  // instrumentation.js(问候语定时器 → DB 层)trace 进来的,而 outputFileTracingExcludes
+  // 按路由匹配、对 instrumentation 这类非路由的 server trace 无效(官方文档明说),
+  // 故此处无法排除。镜像本身干净:.dockerignore 的 `**/data` 已把它挡在构建上下文外。
 };
 
 // Sentry 包装:未配置 DSN / 上传 token 时均为空操作(不影响构建)
