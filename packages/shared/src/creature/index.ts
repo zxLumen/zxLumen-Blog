@@ -32,6 +32,18 @@ export type { InteractCounts, GrowthInput, Growth } from './growth.js'
 
 export { fallbackDna, keywordMatch, DEFAULT_DNA, PRESET_DESCRIPTIONS } from './fallback.js'
 
+export { normalizeBlueprint, compileBlueprint, BP_ROLES, MOTION_FAMILIES } from './blueprint.js'
+export type {
+  CreatureBlueprint,
+  BpPart,
+  BpRole,
+  BpMotion,
+  MotionFamily,
+  CompiledRig,
+  CompiledPart,
+  CompiledBlueprint,
+} from './blueprint.js'
+
 export {
   WEIGHTS,
   WEIGHT_TOTAL,

@@ -71,3 +71,76 @@
   display: block;
   overflow: visible;
 }
+
+/* 描述输入行:输入框 + 生成按钮 + 自动开关 */
+.sp-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.sp-input-row .cl-picker-input {
+  flex: 1 1 320px;
+}
+
+.sp-go {
+  padding: 8px 18px;
+  border: 1px solid var(--cl-accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cl-accent) 16%, transparent);
+  color: var(--cl-fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sp-go:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.sp-auto {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--cl-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 生成状态条 */
+.sp-status {
+  margin: 8px 0 2px;
+  padding: 7px 11px;
+  border: 1px solid var(--cl-line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--cl-card) 80%, transparent);
+  color: var(--cl-dim);
+  font-size: 12px;
+}
+
+.sp-status[data-bad='1'] {
+  border-color: #6b3a3a;
+  color: #ffb0b0;
+}
+
+/* 事实栏里的小标签 */
+.sp-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--cl-line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--cl-dim);
+}
+
+.sp-chip[data-score='ok'] {
+  border-color: #2f6b4a;
+  color: #7fe0a8;
+}
+
+.sp-chip[data-score='bad'] {
+  border-color: #6b3a3a;
+  color: #ffb0b0;
+}

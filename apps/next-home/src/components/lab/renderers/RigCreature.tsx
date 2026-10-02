@@ -63,6 +63,8 @@ export interface RigCreatureProps {
   box?: number
   /** 固定在某一天(用于成长条带);不传则随时间轴播放 */
   fixedDay?: number
+  /** 成熟天数(决定整体缩放曲线的终点);缺省 34(手写物种的默认) */
+  matureDay?: number
 }
 
 interface Item {
@@ -83,7 +85,7 @@ function localMatrix(p: Part, o: Override | undefined, day: number, form: FormSt
   return mul(translate(x, y), mul(rotateDeg(rot), scaleM(sx, sy)))
 }
 
-export function RigCreature({ dna, rig, box = 200, fixedDay }: RigCreatureProps) {
+export function RigCreature({ dna, rig, box = 200, fixedDay, matureDay = 34 }: RigCreatureProps) {
   const rawId = useId().replace(/:/g, '')
   const rootRef = useRef<SVGGElement | null>(null)
   const gRefs = useRef<Record<string, SVGGElement | null>>({})
@@ -124,7 +126,7 @@ export function RigCreature({ dna, rig, box = 200, fixedDay }: RigCreatureProps)
       if (!root) return
       // 整体尺寸随天数长大(60% → 110%);按 box 归一,strip 小图也不会溢出
       const fit = (box * 0.42) / rig.span
-      const S = fit * (0.6 + 0.5 * norm(day, 0, 34))
+      const S = fit * (0.6 + 0.5 * norm(day, 0, matureDay))
       root.setAttribute('transform', `translate(${box / 2} ${box / 2}) scale(${S})`)
 
       const ov = rig.pose(form, ts, day)
@@ -160,7 +162,7 @@ export function RigCreature({ dna, rig, box = 200, fixedDay }: RigCreatureProps)
         }
       }
     },
-    [box, rig, items, childrenOf, roots],
+    [box, rig, items, childrenOf, roots, matureDay],
   )
 
   useCreatureLoop(dna, draw, fixedDay === undefined)
