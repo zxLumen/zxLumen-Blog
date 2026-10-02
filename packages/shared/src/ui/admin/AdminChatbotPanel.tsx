@@ -708,8 +708,8 @@ const [logQDebounced, setLogQDebounced] = useState('')
         setLogTotal(d.total ?? 0)
         setHasMore(!!d.hasMore)
         if (d.dayCounts) setDayCounts(d.dayCounts)
-        // 首次载入时展开最新一条,其余折叠
-        if (!opts.append) setOpenSids(got.slice(0, 1).map((x) => x.session_id))
+        // 默认全部折叠:一屏能扫完列表,想看哪次对话再点开
+        if (!opts.append) setOpenSids([])
         if (ar?.ok) {
           const ad = (await ar.json().catch(() => ({ aliases: [] }))) as { aliases?: VisitorAlias[] }
           const map: Record<string, string> = {}
