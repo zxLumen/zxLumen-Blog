@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AI_COLOR, AI_LABEL, useAiStatus, type AiState } from './ai-status.js'
+import { useAiVoice } from './ai-voice.js'
 
 /** 鼠标从灯移向浮窗要跨过浮窗上方那道缝,给一点宽限,否则会「一离开就消失」 */
 const HOVER_CLOSE_DELAY = 180
@@ -24,8 +25,10 @@ const HOVER_CLOSE_DELAY = 180
  *  - 顶栏布局:导航栏下沿正中,**横排**(B 档,绝对定位不占高度)
  *  - 手机(≤820px):换行后的导航栏正下方,横排
  */
-export function AiStatusLight({ admin }: { admin?: boolean }) {
+export function AiStatusLight({ admin, mockId }: { admin?: boolean; mockId?: string | null }) {
   const { state, sources } = useAiStatus(!!admin)
+  /** 念一句:success / error / blocked 三次跳变时播报(默认静音,访客自己开) */
+  const voice = useAiVoice(state, mockId)
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
@@ -68,7 +71,8 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
     const left = r.left < 160
       ? r.right + gap
       : r.left + r.width / 2 - width / 2
-    const height = 46 + sources.length * 30
+    // 高度算上「念一句」那一行,否则底部按钮会被视口裁掉
+    const height = 46 + sources.length * 30 + 34
     let top = r.bottom + gap
     if (top + height > vh - 12) top = Math.max(12, r.top - gap - height)
     setPos({
@@ -156,6 +160,20 @@ export function AiStatusLight({ admin }: { admin?: boolean }) {
             {rows.some((s) => s.detail) && (
               <div className="zx-aistatus-pop-foot">{rows.find((s) => s.detail)?.detail}</div>
             )}
+            {/* 播报开关。浮层是 portal 出去的,但 React 事件仍沿组件树冒泡到灯的
+                onClick —— 不 stopPropagation 的话点它会顺手把浮层也 toggle 掉 */}
+            <button
+              type="button"
+              className="zx-aistatus-voice"
+              aria-pressed={voice.enabled}
+              onClick={(e) => {
+                e.stopPropagation()
+                voice.toggle()
+              }}
+            >
+              <span aria-hidden>{voice.enabled ? '🔔' : '🔇'}</span>
+              <span>念一句{voice.enabled ? '已开启' : '静音中'}</span>
+            </button>
           </div>,
           document.body,
         )

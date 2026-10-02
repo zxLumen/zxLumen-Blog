@@ -17,3 +17,7 @@ export const themeKey = (mockId?: string | null): string => `${THEME_STORAGE_KEY
 /** 访客自定义应用栏顺序的 localStorage 键(带身份后缀)
  *  → 每个 mock 身份各自一份顺序,切 A/B/C 时互不影响,便于验证「不同访客独立」 */
 export const appsOrderKey = (mockId?: string | null): string => `zx_apps.order${selSuffix(mockId)}`
+
+/** AI 状态灯「念一句」的开关 localStorage 键(带身份后缀)
+ *  → 属个人偏好(同昵称/主题规则):切换 mock 身份时各自静音或开启,互不影响 */
+export const aiVoiceKey = (mockId?: string | null): string => `zx_ai.voice${selSuffix(mockId)}`

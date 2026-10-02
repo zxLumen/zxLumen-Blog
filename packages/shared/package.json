@@ -19,6 +19,10 @@
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js"
     },
+    "./creature": {
+      "types": "./dist/creature/index.d.ts",
+      "import": "./dist/creature/index.js"
+    },
     "./styles.css": "./src/styles.css"
   },
   "files": [
@@ -33,6 +37,7 @@
     "cover:push": "node scripts/cover-push.mjs",
     "sync:projects": "node scripts/sync-projects.mjs",
     "seed:chatbot": "node scripts/seed-chatbot.mjs",
+    "ai-voice:prep": "node scripts/ai-voice-prep.mjs",
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json --watch",
     "test": "npm run build && node --test tests/*.test.ts"

@@ -986,6 +986,34 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   word-break: break-word;
 }
 
+/* 播报开关。整行可点(这是个真开关,不是装饰),状态用颜色区分 */
+.zx-aistatus-voice {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: 0.45rem;
+  padding: 0.3rem 0.2rem 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.zx-aistatus-voice:hover {
+  color: var(--fg);
+}
+.zx-aistatus-voice[aria-pressed='true'] {
+  color: var(--fg);
+}
+.zx-aistatus-voice:focus-visible {
+  outline: 1px solid var(--fg-muted);
+  outline-offset: 1px;
+}
+
 /* ---------- 选择器(顶栏弹出) ---------- */
 
 .zx-picker {

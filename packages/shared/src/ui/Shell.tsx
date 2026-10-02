@@ -70,7 +70,7 @@ export function Shell({
           link={link}
           shell={profile?.shell}
           extra={extra}
-          bottom={<AiStatusLight admin={admin} />}
+          bottom={<AiStatusLight admin={admin} mockId={mockId} />}
         />
         <main className="zx-main">{children}</main>
         <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />

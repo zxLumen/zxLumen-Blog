@@ -1,7 +1,7 @@
 export { PreferencesProvider, usePrefs, useTheme } from './theme-context.js'
 export type { FeatureId } from '../features.js'
 export { ThemePicker } from './ThemePicker.js'
-export { nickKey, themeKey, appsOrderKey, selSuffix } from './identity.js'
+export { nickKey, themeKey, appsOrderKey, aiVoiceKey, selSuffix } from './identity.js'
 export { useDragReorder, applySavedOrder } from './useDragReorder.js'
 export type { DropTarget, DragReorder, DragReorderOptions } from './useDragReorder.js'
 export { ThemeGrid, LayoutGrid } from './PickGrid.js'
@@ -39,6 +39,17 @@ export {
   useReportAiState,
 } from './ai-status.js'
 export type { AiState, AiSource } from './ai-status.js'
+export {
+  AI_VOICE_EVENTS,
+  AI_VOICE_FILES,
+  AI_VOICE_FOR_STATE,
+  AI_VOICE_MIN_GAP_MS,
+  AI_VOICE_VOLUME,
+  planVoice,
+  pickVoiceFile,
+  useAiVoice,
+} from './ai-voice.js'
+export type { AiVoiceEvent } from './ai-voice.js'
 export { AppPanelProvider, useAppPanel } from './AppPanel.js'
 export { WeChatIcon, GitHubIcon, MailIcon, PhoneIcon, MessageIcon } from './icons.js'
 export type { NavItem, LinkProps, LinkComponent } from './types.js'
