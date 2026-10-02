@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   }
 
   const ip = clientIp(req)
-  if (!rateLimit(ip, 12, 60_000)) {
+  if (!rateLimit(`chat:${ip}`, 12, 60_000)) {
     return Response.json({ error: '问得太快啦,稍微缓缓' }, { status: 429 })
   }
 

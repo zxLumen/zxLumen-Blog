@@ -41,7 +41,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const ip = clientIp(req)
-  if (!rateLimit(ip)) {
+  if (!rateLimit(`comments:${ip}`)) {
     return Response.json({ error: '太频繁了,稍后再试' }, { status: 429 })
   }
 

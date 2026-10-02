@@ -14,6 +14,25 @@ interface ContactActionsProps {
 const POP_W_MAX = 330
 const POP_GAP = 8
 
+/**
+ * 电话号预取去重:About 与 Footer 各挂一个 ContactActions,原先每个实例挂载都打一次
+ * `/api/contact/phone`(限流按 IP,会与聊天/评论互相挤占)。改为模块级共享同一个请求,
+ * 每页只打一次;失败不缓存,后续实例可重试。
+ */
+let phoneFetch: Promise<string | null> | null = null
+function prefetchPhone(): Promise<string | null> {
+  if (!phoneFetch) {
+    phoneFetch = fetch('/api/contact/phone', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ phone?: string }>) : null))
+      .then((d) => d?.phone ?? null)
+      .catch(() => {
+        phoneFetch = null
+        return null
+      })
+  }
+  return phoneFetch
+}
+
 export function ContactActions({ contacts, variant = 'full' }: ContactActionsProps) {
   const c = contacts ?? CONTACTS
   const [toast, setToast] = useState('')
@@ -29,14 +48,9 @@ export function ContactActions({ contacts, variant = 'full' }: ContactActionsPro
   useEffect(() => {
     if (!c.hasPhone && !(c.phoneReversed && c.phoneReversed.length)) return
     let alive = true
-    fetch('/api/contact/phone', { credentials: 'same-origin' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { phone?: string } | null) => {
-        if (alive && d?.phone) phoneRef.current = d.phone
-      })
-      .catch(() => {
-        /* 忽略:点击时会再取一次 */
-      })
+    prefetchPhone().then((p) => {
+      if (alive && p) phoneRef.current = p
+    })
     return () => {
       alive = false
     }
