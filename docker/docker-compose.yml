@@ -88,6 +88,29 @@ services:
     networks:
       - web
 
+  # StockApp 股票速览(独立服务,ghcr 镜像,服务器只 pull)。
+  # 与 Opentodo / 易经同一套模式:给主站 iframe 嵌进应用栏;与博客共享 admin(SSO)——
+  # 两边配同一个 SESSION_SECRET(在 docker/.env 里)。详见 StockApp 仓库 README.md。
+  stock:
+    image: ghcr.io/zxlumen/stock-web:${STOCK_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      STOCK_HOST: 0.0.0.0
+      STOCK_PORT: 8789
+      # 运行期数据目录(自选股 / AI 配置 / Key / owner token)指到卷上
+      # —— 否则落在容器可写层,重建即丢
+      STOCK_DATA_DIR: /data
+      # 放行访客使用 AI 解读(走站长配的 provider);=0 关闭
+      STOCK_VISITOR_AI: ${STOCK_VISITOR_AI:-1}
+      # SESSION_SECRET 由上面的 env_file 带入(与博客同一个):已登录博客即视为站长
+    volumes:
+      - stock-data:/data
+    expose:
+      - "8789"
+    networks:
+      - web
+
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -220,6 +243,7 @@ volumes:
   grafana-data:
   opentodo-data:
   yijing-data:
+  stock-data:
 
 networks:
   web:

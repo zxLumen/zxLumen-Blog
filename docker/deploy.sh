@@ -23,6 +23,9 @@ echo "[deploy] IMAGE_TAG=${IMAGE_TAG} (工作目录: $(pwd))"
   # 易经六十四卦网页版:同上
   ${SUDO:-} env YIJING_TAG="${YIJING_TAG:-latest}" docker compose pull yijing \
     || echo "[deploy] yijing 镜像拉取失败(可能尚未推送),跳过"
+  # StockApp 股票速览:同上
+  ${SUDO:-} env STOCK_TAG="${STOCK_TAG:-latest}" docker compose pull stock \
+    || echo "[deploy] stock 镜像拉取失败(可能尚未推送),跳过"
   ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
 
 # 服务器侧配置(Caddyfile / compose)由 CI scp 同步过来;`up -d` 不会因挂载文件

@@ -96,6 +96,7 @@ export const AI_SOURCES: readonly AiSourceDef[] = [
   { id: 'avatar', label: 'AI 分身' },
   { id: 'opentodo', label: 'Opentodo' },
   { id: 'yijing', label: '易经' },
+  { id: 'stock', label: '股票速览' },
 ]
 
 export interface AiSource {

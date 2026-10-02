@@ -6,6 +6,8 @@
 
 ### 新增
 
+- **StockApp 股票速览接入准备**(仅服务端配置,功能尚未上线):AI 状态灯登记第四个来源 `stock`;`docker/` 增加 `stock` 服务(`stock.${DOMAIN}` 反代、`stock-data` 命名卷、`STOCK_VISITOR_AI` 开关),与 Opentodo / 易经同一套独立容器 + 共享 `SESSION_SECRET` 的模式。待 StockApp 镜像推 GHCR、`stock.${DOMAIN}` DNS 与线上应用栏 / 项目卡数据同步后再启用。
+
 - **生物渲染实验室 `/lab/creature`(内部演示路由)**:一份 DNA 配一条共享时间轴,并排跑六套渲染技术,外加 5 只群飞,用来在正式接入前先定「哪条路线最好看、最稳」。**一个图形库都没引**。
   - 六套:SVG + CSS、SVG 液态滤镜(metaball)、Canvas 2D 流场拖尾、Canvas 2D Verlet 软体、WebGL2 GPU 粒子(transform feedback + 顶点纹理拉取)、WebGL 顶点位移网格;群飞另用 SVG + CSS 相位错开。
   - DNA / 成长 / 评分是 `@zx/shared/creature` 里的纯函数:60 天四阶段(孢子 / 幼体 / 成体 / 觉醒),阶段之间对体型 / 辉光 / 拖尾 / 自转 / 性格**连续插值**(不是硬切);时间经验按 18 XP/天连续累积,互动经验按访客分桶、单访客封顶。

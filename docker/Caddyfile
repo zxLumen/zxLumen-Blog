@@ -149,6 +149,21 @@ yijing.{$DOMAIN} {
 	reverse_proxy yijing:8788
 }
 
+# StockApp 股票速览(独立容器,加入 docker_web 网络;见 StockApp 仓库)
+stock.{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		# 会被主站用 iframe 嵌进应用栏 → 不能 DENY;只放行主站(与自身)内嵌
+		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy stock:8789
+}
+
 # (可选)Alloy 自带 UI/调试页:仅在需要时启用,并务必加 basic_auth
 # alloy.{$DOMAIN} {
 # 	basic_auth {
