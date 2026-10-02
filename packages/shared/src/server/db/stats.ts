@@ -196,6 +196,13 @@ export function statsStore(db: SqliteDb): StatsStore {
         const nickMap = new Map<string, string>()
         for (const r of nickRows) if (!nickMap.has(r.author_cid)) nickMap.set(r.author_cid, r.author)
 
+        // 站长备注的别名(仅 admin 可见;未备注则为空串)
+        const aliasMap = new Map<string, string>()
+        for (const r of db
+          .prepare(`SELECT cid, alias FROM visitor_aliases WHERE alias != ''`)
+          .all() as { cid: string; alias: string }[])
+          aliasMap.set(r.cid, r.alias)
+
         // 回头客判定:访问日 ≥ 2 天(即在不同日期访问过,视为回访;单日多次仍算新客)
         const visitDayRows = db
           .prepare(
@@ -245,6 +252,7 @@ export function statsStore(db: SqliteDb): StatsStore {
           for (const h of hist) if (!referrer && h.referrer) referrer = h.referrer
           return {
             cid: r.cid,
+            alias: aliasMap.get(r.cid) ?? '',
             nickname: nickMap.get(r.cid) ?? '',
             lastSeen: bjTime(r.lastTs),
             firstSeen: bjTime(hist[0]?.ts ?? r.lastTs),

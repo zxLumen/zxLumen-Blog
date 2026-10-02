@@ -11,6 +11,7 @@ import type {
   PagedComments,
   StatsResult,
   UsageRow,
+  VisitorAlias,
   Visibility,
 } from '../../schema.js'
 
@@ -85,6 +86,12 @@ export interface Db {
   addEventOnce(input: NewEventInput): boolean
   /** 首页统计聚合(PV/UV/趋势/留言/事件;visitors 仅在 opts.visitors=true 时计算) */
   stats(opts?: { trendDays?: number; onlineMinutes?: number; visitors?: boolean }): StatsResult
+  /** 站长给某访客的备注(未备注返回 null;仅服务端/站长接口使用) */
+  getVisitorAlias(cid: string): VisitorAlias | null
+  /** 全部已备注的访客(按更新时间倒序;仅站长接口使用) */
+  listVisitorAliases(): VisitorAlias[]
+  /** 写入/清除某访客的备注(空字符串 = 清除);返回落库后的行或 null(已清除) */
+  setVisitorAlias(cid: string, alias: string): VisitorAlias | null
   countComments(): number
   clearComments(): number
   getMeta(key: string): string | null
@@ -157,6 +164,7 @@ export type FeedbackStore = Pick<Db, 'addFeedback' | 'setFeedbackStatus'>
 export type EventStore = Pick<Db, 'addEvent' | 'addEventOnce'>
 export type StatsStore = Pick<Db, 'stats'>
 export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta' | 'listMetaKeys'>
+export type VisitorStore = Pick<Db, 'getVisitorAlias' | 'listVisitorAliases' | 'setVisitorAlias'>
 export type ChatStore = Pick<Db, 'addChatLog' | 'listChatLogs' | 'countChatByCidDay' | 'chatDayCounts' | 'deleteAllChatLogs'>
 export type KbStore = Pick<
   Db,

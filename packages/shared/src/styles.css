@@ -4001,6 +4001,50 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   color: var(--fg-muted);
 }
 
+/* 站长给访客起的别名(备注)徽标 */
+.zx-alias-tag {
+  display: inline-block;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--fg);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.zx-alias-btn {
+  margin-left: 0.4rem;
+  padding: 0 0.3rem;
+  font-size: 0.62rem;
+  line-height: 1.5;
+  opacity: 0.6;
+}
+
+tr:hover .zx-alias-btn {
+  opacity: 1;
+}
+
+.zx-alias-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: default;
+}
+
+.zx-alias-edit input {
+  flex: 1;
+  min-width: 0;
+  max-width: 16rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+}
+
 .zx-proj-chips {
   font-size: 0.72rem;
   line-height: 1.5;

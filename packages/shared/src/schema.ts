@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS feedback (
 
 CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(created_at);
 
+-- 站长给访客起的别名/备注(仅 admin 可见;cid = 访客匿名 ID)
+CREATE TABLE IF NOT EXISTS visitor_aliases (
+  cid        TEXT PRIMARY KEY,      -- 访客匿名 ID(与 events.cid 一致)
+  alias      TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_day_type ON events(day, type);
 CREATE INDEX IF NOT EXISTS idx_events_cid ON events(cid);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
@@ -230,9 +237,20 @@ export interface VisitorEvent {
   dwell?: number
 }
 
+/** 站长给访客起的别名/备注(仅站长接口可见;alias 为空表示未备注) */
+export interface VisitorAlias {
+  /** 访客匿名 ID */
+  cid: string
+  /** 站长备注的别名(≤ 40 字;清空即删除备注) */
+  alias: string
+  updated_at: string
+}
+
 /** 单个访客的访问详情(仅站长接口/页面使用) */
 export interface VisitorDetail {
   cid: string
+  /** 站长给该访客起的别名(未备注则空;仅 admin 可见) */
+  alias: string
   /** 曾在留言中留下的昵称(未留过则空) */
   nickname: string
   /** 北京时间 MM-DD HH:mm */

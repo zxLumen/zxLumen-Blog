@@ -8,6 +8,7 @@ import { kbStore } from './kb.js'
 import { metaStore } from './meta.js'
 import { statsStore } from './stats.js'
 import { usageStore } from './usage.js'
+import { visitorStore } from './visitors.js'
 import type { Db } from './types.js'
 
 /** 打开(必要时创建)SQLite 数据库并初始化 schema + 轻量迁移 */
@@ -49,6 +50,7 @@ export function openDb(path: string): Db {
     ...feedbackStore(db),
     ...statsStore(db),
     ...metaStore(db),
+    ...visitorStore(db),
     ...chatStore(db),
     ...kbStore(db),
     close() {

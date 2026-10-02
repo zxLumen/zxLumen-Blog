@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import type { AppItem, EventType, VisitorDetail } from '../../schema.js'
 import { fmtInt } from '../../format.js'
 import { SECTION_LABELS, type Project } from '../../content.js'
@@ -35,14 +36,43 @@ export function VisitorDetailRow({
   onToggle,
   projects,
   apps,
+  onAlias,
+  aliasBusy,
 }: {
   v: VisitorDetail
   open: boolean
   onToggle: () => void
   projects: Project[]
   apps?: AppItem[]
+  /** 保存/清除该访客的备注(站长专用;不传则不显示备注入口) */
+  onAlias?: (cid: string, alias: string) => void | Promise<void>
+  /** 该访客备注正在保存中 */
+  aliasBusy?: boolean
 }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(v.alias)
+  const inputRef = useRef<HTMLInputElement>(null)
+  // 外部(重载 / 别的行保存)改了备注就同步进输入框
+  useEffect(() => {
+    if (!editing) setDraft(v.alias)
+  }, [v.alias, editing])
+  useEffect(() => {
+    if (editing) inputRef.current?.focus()
+  }, [editing])
+
+  async function commit() {
+    const next = draft.trim().slice(0, 40)
+    if (next === v.alias.trim()) {
+      setEditing(false)
+      return
+    }
+    await onAlias?.(v.cid, next)
+    setEditing(false)
+  }
+
   const appName = (id: string) => apps?.find((a) => a.id === id)?.name ?? id
+  // 展示名优先级:站长备注 > 访客留言昵称 > cid 前 8 位
+  const displayName = v.alias || v.nickname || `访客 ${v.cid.slice(0, 8)}`
   const proj = Object.entries(v.projectClicks)
     .sort((a, b) => b[1] - a[1])
     .map(([t, n]) => `${targetLabel(t, projects)}×${n}`)
@@ -78,24 +108,67 @@ export function VisitorDetailRow({
     <>
       <tr className={open ? 'is-open' : ''} onClick={onToggle} style={{ cursor: 'pointer' }}>
         <td>
-          <div>
-            {v.nickname || `访客 ${v.cid.slice(0, 8)}`}
-            <span
-              className={`zx-visitor-tag ${v.returning ? 'is-returning' : 'is-new'}`}
-              title={v.returning ? '回头客 · 分不同日期访问过' : '新客 · 仅当日访问'}
-            >
-              {v.returning ? '回头客' : '新客'}
-            </span>
-            {v.nickname ? (
-              <span className="zx-muted" style={{ fontSize: '0.7rem' }}>
-                {' '}
-                · {v.cid.slice(0, 8)}
-              </span>
-            ) : null}
-          </div>
-          <div className="zx-mono zx-muted" style={{ fontSize: '0.65rem' }}>
-            {v.cid}
-          </div>
+          {editing ? (
+            <div className="zx-alias-edit" onClick={(e) => e.stopPropagation()}>
+              <input
+                ref={inputRef}
+                value={draft}
+                maxLength={40}
+                placeholder="给这位访客起个名字(仅自己可见)"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void commit()
+                  if (e.key === 'Escape') {
+                    setDraft(v.alias)
+                    setEditing(false)
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="zx-btn zx-btn-sm"
+                disabled={aliasBusy}
+                onClick={() => void commit()}
+              >
+                保存
+              </button>
+            </div>
+          ) : (
+            <>
+              <div>
+                {v.alias ? <span className="zx-alias-tag">{v.alias}</span> : displayName}
+                {v.alias && v.nickname ? (
+                  <span className="zx-muted" style={{ fontSize: '0.7rem' }}>
+                    {' '}
+                    · {v.nickname}
+                  </span>
+                ) : null}
+                <span
+                  className={`zx-visitor-tag ${v.returning ? 'is-returning' : 'is-new'}`}
+                  title={v.returning ? '回头客 · 分不同日期访问过' : '新客 · 仅当日访问'}
+                >
+                  {v.returning ? '回头客' : '新客'}
+                </span>
+                {onAlias && !aliasBusy ? (
+                  <button
+                    type="button"
+                    className="zx-btn zx-btn-sm zx-btn-ghost zx-alias-btn"
+                    title={v.alias ? '修改备注' : '给这位访客起个名字(仅自己可见)'}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditing(true)
+                    }}
+                  >
+                    {v.alias ? '备注' : '起名'}
+                  </button>
+                ) : null}
+                {aliasBusy ? <span className="zx-muted zx-mono"> 保存中…</span> : null}
+              </div>
+              <div className="zx-mono zx-muted" style={{ fontSize: '0.65rem' }}>
+                {v.cid}
+              </div>
+            </>
+          )}
         </td>
         <td className="num">{fmtInt(v.visits)}</td>
         <td className="num">{fmtInt(v.commentCount)}</td>

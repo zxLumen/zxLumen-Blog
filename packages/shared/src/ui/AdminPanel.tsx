@@ -156,6 +156,8 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
   const [stats, setStats] = useState<StatsResult | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
   const [statVisitor, setStatVisitor] = useState<string | null>(null)
+  /** 正在保存备注的访客 cid */
+  const [aliasBusyCid, setAliasBusyCid] = useState<string | null>(null)
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true)
@@ -166,6 +168,31 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       /* ignore */
     } finally {
       setStatsLoading(false)
+    }
+  }, [])
+
+  /** 给访客起别名/备注(仅 admin 可见;alias 传空串 = 清除) */
+  const saveVisitorAlias = useCallback(async (cid: string, alias: string) => {
+    setAliasBusyCid(cid)
+    setMsg(null)
+    try {
+      const res = await adminFetch('/api/admin/visitor-alias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cid, alias }),
+      })
+      if (!res.ok) throw new Error('保存失败')
+      // 就地改这一行,不重拉整表(避免展开态与滚动位置跳动)
+      setStats((s) =>
+        s
+          ? { ...s, visitors: s.visitors.map((v) => (v.cid === cid ? { ...v, alias } : v)) }
+          : s,
+      )
+      setMsg({ kind: 'ok', text: alias ? `已备注「${alias}」` : '已清除备注' })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '保存失败' })
+    } finally {
+      setAliasBusyCid(null)
     }
   }, [])
 
@@ -1611,6 +1638,8 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
                       onToggle={() => setStatVisitor(statVisitor === v.cid ? null : v.cid)}
                       projects={projList}
                       apps={apps}
+                      onAlias={saveVisitorAlias}
+                      aliasBusy={aliasBusyCid === v.cid}
                     />
                   ))}
                 </tbody>
