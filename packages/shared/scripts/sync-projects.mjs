@@ -2,7 +2,8 @@
 //   1) 读 docker/site-content/content.json 的 PROJECTS(即 content.local.ts 导出的结果)
 //   2) 登录线上,GET 线上现有的项目表
 //   3) 按 id 合并:**只补线上没有的**,不动线上已有的(线上可能被 admin 改过)
-//   4) POST 整表保存(走站点自己的 /api/admin/projects,由应用写库)
+//   4) POST 整表保存(走站点自己的 /api/admin/projects,由应用写库),带回 GET 的 rev
+//      做乐观并发校验,期间线上若被改过则 409 中止,不覆盖
 //
 // 为什么走 HTTP 而不是 SSH + sqlite:线上库文件属容器内 uid 10001,root 直接写会
 // 把 db / -wal / -shm 写成 root 所有,之后应用就写不进去了(留言、埋点全挂)。走
@@ -104,7 +105,11 @@ const api = (method, body) =>
 
 const got = await api('GET')
 if (!got.ok) die(`读取线上项目表失败 HTTP ${got.status}`)
-const remote = (await got.json()).projects ?? []
+// rev 是乐观锁版本戳,写回时带上:读取之后若线上被改过(另一个标签页 / 另一次同步),
+// 服务端返回 409 拒绝整表覆盖 —— 否则本脚本自己就是那个「静默抹掉别人新增条目」的路径
+const gotJson = await got.json()
+const remote = gotJson.projects ?? []
+const rev = gotJson.rev
 log(`线上 ${remote.length} 条,本地候选 ${wanted.length} 条`)
 
 // ---------------------------------------------------------------- 合并(只加不减)
@@ -130,8 +135,13 @@ if (dryRun) {
 }
 
 // ---------------------------------------------------------------- 写回
-const post = await api('POST', { projects: merged })
-if (!post.ok) die(`保存失败 HTTP ${post.status}:${(await post.text()).slice(0, 200)}`)
+const post = await api('POST', { projects: merged, rev })
+if (!post.ok) {
+  if (post.status === 409) {
+    die('线上项目表在本次读取之后被改过(另一个标签页或另一次同步),已中止以免整表覆盖;重跑一次即可')
+  }
+  die(`保存失败 HTTP ${post.status}:${(await post.text()).slice(0, 200)}`)
+}
 
 // 复查:重新读一次,确认真的落库了
 const after2 = await api('GET')
