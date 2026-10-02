@@ -4858,7 +4858,7 @@ tr:hover .zx-alias-btn {
 .zxchat-teaser {
   position: fixed;
   z-index: 350;
-  transform: translateY(-50%);
+  transform: translateY(-100%);
   max-width: 250px;
   padding: 0.55rem 0.8rem 0.55rem 2.15rem;
   font-family: var(--font-mono);
@@ -4908,11 +4908,11 @@ tr:hover .zx-alias-btn {
 @keyframes zxchat-teaser-in {
   from {
     opacity: 0;
-    transform: translateY(-50%) translateY(4px);
+    transform: translateY(-100%) translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(-50%);
+    transform: translateY(-100%);
   }
 }
 
