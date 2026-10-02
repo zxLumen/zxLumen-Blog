@@ -1,0 +1,489 @@
+/*
+ * `/lab/creature` 专用样式。
+ *
+ * 只有渲染器 1 的运动真的由这里驱动(扇动 / 浮动 / 呼吸),其余五套都是 canvas 或
+ * WebGL 自绘。所以这个文件**故意很小** —— 动画逻辑一旦搬进 CSS,就少一份 JS 开销。
+ */
+
+.cl-root {
+  --cl-bg: #0b0f16;
+  --cl-fg: #e6ecf5;
+  --cl-dim: #7f8da3;
+  --cl-line: #1e2733;
+  --cl-card: #111823;
+  --cl-accent: #4fd6ff;
+
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 20px 80px;
+  color: var(--cl-fg);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cl-head h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  letter-spacing: 0.02em;
+}
+
+.cl-head p {
+  margin: 0 0 18px;
+  max-width: 62ch;
+  color: var(--cl-dim);
+}
+
+/* ---------------------------- 描述选择 ---------------------------- */
+
+.cl-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.cl-picker-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cl-picker button {
+  padding: 5px 10px;
+  border: 1px solid var(--cl-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cl-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.cl-picker button:hover {
+  color: var(--cl-fg);
+  border-color: #2c3a4d;
+}
+
+.cl-picker button.is-on {
+  color: #04121a;
+  background: var(--cl-accent);
+  border-color: var(--cl-accent);
+}
+
+.cl-picker-input {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--cl-line);
+  border-radius: 8px;
+  background: var(--cl-card);
+  color: var(--cl-fg);
+  font-size: 12px;
+}
+
+/* ---------------------------- 形态摘要 ---------------------------- */
+
+.cl-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: baseline;
+  padding: 9px 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--cl-line);
+  border-radius: 10px;
+  background: var(--cl-card);
+  color: var(--cl-dim);
+  font-size: 12px;
+}
+
+.cl-fact-name {
+  color: var(--cl-fg);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cl-fact-note {
+  flex: 1 1 200px;
+  color: var(--cl-accent);
+  text-align: right;
+}
+
+/* ---------------------------- 时间轴 ---------------------------- */
+
+.cl-timeline {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--cl-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--cl-card) 92%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.cl-tl-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cl-tl-state {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.cl-tl-day b {
+  color: var(--cl-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 阶段徽章 + 阶段内进度条(进度用 scaleX,避免每帧触发布局) */
+.cl-tl-stage {
+  position: relative;
+  padding: 2px 8px;
+  overflow: hidden;
+  border: 1px solid var(--cl-line);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+}
+
+/*
+ * 进度条压在文字下面。**不能用 z-index: -1** —— `.cl-timeline` 是 sticky,
+ * 自带层叠上下文,负 z-index 会把进度条压到 sticky 面板的背景之下,等于消失。
+ * 所以改成「文字抬高一层」的正常叠放。
+ */
+.cl-tl-stage > i {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--cl-accent) 30%, transparent);
+  transform-origin: left center;
+  transition: transform 0.1s linear;
+}
+
+.cl-tl-stage > span {
+  position: relative;
+}
+
+.cl-tl-note {
+  color: var(--cl-dim);
+  font-size: 11px;
+}
+
+.cl-tl-ctl {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cl-tl-ctl > button,
+.cl-tl-speed button {
+  min-width: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--cl-line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cl-fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cl-tl-ctl .cl-tl-play {
+  border-color: var(--cl-accent);
+  color: var(--cl-accent);
+}
+
+.cl-tl-speed {
+  display: flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.cl-tl-speed button.is-on {
+  border-color: var(--cl-accent);
+  color: var(--cl-accent);
+}
+
+.cl-tl-loop {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--cl-dim);
+  font-size: 12px;
+}
+
+.cl-tl-range {
+  width: 100%;
+  margin: 10px 0 6px;
+  accent-color: var(--cl-accent);
+}
+
+.cl-tl-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cl-tl-marks button {
+  padding: 2px 7px;
+  border: 1px solid var(--cl-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cl-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.cl-tl-marks button.is-on {
+  border-color: var(--cl-accent);
+  color: var(--cl-accent);
+}
+
+/* ---------------------------- 卡片网格 ---------------------------- */
+
+.cl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.cl-card {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border: 1px solid var(--cl-line);
+  border-radius: 12px;
+  background: var(--cl-card);
+}
+
+.cl-card header {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cl-card h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.cl-card-tone {
+  color: var(--cl-accent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.cl-card p {
+  margin: 10px 0 0;
+  color: var(--cl-dim);
+  font-size: 12px;
+}
+
+.cl-stage {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  border-radius: 10px;
+  /* 半透明网格底:方便肉眼判断体型/位移,又能看清辉光 */
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--cl-fg) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--cl-fg) 5%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.cl-svg,
+.cl-canvas {
+  display: block;
+  overflow: visible;
+  /* 体型随阶段变大,别让画布把卡片撑开 */
+  max-width: 100%;
+}
+
+/* JS 会按 box 精确钉 style.width/height;这里兜住「还没跑第一帧」的瞬间 */
+.cl-canvas {
+  width: 220px;
+  height: 220px;
+}
+
+.cl-fallback {
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  color: #ff9a9a;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ==========================================================================
+   渲染器 1 的动画:这里就是「SVG + CSS」那条路线里 CSS 那一半
+   ========================================================================== */
+
+.cl-svg {
+  /* 只动 transform / opacity → 交给合成器,主线程不做布局 */
+  will-change: transform;
+}
+
+/* 躯干呼吸:幅度随阶段变大(越成熟越"有呼吸") */
+.cl-bob > .cl-body {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cl-breathe var(--cl-breath-dur, 1.9s) ease-in-out infinite;
+}
+
+@keyframes cl-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.035, 0.972); }
+}
+
+/* 上下浮动 */
+.cl-bob {
+  animation: cl-bob var(--cl-bob-dur, 2.4s) ease-in-out infinite;
+}
+
+@keyframes cl-bob {
+  0%, 100% { transform: translateY(calc(var(--cl-bob-amt, 4px) * -1)); }
+  50% { transform: translateY(var(--cl-bob-amt, 4px)); }
+}
+
+/* 辉光脉冲:只动 opacity。
+   注意是 `时间 × 数字`,不是 `1 / 时间` —— 后者在 calc 里是无效的,
+   会让整条 animation-duration 被丢弃(动画静默失效)。 */
+.cl-halo {
+  opacity: calc(0.35 + var(--cl-glow, 0.3) * 0.65);
+  animation: cl-pulse calc(var(--cl-flap-dur, 0.4s) * 3) ease-in-out infinite;
+}
+
+@keyframes cl-pulse {
+  0%, 100% { opacity: calc(0.3 + var(--cl-glow, 0.3) * 0.5); }
+  50% { opacity: calc(0.55 + var(--cl-glow, 0.3) * 0.45); }
+}
+
+/*
+ * 肢体扇动:父 <g> 已把附着点平移到局部原点,所以这里 `transform-origin: 0 0`
+ * 必须显式写 —— SVG 元素的 CSS transform-origin 初值会解析到 SVG 视口中心,
+ * 不写的话整条肢体会绕画布中心甩(这个坑很隐蔽)。
+ *
+ * 负 delay 让相邻肢体错开相位,而不是整齐划一地上下动。
+ */
+.cl-limb-g {
+  transform-origin: 0 0;
+}
+
+.cl-limb {
+  opacity: var(--cl-limb-op, 0.6);
+  animation: cl-flap var(--cl-flap-dur, 0.4s) ease-in-out infinite;
+  animation-delay: calc(var(--cl-i, 0) * -0.13s);
+  transform-origin: 0 0;
+  transform: scaleX(var(--cl-side, 1));
+}
+
+@keyframes cl-flap {
+  0%, 100% {
+    transform: scaleX(calc(var(--cl-side, 1) * (1 - var(--cl-flap-d, 0.2))))
+      rotate(calc(var(--cl-side, 1) * var(--cl-wing-a, 20) * -1deg));
+  }
+  50% {
+    transform: scaleX(calc(var(--cl-side, 1) * (1 + var(--cl-flap-d, 0.2))))
+      rotate(calc(var(--cl-side, 1) * var(--cl-wing-a, 20) * 1deg));
+  }
+}
+
+/* 渲染器 2:液态路线的肢体甩得更开(JS 传 --cl-swing) */
+.cl-limb-swing {
+  animation: cl-swing var(--cl-limb-dur, 0.5s) ease-in-out infinite;
+  animation-delay: calc(var(--cl-i, 0) * -0.19s);
+}
+
+@keyframes cl-swing {
+  0%, 100% { transform: rotate(calc(var(--cl-side, 1) * var(--cl-swing, 20) * -1deg)); }
+  50% { transform: rotate(calc(var(--cl-side, 1) * var(--cl-swing, 20) * 1deg)); }
+}
+
+/* ---------------------------- 群飞 ---------------------------- */
+
+.cl-swarm {
+  position: relative;
+}
+
+.cl-swarm-item {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.2s;
+}
+
+/* 各走各的轨迹:相位由 JS 给的 --cl-phase 错开,避免整群同步平移 */
+.cl-swarm-float {
+  display: block;
+  animation: cl-swarm-drift 9s ease-in-out infinite alternate;
+  animation-delay: calc(var(--cl-phase, 0) * -1s);
+}
+
+@keyframes cl-swarm-drift {
+  0% { transform: translate(-9px, 5px); }
+  50% { transform: translate(8px, -7px); }
+  100% { transform: translate(-4px, 9px); }
+}
+
+.cl-swarm-item.is-dim {
+  opacity: 0.22;
+}
+
+.cl-swarm-item.is-focus {
+  z-index: 2;
+}
+
+.cl-swarm-item.is-focus .cl-swarm-float {
+  animation: cl-swarm-pop 0.35s ease-out;
+}
+
+@keyframes cl-swarm-pop {
+  from { transform: scale(0.9); }
+  to { transform: scale(1.45); }
+}
+
+.cl-swarm-name {
+  color: var(--cl-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.cl-swarm-hint {
+  position: absolute;
+  bottom: -18px;
+  left: 0;
+  color: var(--cl-dim);
+  font-size: 10px;
+}
+
+/* ---------------------------- 动效偏好 ---------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  /* 停掉所有 CSS 动画。canvas / WebGL 那五套不在此列 ——
+     它们按 rAF 自绘,要停得在渲染器里判断(见 usePrefersReducedMotion)。 */
+  .cl-bob,
+  .cl-bob > .cl-body,
+  .cl-halo,
+  .cl-limb,
+  .cl-limb-swing,
+  .cl-swarm-float {
+    animation: none !important;
+  }
+}
