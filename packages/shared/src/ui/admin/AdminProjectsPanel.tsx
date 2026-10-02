@@ -153,13 +153,18 @@ export function AdminProjectsPanel({
   showTabs,
   tab,
   onNotify,
+  onDirtyChange,
 }: {
   active: boolean
   showTabs: boolean
   tab: string
   onNotify?: (m: NotifyMsg) => void
+  /** 把「有未保存修改」同步给父级,用于切 Tab 前拦截(否则 unmount 静默丢编辑) */
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const [projects, setProjects] = useState<StoredProject[]>([])
+  /** 乐观锁版本戳:GET 时的表指纹,POST 时带回;不匹配服务端返回 409 */
+  const [rev, setRev] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -171,14 +176,21 @@ export function AdminProjectsPanel({
     if (gated && active) void load()
   }, [gated, active, loadKey])
 
+  // 把 dirty 同步给父级(切 Tab 前拦截用);unmount 时清掉
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+    return () => onDirtyChange?.(false)
+  }, [dirty, onDirtyChange])
+
   const notify = (kind: 'ok' | 'err', text: string) => onNotify?.({ kind, text })
 
   const load = useCallback(async () => {
     setBusy(true)
     try {
       const r = await adminFetch('/api/admin/projects', { cache: 'no-store' })
-      const data = (await r.json()) as { projects?: StoredProject[] }
+      const data = (await r.json()) as { projects?: StoredProject[]; rev?: string }
       setProjects(data.projects ?? [])
+      setRev(data.rev)
       setDirty(false)
     } catch {
       notify('err', '项目列表加载失败')
@@ -233,11 +245,24 @@ export function AdminProjectsPanel({
       const r = await adminFetch('/api/admin/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projects }),
+        body: JSON.stringify({ projects, rev }),
       })
-      const d = (await r.json().catch(() => ({}))) as { error?: string; projects?: StoredProject[] }
-      if (!r.ok) throw new Error(d.error || '保存失败')
+      const d = (await r.json().catch(() => ({}))) as {
+        error?: string
+        projects?: StoredProject[]
+        rev?: string
+      }
+      if (!r.ok) {
+        // 409:期间有别处改动过这张表。绝不能拿本地旧列表硬覆盖,提示刷新并放弃本次编辑
+        if (r.status === 409) {
+          notify('err', d.error || '列表已被修改,请点「刷新」后重新编辑')
+          await load()
+          return
+        }
+        throw new Error(d.error || '保存失败')
+      }
       if (d.projects) setProjects(d.projects)
+      setRev(d.rev ?? rev)
       setDirty(false)
       notify('ok', '项目已保存(立即生效)')
     } catch (err) {
@@ -251,10 +276,15 @@ export function AdminProjectsPanel({
     if (!confirm('恢复为 content.local.ts 的静态默认项目?当前所有增删改将丢失。')) return
     setSaving(true)
     try {
-      const r = await adminFetch('/api/admin/projects', { method: 'DELETE' })
-      const d = (await r.json().catch(() => ({}))) as { projects?: StoredProject[] }
+const r = await adminFetch('/api/admin/projects', { method: 'DELETE' })
+      const d = (await r.json().catch(() => ({}))) as {
+        error?: string
+        projects?: StoredProject[]
+        rev?: string
+      }
       if (!r.ok) throw new Error('恢复失败')
       if (d.projects) setProjects(d.projects)
+      setRev(d.rev)
       setDirty(false)
       notify('ok', '已恢复静态默认项目')
     } catch (err) {
@@ -408,6 +438,18 @@ export function AdminProjectsPanel({
             </Badge>
           )}
           <Group gap="xs" ml="auto">
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              disabled={actionsDisabled}
+              title="重新读取服务端列表(会丢弃本页未保存的修改)"
+              onClick={() => {
+                if (dirty && !confirm('刷新会丢弃本页未保存的修改,继续?')) return
+                void load()
+              }}
+            >
+              刷新
+            </Button>
             <Button size="compact-xs" variant="light" disabled={actionsDisabled} onClick={add}>
               + 新增项目
             </Button>

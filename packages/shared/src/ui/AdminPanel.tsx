@@ -151,6 +151,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
   const [archPageSize, setArchPageSize] = useState(20)
   const [archTotalPages, setArchTotalPages] = useState(1)
   const [archLoading, setArchLoading] = useState(false)
+  const [projectsDirty, setProjectsDirty] = useState(false)
   const [archBusy, setArchBusy] = useState(false)
 
   const [stats, setStats] = useState<StatsResult | null>(null)
@@ -634,6 +635,14 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
     if (tab === 'stats') void loadStats()
   }, [tab, loadArchive, archPage, archPageSize, loadStats])
 
+  /** 项目面板有未保存修改时,切走前确认(否则 unmount 会静默丢弃编辑) */
+  function switchTab(next: TabKey) {
+    if (tab === 'projects' && next !== 'projects' && projectsDirty) {
+      if (!confirm('项目列表有未保存的修改,切走会丢失。继续?')) return
+    }
+    setTab(next)
+  }
+
   async function savePassword() {
     if (newPw !== newPw2) return setMsg({ kind: 'err', text: '两次输入的新密码不一致' })
     if (newPw.length < 4) return setMsg({ kind: 'err', text: '新密码至少 4 位' })
@@ -777,7 +786,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
               key={t}
               type="button"
               className={`zx-tab${tab === t ? ' is-active' : ''}`}
-              onClick={() => setTab(t)}
+              onClick={() => switchTab(t)}
             >
               {t === 'comments'
                 ? '留言'
@@ -809,7 +818,13 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       {msg && <div className={`zx-msg ${msg.kind}`}>{msg.text}</div>}
 
       {tab === 'projects' && (
-        <AdminProjectsPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
+        <AdminProjectsPanel
+          active
+          onNotify={(m) => setMsg(m)}
+          onDirtyChange={setProjectsDirty}
+          showTabs
+          tab={tab}
+        />
       )}
 
       {tab === 'vlog' && (

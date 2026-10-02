@@ -1,9 +1,13 @@
+import { createHash } from 'node:crypto'
+
 import type { Project, StoredProject } from '@zx/shared'
 import { normalizeUrl } from '@zx/shared'
 import { getRuntimeContent } from '@zx/shared/server'
 import { getDb } from './db'
 
 const META_KEY = 'projects_config'
+/** 并发保护:整表覆盖时的乐观锁版本戳键(与 META_KEY 分开存,不参与表内容) */
+const META_REV_KEY = 'projects_config_rev'
 
 const STATUSES: Project['status'][] = ['online', 'demo', 'building', 'archived']
 const KINDS: NonNullable<Project['kind']>[] = ['personal', 'work']
@@ -104,18 +108,53 @@ export async function getStoredProjects(): Promise<StoredProject[]> {
   }
 }
 
-/** 保存整表(数组顺序即展示顺序) */
-export function saveStoredProjects(input: unknown): StoredProject[] {
+/**
+ * 表内容指纹:由库里存的原始 JSON 算出,用于乐观并发检测。
+ * 指纹相同 ⇒ 期间没人改过这张表,整表覆盖是安全的。
+ */
+function fingerprint(raw: string | null): string {
+  return createHash('sha256').update(raw ?? '').digest('hex').slice(0, 16)
+}
+
+/**
+ * 当前版本戳(GET 返回给前端;POST 带回做校验)。
+ * 从未配置过时返回 undefined —— 表示「这张表尚不存在」,与空表区分开。
+ */
+export function getProjectsRev(): string | undefined {
+  const stored = getDb().getMeta(META_REV_KEY)
+  if (stored) return stored
+  const raw = getDb().getMeta(META_KEY)
+  return raw === null ? undefined : fingerprint(raw)
+}
+
+/** 保存整表(数组顺序即展示顺序);expectedRev 不匹配则抛 StaleProjectsError */
+export class StaleProjectsError extends Error {
+  constructor(readonly currentRev: string | undefined) {
+    super('项目列表已在别处被修改(可能是另一个标签页或 sync:projects 改过),请刷新后重新编辑')
+    this.name = 'StaleProjectsError'
+  }
+}
+
+export function saveStoredProjects(input: unknown, expectedRev?: string): StoredProject[] {
+  const db = getDb()
+  const currentRev = getProjectsRev()
+  // 仅当调用方明确带了版本戳才校验;旧调用方(无 stamp)保持原行为
+  if (expectedRev !== undefined && expectedRev !== currentRev) {
+    throw new StaleProjectsError(currentRev)
+  }
   const list = Array.isArray(input)
     ? input.map(normalizeOne).filter((p): p is StoredProject => p !== null)
     : []
-  getDb().setMeta(META_KEY, JSON.stringify(list))
+  const raw = JSON.stringify(list)
+  db.setMeta(META_KEY, raw)
+  db.setMeta(META_REV_KEY, fingerprint(raw))
   return list
 }
 
 /** 恢复为静态默认(删除配置) */
 export async function resetStoredProjects(): Promise<StoredProject[]> {
   getDb().delMeta(META_KEY)
+  getDb().delMeta(META_REV_KEY)
   return fromStatic()
 }
 
