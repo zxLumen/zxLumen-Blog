@@ -101,6 +101,7 @@
 
 - **项目卡丢了两张:整表覆盖 + 裸 `cp` 备份,两个动作叠加**(WAL 只是让第 ② 条变得容易发生,并**不会自己回滚**):本地库的 `projects_config` 里那两项当时已提交但滞留在 `zx.db-wal` 里,主库文件仍是老的 10 项;随后备份用了裸 `cp`(只拷走主库文件),恢复时又把 `-wal`/`-shm` 删掉 —— 于是旁路文件里那两条记录消失,埋点 `events` 也一起丢了两条,且不留任何 API 调用记录。**WAL 模式下已提交的数据不会自己「回滚」**:只要 `-wal` 还在就读得全,连最后一个连接干净关闭触发 checkpoint 也是把内容并进主库。真正的杀手是**把旁路文件当临时文件处置**(`rm zx.db-wal` / 裸 `cp` / 恢复时留下旧 `-wal` 让它被回放)。上面那套乐观锁挡不住的是第 ① 条,下面的 DELETE 也挡不住第 ② 条 —— 后者只能靠备份规范,故已一并写入 `AGENTS.md`。
   - **`journal_mode` 由 WAL 改为 DELETE**(`packages/shared/src/server/db/connection.ts`):本库是单机单文件单用户,WAL 的并发读收益为零,而它的代价是让已提交数据「住在旁路文件里」、可以被误删。DELETE 模式下每次提交直接改主库文件,没有旁路文件可丢,最坏只丢最后一次事务。旧库首次打开时自动转换并删掉残留的 `-wal`/`-shm`。`synchronous` 同时从 `NORMAL` 提到 `FULL`(DELETE 下 NORMAL 遇强杀可能损坏库,写入量很小换稳定更值)。**注意:这只消除第 ② 条的放大器,不替代备份规范。**
+  - **设完必须回读校验,不对就拒绝启动**:`db.pragma()` 返回的是**实际生效的值且失败不抛错** —— 库被其他进程占着、或所在文件系统不支持时,`journal_mode = DELETE` 会静默不生效,库继续跑在 WAL 上,而 `AGENTS.md` 与文档都写着 delete,等于骗自己。现在 `openDb()` 立刻回读 `journal_mode` 与 `synchronous`,对不上就抛错中止启动(宁可起不来,也不要静默跑在一个没有旁路保护的库上)。`:memory:` 单独放行(内存库没有旁路文件,比 delete 更安全)。
   - **备份改用 SQLite 的 online backup API**(`db.backup()`,见 `docker/backup.sh` 与 `apps/next-home/scripts/backup.mjs`):原先是 `wal_checkpoint(TRUNCATE)` + 拷文件,一旦漏了 `-wal` 就是一份**静默残缺**的备份;新写法走 SQLite 自己的页级复制,不停服务、不依赖 journal_mode、结果一定完整。
 
 - **应用浮层通用「保活 + 宽屏空闲预热」**:打开过的 `openIn:'panel'` 应用保持挂载、仅以 `visibility:hidden` 隐藏(不是 `display:none`,应用首帧仍能量到布局),收起再开不销毁 iframe;宽屏且页面空闲时把**所有** panel 应用的 iframe 提前隐藏加载,点开即用、不再转圈(窄屏全屏面板跳过预热省流量)。两者都**与具体应用无关,新加应用零改动**自动生效。

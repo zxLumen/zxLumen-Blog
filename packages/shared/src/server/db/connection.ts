@@ -35,6 +35,25 @@ export function openDb(path: string): Db {
   db.pragma('busy_timeout = 30000')
   // DELETE 模式下 NORMAL 在断电/强杀时可能损坏数据库;写入量很小,换 FULL 更稳。
   db.pragma('synchronous = FULL')
+  // pragma **返回实际生效的值且失败不抛错**:库在不支持的 FS / 库被锁 / 只读挂载时
+  // 可能静默留在 WAL,而文档与 AGENTS.md 都写着 delete —— 那等于骗自己。所以设完
+  // 立刻回读校验,对不上就启动失败(宁可起不来,也不要静默跑在一个没有旁路保护的库上)。
+  const mode = String(db.pragma('journal_mode', { simple: true })).toLowerCase()
+  // 内存库没有旁路文件可言,比 delete 更安全,单独放行(测试里有用)
+  const ok = mode === 'delete' || (path === ':memory:' && mode === 'memory')
+  if (!ok) {
+    db.close()
+    throw new Error(
+      `journal_mode 期望 delete,实际 ${mode}:设置未生效(库被其他进程占用,或所在文件系统不支持)` +
+        ` —— 已中止启动,避免在 WAL 模式下静默运行`,
+    )
+  }
+  const sync = Number(db.pragma('synchronous', { simple: true }))
+  if (sync !== 2) {
+    db.close()
+    throw new Error(`synchronous 期望 2(FULL),实际 ${sync}:设置未生效 —— 已中止启动`)
+  }
+
   db.exec(SCHEMA_SQL)
 
   // 迁移:老库补列
