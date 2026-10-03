@@ -4,7 +4,7 @@ import { chatProtocol, getChatApiKey, getConfig } from '@/lib/chat/config'
 import { completeChatFull } from '@/lib/chat/llm'
 import { defaultBaseUrl } from '@/lib/chat/providers'
 import { isAdmin } from '@/lib/auth'
-import { effectiveCid, resolveCid, cidCookie } from '@/lib/clientid'
+import { effectiveCid, isMockActive, resolveCid, cidCookie } from '@/lib/clientid'
 import { normalizeBlueprint, compileBlueprint, type CreatureBlueprint } from '@zx/shared/creature'
 import { buildGenerateMessages, GENERATE_BUDGETS } from '@/components/lab/blueprint/GENERATE_PROMPT'
 import { extractJson } from '@/components/lab/blueprint/json'
@@ -81,7 +81,12 @@ export async function POST(req: Request) {
     return Response.json({ error: '模型端点未配置' }, { status: 503 })
   }
 
-  const admin = await isAdmin()
+  /**
+   * 调试豁免:站长本人 **或** 开着 MOCK 访客 —— 两者都当作「不受每人每天 5 只」限制。
+   * MOCK 是拿来看「访客视角」的,顺手在实验室里反复点很正常,所以一并豁免,
+   * 省得每轮调试都先撞一次限流。注意**只豁免只数**,日预算照样记账。
+   */
+  const exempt = (await isAdmin()) || (await isMockActive())
   /**
    * 访客身份:没有 cookie 就**当场发一个**。
    * 否则「每人每天 5 只」形同虚设 —— 直接访问 /lab/species(没先逛首页触发
@@ -90,7 +95,7 @@ export async function POST(req: Request) {
    */
   const existing = await effectiveCid()
   const { cid, isNew } = existing ? { cid: existing, isNew: false } : await resolveCid()
-  const today = cidsUsedToday(cid, admin)
+  const today = cidsUsedToday(cid, exempt)
   if (today >= DAILY_PER_CID) {
     return json({ error: `今天已经生成 ${today} 只了,明天再来(每人每天 ${DAILY_PER_CID} 只)` }, 429, isNew ? cid : '')
   }
@@ -104,13 +109,13 @@ export async function POST(req: Request) {
    */
   const slot = q.acquire(jobId, descr)
   if (!slot) {
-    const out = await run(jobId, descr, body.retryHint, { baseUrl, model, apiKey, cid, admin })
+    const out = await run(jobId, descr, body.retryHint, { baseUrl, model, apiKey, cid, exempt })
     return json(out.body, out.status, isNew ? cid : '')
   }
 
   // 排队:后台等轮到自己,完成后把结果写进 job;客户端轮询取
   void slot
-    .then(() => run(jobId, descr, body.retryHint, { baseUrl, model, apiKey, cid, admin }))
+    .then(() => run(jobId, descr, body.retryHint, { baseUrl, model, apiKey, cid, exempt }))
     .catch((e: Error) => {
       // 排队期间被取消 / 超时 —— 此时 `run` 压根没执行,也就没预扣过预算,无需 refund
       q.finish(jobId, e.message === 'CANCELLED' ? 'cancelled' : 'error', undefined, {
@@ -145,7 +150,8 @@ interface RunTarget {
   model: string
   apiKey: string
   cid: string
-  admin: boolean
+  /** 调试豁免(admin 或 MOCK):不受每人每天 5 只限制 */
+  exempt: boolean
 }
 
 /** 真正跑一次生成(含预算预扣 / 结算 / 槽位归还 / 终态落库) */
@@ -158,7 +164,7 @@ async function run(
   const q = queue()
 
   // 预算闸:真正开跑前才检查(排队期间不占额度),并记一笔在途预估
-  const gate = reserve({ cid: t.cid, isAdminUser: t.admin, model: t.model })
+  const gate = reserve({ cid: t.cid, isAdminUser: t.exempt, model: t.model })
   if (!gate.ok) {
     const body = { error: gate.reason ?? '今天的生成额度用完了' }
     q.finish(jobId, 'error', undefined, { message: body.error, status: 429 })
@@ -170,7 +176,7 @@ async function run(
     const result = await generateOnce(descr, retryHint, t)
     const cost = settle({
       cid: t.cid,
-      isAdminUser: t.admin,
+      isAdminUser: t.exempt,
       model: t.model,
       ok: !('error' in result),
       tokens: 'tokens' in result ? result.tokens : undefined,
@@ -192,7 +198,7 @@ async function run(
       todayUsd: cost.todayUsd,
       budget: cost.budget,
       day: budgetDay(),
-      remainingToday: remainingForCid(t.cid, t.admin),
+      remainingToday: remainingForCid(t.cid, t.exempt),
     }
     // 已被客户端取消的,结果就别浪费地回传了(但 token 已经花了,如实记账)
     const job = q.get(jobId)

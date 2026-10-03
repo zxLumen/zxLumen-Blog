@@ -101,15 +101,6 @@
   cursor: progress;
 }
 
-.sp-auto {
-  display: inline-flex;
-  gap: 5px;
-  align-items: center;
-  color: var(--cl-dim);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 /* 生成状态条 */
 .sp-status {
   margin: 8px 0 2px;
