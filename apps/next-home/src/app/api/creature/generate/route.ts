@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { clientIp, rateLimit } from '@/lib/db'
+import { rateLimit, clientIp } from '@/lib/db'
 import { chatProtocol, getChatApiKey, getConfig } from '@/lib/chat/config'
-import { completeChat } from '@/lib/chat/llm'
+import { completeChatFull } from '@/lib/chat/llm'
 import { defaultBaseUrl } from '@/lib/chat/providers'
+import { isAdmin } from '@/lib/auth'
+import { effectiveCid, resolveCid, cidCookie } from '@/lib/clientid'
 import { normalizeBlueprint, compileBlueprint, type CreatureBlueprint } from '@zx/shared/creature'
 import { buildGenerateMessages, GENERATE_BUDGETS } from '@/components/lab/blueprint/GENERATE_PROMPT'
 import { extractJson } from '@/components/lab/blueprint/json'
+import { queue } from '@/lib/creature/queue'
+import { budgetDay, DAILY_PER_CID, cidsUsedToday, remainingForCid, reserve, settle } from '@/lib/creature/budget'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,10 +17,10 @@ interface Body {
   descr?: string
   /** 重试提示:把上一次的问题带回给模型 */
   retryHint?: string
+  /** 取消一个已受理的任务(沿用 admin 蒸馏的 `{action:'cancel'}` 风格) */
+  jobId?: string
+  action?: string
 }
-
-/** 生成结果缓存:同一句描述直接复用,避免反复烧 token(进程内,重启即清) */
-const cache = new Map<string, CreatureBlueprint>()
 
 function modelTarget() {
   const cfg = getConfig()
@@ -25,32 +29,46 @@ function modelTarget() {
   return { cfg, baseUrl, model, apiKey: getChatApiKey() }
 }
 
+/* ---------- 轮询:查任务状态 ---------- */
+
+export async function GET(req: Request) {
+  const id = new URL(req.url).searchParams.get('jobId') ?? ''
+  if (!id) return Response.json({ error: '缺少 jobId' }, { status: 400 })
+  const job = queue().get(id)
+  if (!job) {
+    return Response.json({ state: 'gone' }, { status: 404 })
+  }
+  if (job.state === 'queued') {
+    return Response.json({ state: 'queued', position: job.position, etaMs: job.etaMs })
+  }
+  if (job.state === 'running') return Response.json({ state: 'running' })
+  if (job.state === 'done') return Response.json({ state: 'done', ...(job.result as object) })
+  if (job.state === 'cancelled') return Response.json({ state: 'cancelled' })
+  return Response.json(
+    { state: 'error', error: job.error?.message ?? '生成失败', status: job.error?.status ?? 422 },
+    { status: 200 },
+  )
+}
+
+/* ---------- 发起生成 ---------- */
+
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as Body
+
+  // 取消:还在排队就直接摘掉(不烧 token),已开跑则标记放弃(结果不再回传)
+  if (body.action === 'cancel' && body.jobId) {
+    const ok = queue().cancel(body.jobId)
+    return Response.json({ cancelled: ok })
+  }
+
   const descr = (body.descr ?? '').trim().slice(0, 300)
   if (!descr) return Response.json({ error: '描述不能为空' }, { status: 400 })
 
   /**
-   * **缓存命中不走限流。**
-   *
-   * 限流是为了保护模型配额,而缓存命中一次模型都不调;若把命中也算进去,
-   * 用户「重复点已生成过的描述」就会白白吃掉配额,很快 429。所以先查缓存再判限流。
-   */
-  const key = descr
-  if (!body.retryHint) {
-    const hit = cache.get(key)
-    if (hit) return Response.json({ blueprint: hit, cached: true, ms: 0 })
-  }
-
-  /**
-   * 限流:本机/dev 下所有浏览器与脚本共享同一个 `clientIp`(通常是 'local'),
-   * 所以额度要给得宽一些。单次生成要 20~60s,真正瓶颈是「在途请求数」,
-   * 这里用一个**并发闸**兜住:同时在途的生成最多 4 个,超过直接 429。
+   * **每 IP 每分钟的上限**:只挡住脚本狂刷,不是主要闸门(排队 + 日预算才是)。
+   * 保留宽松值,免得正常玩的时候被误伤。
    */
   const ip = clientIp(req)
-  if (inflight >= MAX_INFLIGHT) {
-    return Response.json({ error: '当前生成的人有点多,稍等几秒再试' }, { status: 429 })
-  }
   if (!rateLimit(`creature-gen:${ip}`, 60, 60_000)) {
     return Response.json({ error: '生成太频繁,稍等一下' }, { status: 429 })
   }
@@ -63,33 +81,143 @@ export async function POST(req: Request) {
     return Response.json({ error: '模型端点未配置' }, { status: 503 })
   }
 
-  inflight++
+  const admin = await isAdmin()
+  /**
+   * 访客身份:没有 cookie 就**当场发一个**。
+   * 否则「每人每天 5 只」形同虚设 —— 直接访问 /lab/species(没先逛首页触发
+   * /api/track 下发 cookie)的人每次请求都是「新访客」,永远停在 0 只。
+   * 发 cookie 与 `/api/comments`、`/api/chat` 同一套做法(`resolveCid` + `cidCookie`)。
+   */
+  const existing = await effectiveCid()
+  const { cid, isNew } = existing ? { cid: existing, isNew: false } : await resolveCid()
+  const today = cidsUsedToday(cid, admin)
+  if (today >= DAILY_PER_CID) {
+    return json({ error: `今天已经生成 ${today} 只了,明天再来(每人每天 ${DAILY_PER_CID} 只)` }, 429, isNew ? cid : '')
+  }
+
+  const jobId = randomUUID()
+  const q = queue()
+
+  /**
+   * 有空位 → 立刻开跑,一次请求直接拿到结果(**常见路径,前端不用轮询**);
+   * 没空位 → 返回 202 + jobId,前端轮询 `GET ?jobId=` 看位置与结果。
+   */
+  const slot = q.acquire(jobId, descr)
+  if (!slot) {
+    const out = await run(jobId, descr, body.retryHint, { baseUrl, model, apiKey, cid, admin })
+    return json(out.body, out.status, isNew ? cid : '')
+  }
+
+  // 排队:后台等轮到自己,完成后把结果写进 job;客户端轮询取
+  void slot
+    .then(() => run(jobId, descr, body.retryHint, { baseUrl, model, apiKey, cid, admin }))
+    .catch((e: Error) => {
+      // 排队期间被取消 / 超时 —— 此时 `run` 压根没执行,也就没预扣过预算,无需 refund
+      q.finish(jobId, e.message === 'CANCELLED' ? 'cancelled' : 'error', undefined, {
+        message: e.message === 'CANCELLED' ? '已取消' : '排队超时,请重新生成',
+        status: 429,
+      })
+    })
+
+  const job = q.get(jobId)
+  return json(
+    {
+      state: 'queued',
+      jobId,
+      position: job?.position ?? 1,
+      etaMs: job?.etaMs ?? 45_000,
+      remainingToday: Math.max(0, DAILY_PER_CID - today),
+    },
+    202,
+    isNew ? cid : '',
+  )
+}
+
+/** 统一出口:顺带把新访客的 `zx_cid` cookie 带上 */
+function json(body: Record<string, unknown>, status: number, setCid?: string): Response {
+  const h = new Headers({ 'Content-Type': 'application/json' })
+  if (setCid) h.append('Set-Cookie', cidCookie(setCid))
+  return new Response(JSON.stringify(body), { status, headers: h })
+}
+
+interface RunTarget {
+  baseUrl: string
+  model: string
+  apiKey: string
+  cid: string
+  admin: boolean
+}
+
+/** 真正跑一次生成(含预算预扣 / 结算 / 槽位归还 / 终态落库) */
+async function run(
+  jobId: string,
+  descr: string,
+  retryHint: string | undefined,
+  t: RunTarget,
+): Promise<{ body: Record<string, unknown>; status: number }> {
+  const q = queue()
+
+  // 预算闸:真正开跑前才检查(排队期间不占额度),并记一笔在途预估
+  const gate = reserve({ cid: t.cid, isAdminUser: t.admin, model: t.model })
+  if (!gate.ok) {
+    const body = { error: gate.reason ?? '今天的生成额度用完了' }
+    q.finish(jobId, 'error', undefined, { message: body.error, status: 429 })
+    q.release()
+    return { body, status: 429 }
+  }
+
   try {
-    const result = await generateOnce(descr, body.retryHint, { baseUrl, model, apiKey })
+    const result = await generateOnce(descr, retryHint, t)
+    const cost = settle({
+      cid: t.cid,
+      isAdminUser: t.admin,
+      model: t.model,
+      ok: !('error' in result),
+      tokens: 'tokens' in result ? result.tokens : undefined,
+    })
+
     if ('error' in result) {
-      return Response.json({ error: result.error, raw: result.raw }, { status: result.status })
+      const body = { error: result.error, raw: result.raw }
+      q.finish(jobId, 'error', undefined, { message: result.error, status: result.status })
+      return { body, status: result.status }
     }
-    cache.set(key, result.bp)
+
     const compiled = compileBlueprint(result.bp)
-    return Response.json({
+    const body = {
+      state: 'done',
       blueprint: result.bp,
       parts: compiled.rig.parts.length,
       ms: Date.now() - result.started,
-    })
+      spentUsd: cost.usd,
+      todayUsd: cost.todayUsd,
+      budget: cost.budget,
+      day: budgetDay(),
+      remainingToday: remainingForCid(t.cid, t.admin),
+    }
+    // 已被客户端取消的,结果就别浪费地回传了(但 token 已经花了,如实记账)
+    const job = q.get(jobId)
+    if (job?.state === 'cancelled') {
+      q.finish(jobId, 'cancelled')
+    } else {
+      q.finish(jobId, 'done', body)
+    }
+    return { body, status: 200 }
   } finally {
-    inflight--
+    q.release()
   }
 }
 
-/** 在途生成数(进程内);挡住把上游配额一次性打爆 */
-let inflight = 0
-const MAX_INFLIGHT = 4
+interface GenOk {
+  bp: CreatureBlueprint
+  started: number
+  tokens: { input: number; output: number; cacheRead: number }
+}
 
 async function generateOnce(
   descr: string,
   retryHint: string | undefined,
-  t: { baseUrl: string; model: string; apiKey: string },
-): Promise<{ bp: CreatureBlueprint; started: number } | { error: string; raw: string; status: number }> {
+  t: RunTarget,
+): Promise<GenOk | { error: string; raw: string; status: number }> {
   const started = Date.now()
   /**
    * **总时限**,而不是「每次尝试各 120s」。
@@ -106,8 +234,10 @@ async function generateOnce(
     const remain = DEADLINE - (Date.now() - started)
     if (remain < 20_000) break // 剩下的时间不够一次生成,别再开新一轮
     let raw: string
+    let inTokens = 0
+    let outTokens = 0
     try {
-      raw = await completeChat({
+      const r = await completeChatFull({
         protocol: chatProtocol(),
         baseUrl: t.baseUrl,
         apiKey: t.apiKey,
@@ -118,6 +248,9 @@ async function generateOnce(
         signal: AbortSignal.timeout(Math.min(remain, 150_000)),
         sessionId: randomUUID(),
       })
+      raw = r.text
+      inTokens = r.inTokens ?? 0
+      outTokens = r.outTokens ?? 0
     } catch (e) {
       lastErr = e instanceof Error ? e.message : String(e)
       continue
@@ -125,7 +258,13 @@ async function generateOnce(
     lastRaw = raw
     const parsed = extractJson(raw)
     const candidate = normalizeBlueprint(parsed)
-    if (candidate) return { bp: candidate, started }
+    if (candidate) {
+      return {
+        bp: candidate,
+        started,
+        tokens: { input: inTokens, output: outTokens, cacheRead: 0 },
+      }
+    }
     lastErr = parsed ? 'JSON 结构不符合骨架要求' : '响应里没有可解析的 JSON'
   }
 

@@ -126,6 +126,11 @@
   color: #ffb0b0;
 }
 
+/* 排队中:和「正在生成」区分开,让人知道要等而不是坏了 */
+.sp-status span[data-queue='1'] {
+  color: #e8d48a;
+}
+
 /* 事实栏里的小标签 */
 .sp-chip {
   padding: 1px 7px;

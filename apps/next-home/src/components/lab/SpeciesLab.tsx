@@ -55,29 +55,36 @@ export function SpeciesLab() {
   const matureDay = usingGenerated ? compiled.matureDay : fallback.matureDay
   const growthPct = Math.round(Math.min(1, day / matureDay) * 100)
 
+  /** 已经为哪个描述自动生成过(防止「描述没变也重生成」) */
+  const autoRanFor = useRef<string | null>(null)
+
+  /**
+   * **一次提交 = 一次生成。**
+   *
+   * 以前这里是 `setCommitted(d)` + `generate(d)` 各来一次,而下面 auto 的 effect 又会
+   * 因 committed 变化再生成一次 —— auto 默认开着,于是**点一下打两次模型**(客户端
+   * 会 abort 第一个,但上游那次仍在烧钱)。现在只改 committed,由下面唯一的 effect 驱动。
+   * 关掉 auto 时才在这里直接生成。
+   */
   const run = useCallback(
     (descr: string) => {
       const d = descr.trim()
       if (!d) return
       setCommitted(d)
-      void generate(d)
+      if (!auto) {
+        autoRanFor.current = d // 记下已跑过,免得随后打开 auto 又重跑一次
+        void generate(d)
+      }
     },
-    [generate],
+    [auto, generate],
   )
 
-  // 自动模式:每次 committed 变化生成一次。用 ref 拿最新函数,避免「描述没变也重生成」
-  const genRef = useRef(generate)
-  useEffect(() => {
-    genRef.current = generate
-  }, [generate])
-
-  const autoRanFor = useRef<string | null>(null)
   useEffect(() => {
     if (!auto) return
     if (autoRanFor.current === committed) return
     autoRanFor.current = committed
-    void genRef.current(committed)
-  }, [committed, auto])
+    void generate(committed)
+  }, [committed, auto, generate])
 
   const score = state.score
   const verdict = score ? (score.total >= 75 ? 'ok' : score.total >= 55 ? 'mid' : 'bad') : undefined
@@ -128,6 +135,11 @@ export function SpeciesLab() {
         <span>第 {day.toFixed(1)} 天</span>
         {state.cached && <span className="sp-chip">缓存</span>}
         {state.ms > 0 && <span className="sp-chip">{(state.ms / 1000).toFixed(1)}s</span>}
+        {state.remainingToday >= 0 && (
+          <span className="sp-chip" title="每人每天的生成只数;日预算烧完后也会停">
+            今日还可 {state.remainingToday} 只
+          </span>
+        )}
         {score && (
           <span className="sp-chip" data-score={verdict} title="本地启发式评分,满分 100">
             评分 {score.total.toFixed(0)}
@@ -139,7 +151,11 @@ export function SpeciesLab() {
       {/* 评分明细 + 生成状态 */}
       {(score || state.loading || state.error) && (
         <div className="sp-status" data-bad={state.error ? '1' : '0'}>
-          {state.loading && <span>⏳ {state.phase || '处理中…'}</span>}
+          {state.loading && (
+            <span data-queue={state.queuePosition > 0 ? '1' : '0'}>
+              {state.queuePosition > 0 ? '⏳ 排队' : '⏳'} {state.phase || '处理中…'}
+            </span>
+          )}
           {!state.loading && state.error && (
             <span>
               ⚠ {state.error}
