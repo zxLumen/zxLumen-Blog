@@ -14,7 +14,7 @@ const ICON_RE = /^\/apps\/[a-z0-9][a-z0-9-]{0,39}\.(?:jpg|jpeg|png|webp)$/i
 const DEFAULT_APPS: AppItem[] = [
   { id: 'github', name: 'GitHub', url: 'https://github.com/zxlumen', bind: 'github' },
   { id: 'resume', name: '简历', url: '/resume.pdf', bind: 'resume' },
-  { id: 'luminari', name: '生灵', url: '/apps/luminari.png', openIn: 'panel', bind: 'luminari' },
+  { id: 'luminari', name: '生灵', url: 'luminari.zxlumen.cn', icon: '/apps/luminari.png', openIn: 'panel', bind: 'luminari' },
 ]
 
 /** 规范化单条(过滤非法值,兜底字段);无 id 则丢弃 */
