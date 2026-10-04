@@ -11,7 +11,7 @@
  * 所有分项与权重都导出,便于日后调参;排名在读取时算,原始分入库,所以改权重零成本。
  */
 
-import { TRAIT_AXES, type CreatureDna } from './spec.js'
+import { TRAIT_AXES, TRAIT_LABELS, type CreatureDna } from './spec.js'
 import { keywordMatch } from './fallback.js'
 
 /**
@@ -368,15 +368,19 @@ function scoreFidelity(
   const text = descr.trim()
   if (!text) return { v: 0.5, notes: [] }
 
-  /** 各类特征:描述里出现了才进入分母,避免「没提」被算成「没做到」 */
-  const checks: { hit: boolean; note: string }[] = []
+  /**
+   * 各类特征:描述里出现了才进入分母,避免「没提」被算成「没做到」。
+   * `w` 是达成度 0..1(不是布尔):「气质轴半亮」这种中间态要能表达。
+   */
+  const checks: { w: number; note: string }[] = []
+  const hit = (ok: boolean, note: string) => checks.push({ w: ok ? 1 : 0, note })
 
   // 1) 触须/触手/角/鳍 —— 有没有细长末梢部件
   if (/触须|触手|触角|鹿角|龙角|触|须/.test(text)) {
     const has = ctx.parts?.some(
       (p) => /触|须|角|antenna|tentacle|horn|fin/i.test(`${p.id ?? ''}${p.role ?? ''}`),
     )
-    checks.push({ hit: has ?? false, note: '触须/角' })
+    hit(has ?? false, '触须/角')
   }
   // 2) 腿/足 —— 腿的条数是否与描述一致(「六条腿」这种硬要求必须能验)
   if (/条腿|腿|足|爪|蹄/.test(text)) {
@@ -385,29 +389,32 @@ function scoreFidelity(
     // 描述给了具体条数就精确比对,只说「有腿」则只看存不存在。
     // 差一条不算失败(模型数错很正常),差一半才算没照做。
     const legHit = want ? legs === want || Math.abs(legs - want) === 1 : legs > 0
-    checks.push({ hit: legHit, note: `腿(${legs}${want ? `/${want}` : ''})` })
+    hit(legHit, `腿(${legs}${want ? `/${want}` : ''})`)
   }
   // 3) 眼 —— 有没有眼部件
   if (/眼|睛|瞳/.test(text)) {
-    checks.push({ hit: (ctx.parts?.some((p) => /眼|eye/i.test(`${p.id ?? ''}${p.role ?? ''}`)) ?? false) || dna.traits.luminous > 0, note: '眼' })
+    hit(
+      (ctx.parts?.some((p) => /眼|eye/i.test(`${p.id ?? ''}${p.role ?? ''}`)) ?? false) || dna.traits.luminous > 0,
+      '眼',
+    )
   }
   // 4) 发光/辉光 —— 要么有 glow 部件,要么 luminous 特质够高
   if (/发光|辉光|光|亮|荧|闪/.test(text)) {
     const glowPart = ctx.parts?.some((p) => p.role === 'glow' || /glow|光/i.test(p.id ?? ''))
-    checks.push({ hit: !!glowPart || dna.traits.luminous >= 3, note: '发光' })
+    hit(!!glowPart || dna.traits.luminous >= 3, '发光')
   }
   // 5) 翼/翅 —— 飞行动效或翼部件
   if (/翼|翅|飞/.test(text)) {
     const wing = ctx.parts?.some((p) => /翼|翅|wing/i.test(`${p.id ?? ''}${p.role ?? ''}`))
-    checks.push({ hit: !!wing || ctx.motionFamily === 'flap' || ctx.motionFamily === 'glide', note: '翼' })
+    hit(!!wing || ctx.motionFamily === 'flap' || ctx.motionFamily === 'glide', '翼')
   }
   // 6) 尾 —— 尾巴部件
   if (/尾/.test(text)) {
-    checks.push({ hit: ctx.parts?.some((p) => /尾|tail/i.test(`${p.id ?? ''}${p.role ?? ''}`)) ?? false, note: '尾' })
+    hit(ctx.parts?.some((p) => /尾|tail/i.test(`${p.id ?? ''}${p.role ?? ''}`)) ?? false, '尾')
   }
   // 7) 描述点名了颜色 —— 配色里是否真的带上了那个色相
   if (/[青蓝绿金银紫橙白黑粉红霓虹]/.test(text)) {
-    checks.push({ hit: paletteEchoesColor(dna, text), note: '配色' })
+    hit(paletteEchoesColor(dna, text), '配色')
   }
   // 8) 描述给了动作(游/爬/跳/飞/摆) —— 动效 family 是否对得上
   const fam = ctx.motionFamily
@@ -415,9 +422,36 @@ function scoreFidelity(
     const wantSwim = /游|泳|滑/.test(text)
     const wantCrawl = /爬|走|行|迈|步/.test(text)
     const wantHop = /跳|跃|蹦/.test(text)
-    if (wantSwim) checks.push({ hit: fam === 'swim', note: '游' })
-    if (wantCrawl) checks.push({ hit: fam === 'walk', note: '走' })
-    if (wantHop) checks.push({ hit: fam === 'hop', note: '跳' })
+    if (wantSwim) hit(fam === 'swim', '游')
+    if (wantCrawl) hit(fam === 'walk', '走')
+    if (wantHop) hit(fam === 'hop', '跳')
+  }
+
+  /* 9) **气质轴**:描述点名的性格词,对应的特质轴有没有真的被点亮。
+   *
+   * 补的是上面 1~8 全都盖不住的洞:它们逐项查的都是**看得见的物理特征**(有触须吗、
+   * 腿数对吗、发光吗),而「赛博朋克 / 可爱 / 凶猛 / 远古」这类**气质词**既不长在
+   * 部件上也不体现在动作里 —— 它唯一的载体就是那八条特质轴。
+   *
+   * ⚠ 别把这当成「VQA」自我评价:模型没被问到「你觉得自己赛博吗」,所以不存在
+   * 循环论证。检查的是**词表 → 轴**这条确定性映射有没有被兑现 —— 描述点了 cyber,
+   * 模型却把 cyber 轴留在 0,是真实且高频的失败模式(模型理解到了氛围,但没落到
+   * 任何一个可渲染的字段上)。
+   *
+   * 真正的「看图说话」得让视觉模型看渲染结果,那是另一条更贵的管线;这一维是
+   * 免费、确定性、可复现的下界,并且能直接指出是哪根轴没亮。
+   *
+   * `luminous` 排除在外:它已经被第 4 项(发光部件/glow)覆盖,重复计入会让
+   * 「发光」在分母里占两票。
+   */
+  for (const axis of TRAIT_AXES) {
+    if (axis === 'luminous') continue
+    const words = VIBE_WORDS[axis]
+    if (!words?.some((w) => text.includes(w))) continue
+    const v = dna.traits[axis] ?? 0
+    // 轴值 0..5:≥2 算照做(占量程 40%),=1 算半亮,=0 是彻底没兑现
+    const w = v >= 2 ? 1 : v === 1 ? 0.5 : 0
+    checks.push({ w, note: `${TRAIT_LABELS[axis]}(${v})` })
   }
 
   // 描述里没点到任何可验证的特征 —— 不奖不罚,给中性
@@ -435,15 +469,43 @@ function scoreFidelity(
    * 而当描述提了多项要求时,漏掉就该扣 —— 那正是 rich 档该被认出来的地方。
    */
   if (checks.length === 1) {
-    const notes = [`${checks[0]!.hit ? '✓' : '✗'}${checks[0]!.note}`]
-    return { v: checks[0]!.hit ? 1 : 0.4, notes }
+    const only = checks[0]!
+    return { v: only.w >= 0.5 ? 1 : 0.4, notes: [noteOf(only)] }
   }
 
-  const hit = checks.filter((c) => c.hit).length
+  const got = checks.reduce((a, c) => a + c.w, 0)
   // 全中给满分;漏一半给 0.5(不是线性惩罚,漏一两条不至于致命)
-  const v = clamp01(0.35 + 0.65 * (hit / checks.length))
-  const notes = checks.map((c) => `${c.hit ? '✓' : '✗'}${c.note}`)
-  return { v, notes }
+  const v = clamp01(0.35 + 0.65 * (got / checks.length))
+  return { v, notes: checks.map(noteOf) }
+}
+
+/** 一项落实检查的可读备注:✓ 照做 / ~ 半亮 / ✗ 没做到 */
+function noteOf(c: { w: number; note: string }): string {
+  return `${c.w >= 1 ? '✓' : c.w > 0 ? '~' : '✗'}${c.note}`
+}
+
+/**
+ * 每条特质轴的**气质词** —— 用于「描述点名的性格,轴有没有亮」这项落实检查。
+ *
+ * ⚠ 为什么不能用 `fallback.ts` 的 `TRAIT_WORDS`:那份词表是为**生成**服务的,
+ * 追求「宁可多点亮一根轴」,所以收得很宽(`cute` 含 `小`/`圆`,`organic` 含 `肉`/`生物`,
+ * `luminous` 含 `光`/`亮`)。生成时点亮 `cute` 没坏处,评分时就全是坏处:
+ * 「一只**小**东西」也会被判成「点名了可爱」,然后因为 cute 轴没到 2 而扣分 ——
+ * 这不是扣分,这是**造出来的**扣分。
+ *
+ * 所以这里另立一份**高精度**词表:只收本身就明确在表达某种气质的词(多为双字以上),
+ * 不收任何单独出现也常见于中性描述的通用字。
+ *
+ * `luminous` 不在此列 —— 「发光」已经由上面第 4 项按 glow 部件判过了,重复计票。
+ */
+const VIBE_WORDS: Record<string, string[]> = {
+  mechanical: ['机械', '齿轮', '铆钉', '钢铁', '机油', '装甲', '铰链', '蒸汽朋克'],
+  organic: ['血肉', '藤蔓', '有机体', '腐肉', '孢子'],
+  ethereal: ['空灵', '幽灵', '缥缈', '虚影', '仙气', '半透明'],
+  fierce: ['凶猛', '暴戾', '利爪', '獠牙', '狂怒', '狰狞', '杀戮'],
+  cute: ['可爱', '萌', '呆萌', '圆头', '软糯', '毛茸茸', '奶乎乎'],
+  ancient: ['远古', '上古', '年迈', '沧桑', '古旧', '遗迹', '苍老'],
+  cyber: ['赛博', '霓虹', '科幻', '全息', '代码', '数码', '电子', '未来感'],
 }
 
 /** 中文/阿拉伯数字 → 数值,用于「六条腿」这种硬要求 */

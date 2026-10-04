@@ -40,6 +40,18 @@ export const TRAIT_AXES = [
 ] as const
 export type TraitAxis = (typeof TRAIT_AXES)[number]
 
+/** 轴的中文名,展示用(评分备注、校验台图例) */
+export const TRAIT_LABELS: Record<TraitAxis, string> = {
+  mechanical: '机械',
+  organic: '有机',
+  ethereal: '空灵',
+  fierce: '凶猛',
+  cute: '可爱',
+  ancient: '远古',
+  cyber: '赛博',
+  luminous: '发光',
+}
+
 /** 阶段数:0 孢子 / 1 幼体 / 2 成体 / 3 觉醒 */
 export const STAGE_COUNT = 4
 export const STAGE_LABELS = ['孢子', '幼体', '成体', '觉醒'] as const

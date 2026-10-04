@@ -55,3 +55,11 @@ export {
   rankOf,
 } from './score.js'
 export type { ScoreBreakdown, RankedCreature } from './score.js'
+
+/** 批次级多样性 / 新颖度(不进 ScoreBreakdown.total,理由见 diversity.ts) */
+export { diversityOf } from './diversity.js'
+export type { DiversityReport, DiversityPerItem, DimSpread } from './diversity.js'
+
+/** 逐维校准:各维与人工评价的秩相关 + 分布 */
+export { rhoOf, distOf, calibrate, deadThreshold, DIM_KEYS, MIN_N_FOR_RHO } from './calibrate.js'
+export type { Calibration, DimCalib, Dist, RatedRow, DimKey } from './calibrate.js'

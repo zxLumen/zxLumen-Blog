@@ -106,10 +106,22 @@
 }
 
 .sc-ref h2 {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
   margin: 0 0 9px;
   color: var(--cl-dim);
   font-size: 13px;
   font-weight: 600;
+}
+
+/* 标题右侧的副标:说明这个口径的性质(如「不进总分」「用的什么相关」) */
+.sc-ref h2 em {
+  color: var(--cl-dim);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 400;
+  opacity: 0.75;
 }
 
 .sc-ref-row {
@@ -223,13 +235,19 @@
 
 .sc-row {
   display: flex;
-  gap: 9px;
-  align-items: center;
+  flex-direction: column;
   padding: 7px 9px;
   border: 1px solid var(--cl-line);
   border-left-width: 3px;
   border-radius: 10px;
   background: var(--cl-card);
+}
+
+/* 行内容本体:横向一列(排名 / 缩略图 / 信息) */
+.sc-rowtop {
+  display: flex;
+  gap: 9px;
+  align-items: center;
 }
 
 .sc-row[data-status='loading'] {
@@ -266,6 +284,7 @@
 }
 
 .sc-thumb {
+  position: relative;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -279,6 +298,31 @@
     linear-gradient(90deg, color-mix(in srgb, var(--cl-fg) 5%, transparent) 1px, transparent 1px);
   background-size: 20px 20px;
   cursor: pointer;
+}
+
+/* 展开状态:缩略图本身给个实底色 + 主色描边,和行边框一起提示「它开着」 */
+.sc-row[data-picked='1'] .sc-thumb {
+  border-color: var(--cl-accent);
+  background-color: color-mix(in srgb, var(--cl-accent) 10%, #0e1420);
+}
+
+/* 角标:折叠时提示「点它能展开」,展开时改成「收起」 */
+.sc-thumb-caret {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cl-card) 82%, transparent);
+  color: var(--cl-dim);
+  font-size: 9px;
+  line-height: 14px;
+  letter-spacing: 0.2px;
+}
+
+.sc-row[data-picked='1'] .sc-thumb-caret {
+  background: var(--cl-accent);
+  color: #08121c;
 }
 
 .sc-row[data-status='idle'] .sc-thumb .rig-svg,
@@ -413,57 +457,65 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* 展开详情:大图 + 成长条带                                            */
+/* 就地展开:大图 + 完整生命周期条带(每条自带,不是页面底部一块)        */
 /* ------------------------------------------------------------------ */
 
-.sc-detail {
-  margin-top: 18px;
-  padding: 12px;
-  border: 1px solid var(--cl-line);
-  border-radius: 12px;
-  background: var(--cl-card);
+.sc-open {
+  display: grid;
+  grid-template-columns: 276px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed color-mix(in srgb, var(--cl-line) 80%, transparent);
 }
 
-.sc-detail h2 {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 0 0 10px;
-  font-size: 15px;
+@media (width <= 720px) {
+  .sc-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-.sc-x {
-  padding: 2px 10px;
-  border: 1px solid var(--cl-line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--cl-dim);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.sc-detail-stage {
+.sc-open-stage {
   display: grid;
   place-items: center;
-  max-width: 420px;
-  margin: 0 auto;
   padding: 8px;
   border: 1px solid var(--cl-line);
   border-radius: 11px;
   background-color: #0e1420;
 }
 
-.sc-detail-strip {
-  display: flex;
-  gap: 5px;
-  margin-top: 10px;
-  overflow-x: auto;
-  padding-bottom: 5px;
+.sc-open-tip {
+  margin-top: 5px;
+  color: var(--cl-dim);
+  font-size: 10px;
 }
 
-.sc-detail-strip figure {
-  flex: 0 0 auto;
+.sc-open-life h3 {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  color: var(--cl-fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sc-open-life h3 em {
+  color: var(--cl-dim);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+/* 11 帧一行放不下就换行 —— 不做横向滚动,横向滚会把「这是第几天」藏掉 */
+.sc-open-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.sc-open-strip figure {
   margin: 0;
   padding: 4px;
   border: 1px solid var(--cl-line);
@@ -471,14 +523,31 @@
   text-align: center;
 }
 
-.sc-detail-strip figcaption {
+/* 阶段用左边框颜色区分:孢子灰 / 幼体青 / 成体黄 / 觉醒紫 */
+.sc-open-strip figure[data-stage='孢子'] {
+  border-left: 3px solid color-mix(in srgb, #6b7280 70%, transparent);
+}
+
+.sc-open-strip figure[data-stage='幼体'] {
+  border-left: 3px solid color-mix(in srgb, #7fe0a8 70%, transparent);
+}
+
+.sc-open-strip figure[data-stage='成体'] {
+  border-left: 3px solid color-mix(in srgb, #e8d48a 70%, transparent);
+}
+
+.sc-open-strip figure[data-stage='觉醒'] {
+  border-left: 3px solid color-mix(in srgb, #c9a0ff 70%, transparent);
+}
+
+.sc-open-strip figcaption {
   margin-top: 2px;
   color: var(--cl-dim);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
-.sc-detail-descr {
+.sc-open-descr {
   margin: 10px 0 0;
   color: var(--cl-dim);
   font-size: 12px;
@@ -556,5 +625,139 @@
   font-size: 10px;
   letter-spacing: 0.2px;
   white-space: nowrap;
+}
+
+/* 每行的批内新颖度。data-lo=1 → 批里有东西和它几乎一样 */
+.sc-nv {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--cl-line);
+  border-radius: 999px;
+  color: var(--cl-dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.sc-nv[data-lo='1'] {
+  border-color: color-mix(in srgb, #e8d48a 50%, var(--cl-line));
+  background: color-mix(in srgb, #e8d48a 10%, transparent);
+  color: #e8d48a;
+}
+
+/* 分维离散度条:直接指出「哪一维整批没在变」 */
+.sc-spread {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 10px;
+}
+
+.sc-spread-dim {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sc-spread-dim em {
+  flex: 0 0 34px;
+  color: var(--cl-dim);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.sc-spread-dim i {
+  flex: 1 1 auto;
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cl-fg) 8%, transparent);
+}
+
+.sc-spread-dim i b {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cl-accent) 65%, var(--cl-fg));
+}
+
+/* 离散度≈0 = 这一维整批没在变,是调参前该先看的 */
+.sc-spread-dim[data-lo='1'] i b {
+  background: #ffb0b0;
+}
+
+.sc-spread-dim > span {
+  flex: 0 0 26px;
+  color: var(--cl-dim);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 逐维相关表 */
+.sc-rho {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-rho th {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--cl-line);
+  color: var(--cl-dim);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.sc-rho td {
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--cl-line) 55%, transparent);
+  color: var(--cl-fg);
+}
+
+.sc-rho-w {
+  width: 46px;
+  color: var(--cl-dim);
+}
+
+.sc-rho-d {
+  color: var(--cl-dim);
+}
+
+.sc-rho td em {
+  color: var(--cl-dim);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.sc-rho td b {
+  font-size: 14px;
+}
+
+.sc-rho td b[data-sign='1'] {
+  color: #7fe0a8;
+}
+
+.sc-rho td b[data-sign='-1'] {
+  color: #ffb0b0;
+}
+
+/* ρ≈0:拿了权重却测不出信号 → 正在稀释总分 */
+.sc-rho tr[data-dead='1'] {
+  background: color-mix(in srgb, #ffb0b0 7%, transparent);
+}
+
+.sc-rho tr[data-dead='1'] td b {
+  color: #e8d48a;
+}
+
+.sc-rho-total td {
+  border-top: 1px solid var(--cl-line);
+  border-bottom: none;
+  font-weight: 600;
 }
 

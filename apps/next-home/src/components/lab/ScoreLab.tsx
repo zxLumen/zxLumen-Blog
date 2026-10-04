@@ -6,16 +6,23 @@
  * 上一页(`/lab/species`)能看出模型每次生成的东西不一样,但那只回答了**多样性**。
  * 这里回答的是另一个问题:**`heuristicScore` 给的分,是有意义的信号还是在吃噪声?**
  *
- * 只把 30 只按分排开等于自己读自己 —— 排名里没有一个外部参照。所以页面给两个
+ * 只把 30 只按分排开等于自己读自己 —— 排名里没有一个外部参照。所以页面给四个
  * 参照,而且都是**能证伪**的:
  *
- * 1. **同原型三档对照(外部参照 = 描述丰富度)**
- *    随机描述按三连一组出题,同一组 `sparse / medium / rich` **共用同一个原型**,
- *    只改描述的丰富度 —— 于是「丰富度」成了唯一自变量,「动物本身好不好看」这个
- *    混淆变量被控制住了。**若三档均分不呈上升,评分就没在认描述质量。**
- * 2. **机器排名 vs 我的评价(外部参照 = 人)**
- *    每只给你三个按钮(棒 / 还行 / 差)。评完直接看一致度,以及偏差最大的那几只 ——
- *    机器和人分歧最大的样本,往往就是评分公式的 bug 线索。
+ *  1. **同原型三档对照(外部参照 = 描述丰富度)**
+ *     随机描述按三连一组出题,同一组 `sparse / medium / rich` **共用同一个原型**,
+ *     只改描述的丰富度 —— 于是「丰富度」成了唯一自变量,「动物本身好不好看」这个
+ *     混淆变量被控制住了。**若三档均分不呈上升,评分就没在认描述质量。**
+ *  2. **机器排名 vs 我的评价(外部参照 = 人)**
+ *     每只给你三个按钮(棒 / 还行 / 差)。评完直接看一致度,以及偏差最大的那几只 ——
+ *     机器和人分歧最大的样本,往往就是评分公式的 bug 线索。
+ *  3. **批次多样性 / 新颖度** —— 分数只说「这只做得对不对」,这一项说「这批东西
+ *     像不像一个模子刻的」。**它故意不进总分**:新颖度是批次相对量,塞进单只分数
+ *     会让同一个分数在不同上下文里含义不同(见 `diversity.ts`)。
+ *  4. **各维与我的评价相关多少(Spearman ρ)**
+ *     上一栏的总分一致度有个致命毛病:**它可以是正的,而里面好几维其实是纯噪声** ——
+ *     高权重维度把低权重维度的噪声盖掉了。逐维算 ρ 才能拆开这层掩盖:
+ *     **权重大不代表这一维有信息量**,只有 ρ 能说明。
  *
  * 并发自己控(默认 8 路),不靠服务端队列:一批 30 只会把服务端的 12 个槽位灌满,
  * 后面十几只排队超过 90s 就被丢了,白跑。
@@ -35,6 +42,8 @@ import {
   type RandomItem,
   type ScoreBreakdown,
 } from '@zx/shared/creature'
+import { diversityOf, calibrate, MIN_N_FOR_RHO } from '@zx/shared/creature'
+import { STAGE_LABELS, STAGE_COUNT, DAILY_XP, stageFloatOf } from '@zx/shared/creature'
 import { RigCreature } from './renderers/RigCreature'
 import { fallbackDna } from '@zx/shared/creature'
 import { speciesFor } from './species'
@@ -61,6 +70,19 @@ const CONCURRENCY = 8
 const RATINGS = ['棒', '还行', '差'] as const
 type Rating = (typeof RATINGS)[number]
 const RATING_SCORE: Record<Rating, number> = { 棒: 2, 还行: 1, 差: 0 }
+
+/**
+ * 生命周期条带要抽的几天。
+ *
+ * 前 6 天故意挨得密(阶段切换全在前 19 天内),后面拉开 —— 观众一眼要看出
+ * 「孢子 → 幼体 → 成体 → 觉醒」这几次形变,而不是盯着一个不动的成体。
+ */
+const LIFECYCLE_DAYS = [0, 2, 4, 7, 10, 14, 19, 25, 34, 45, 60] as const
+
+/** 站在第 day 天看它处于哪个阶段(纯时间、无互动,与 growth.ts 同一条公式) */
+function stageOfDay(day: number): number {
+  return Math.min(Math.floor(stageFloatOf(day * DAILY_XP)), STAGE_COUNT - 1)
+}
 
 interface Item {
   id: number
@@ -301,6 +323,29 @@ export function ScoreLab() {
     }
   }, [ranked])
 
+  /**
+   * P0-1 批次多样性 / 新颖度。
+   *
+   * 只拿**已编译出 DNA** 的样本算 —— `fallbackDna` 是程序补的默认产物,混进来会
+   * 把「模型生成得多样」变成「默认 DNA 有多套」。`ranked` 已排序,`perItem` 与
+   * `done` 同下标,所以用 id 建回指表给每行显示自己的新颖度。
+   */
+  const diversity = useMemo(() => {
+    const done = ranked.filter((i) => i.dna)
+    if (done.length < 2) return null
+    const report = diversityOf(done.map((i) => i.dna!))
+    const byId = new Map(done.map((i, k) => [i.id, report.perItem[k]!]))
+    return { ...report, byId, names: done.map((i) => i.blueprint?.dna.name ?? `#${i.id}`), n: done.length }
+  }, [ranked])
+
+  /** P0-2 逐维校准:各维与人工评价的秩相关 */
+  const calib = useMemo(() => {
+    const rows = ranked
+      .filter((i) => i.score && i.rating)
+      .map((i) => ({ score: i.score!, rating: RATING_SCORE[i.rating!] }))
+    return rows.length ? calibrate(rows) : null
+  }, [ranked])
+
   const totals = useMemo(() => {
     const xs = items.filter((i) => i.score).map((i) => i.score!.total)
     if (!xs.length) return null
@@ -312,8 +357,6 @@ export function ScoreLab() {
       spread: Math.max(...xs) - Math.min(...xs),
     }
   }, [items])
-
-  const active = items.find((i) => i.id === picked) ?? null
 
   return (
     <div className="cl-root sc-root">
@@ -450,6 +493,155 @@ export function ScoreLab() {
                       —— 这些是评分公式最该先看的样本。
                     </p>
                   )}
+                  <p className="sc-hint">
+                    ⚠ 这一栏只说明<b>总分</b>名次和你的观感大方向一致,不能说明<b>七维都在干活</b>:
+                    权重大的一维会把权重小的噪声盖掉。所以下一栏才把它拆开逐维算。
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* P0-1 参照三:批次多样性 / 新颖度 */}
+            <div className="sc-ref">
+              <h2>
+                参照三 · 批次多样性 / 新颖度
+                <em>这一项不进总分</em>
+              </h2>
+              {!diversity ? (
+                <p className="sc-warn">至少要 2 只生成成功才有得比。</p>
+              ) : (
+                <>
+                  <div className="sc-ref-row">
+                    <span className="sc-ref-cell">
+                      <em>平均新颖度</em>
+                      <b>{(diversity.meanNovelty * 100).toFixed(0)}</b>
+                      <i>到最近邻的距离</i>
+                    </span>
+                    <span className="sc-ref-cell">
+                      <em>diversity</em>
+                      <b>{(diversity.diversity * 100).toFixed(0)}</b>
+                      <i>两两距离达标比例</i>
+                    </span>
+                    <span className="sc-ref-cell">
+                      <em>覆盖率</em>
+                      <b>{(diversity.coverage * 100).toFixed(0)}</b>
+                      <i>
+                        {diversity.occupied}/{diversity.cells} 格
+                      </i>
+                    </span>
+                  </div>
+                  {/*
+                   * 分维离散度是这块最有用的部分:距离类指标只说「不够多样」,
+                   * 这里直接指出**是哪一维整批没在变**(实践中最常见的是动效参数雷同)。
+                   */}
+                  <div className="sc-spread">
+                    {diversity.dims.map((d) => (
+                      <span key={d.key} className="sc-spread-dim" data-lo={d.spread < 0.05 ? '1' : '0'}>
+                        <em>{d.label}</em>
+                        <i>
+                          <b style={{ width: `${Math.round(Math.min(1, d.spread) * 100)}%` }} />
+                        </i>
+                        <span>{(d.spread * 100).toFixed(0)}</span>
+                      </span>
+                    ))}
+                  </div>
+                  {diversity.closest && diversity.closest.dist < 0.1 && (
+                    <p className="sc-warn">
+                      最挤的一对只差 <b>{diversity.closest.dist.toFixed(3)}</b>:
+                      {diversity.names[diversity.closest.a]} ≈ {diversity.names[diversity.closest.b]}
+                      {' '}
+                      —— 换 seed 或换描述模板,别在同一批上继续调参。
+                    </p>
+                  )}
+                  <p className="sc-hint">
+                    这三个口径<b>故意不等价</b>:新颖度只看最近邻(回答「有没有和它撞的」),
+                    diversity 看全部两两(对「一小撮 + 一堆孤点」稳健),
+                    覆盖率只数格子(最接近「不像都从一个模子刻的」)。
+                    <b>均值漂亮但最近邻普遍很近,就是「分成了几小簇」的典型形态</b> —— 所以每行都标了
+                    自己的最近邻距离,那一栏偏低的几只就是成批撞车的地方。
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* P0-2 参照四:逐维 vs 人工评价 */}
+            <div className="sc-ref">
+              <h2>
+                参照四 · 各维与我的评价相关多少
+                <em>Spearman ρ</em>
+              </h2>
+              {!calib || calib.n === 0 ? (
+                <p className="sc-warn">还没评价 —— 在下面的排名列表里给每只点「棒 / 还行 / 差」。</p>
+              ) : (
+                <>
+                  {!calib.enough && (
+                    <p className="sc-warn">
+                      已评 <b>{calib.n}</b> 只,还差 <b>{MIN_N_FOR_RHO - calib.n}</b> 只才够算 ρ
+                      (少于 {MIN_N_FOR_RHO} 只的相关系数波动大到没法当结论,宁可不报)。
+                    </p>
+                  )}
+                  <table className="sc-rho">
+                    <thead>
+                      <tr>
+                        <th>维度</th>
+                        <th>权重</th>
+                        <th>ρ(与我的评价)</th>
+                        <th>这一维自己的分布(min / 中位 / max)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {calib.perDim.map((d) => (
+                        <tr key={d.key} data-dead={d.rho !== null && Math.abs(d.rho) < calib.cut ? '1' : '0'}>
+                          <td>{SCORE_LABELS[d.key]}</td>
+                          <td className="sc-rho-w">{d.weight}</td>
+                          <td>
+                            {d.rho === null ? (
+                              <em>{calib.n < MIN_N_FOR_RHO ? '样本不足' : '无方差'}</em>
+                            ) : (
+                              <b data-sign={d.rho >= 0 ? '1' : '-1'}>{d.rho.toFixed(2)}</b>
+                            )}
+                          </td>
+                          <td className="sc-rho-d">
+                            {d.dist
+                              ? `${d.dist.min.toFixed(2)} / ${d.dist.median.toFixed(2)} / ${d.dist.max.toFixed(2)}`
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="sc-rho-total">
+                        <td>总分(加权)</td>
+                        <td className="sc-rho-w">100</td>
+                        <td>
+                          {calib.total.rho === null ? <em>—</em> : <b>{calib.total.rho.toFixed(2)}</b>}
+                        </td>
+                        <td className="sc-rho-d">
+                          {calib.total.dist
+                            ? `${calib.total.dist.min.toFixed(0)} / ${calib.total.dist.median.toFixed(0)} / ${calib.total.dist.max.toFixed(0)}`
+                            : '—'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {calib.deadWeight.length > 0 && (
+                    <p className="sc-warn">
+                      <b>
+                        {calib.deadWeight.map((d) => SCORE_LABELS[d.key]).join('、')}
+                      </b>{' '}
+                      的 |ρ| &lt; {calib.cut.toFixed(2)}(与 0 无法区分)—— 拿了权重却测不出与观感的关系,
+                      <b>正在稀释总分</b>。先把它们降权或砍掉,总分才会开始反映真实审美。
+                    </p>
+                  )}
+                  <p className="sc-hint">
+                    为什么用 <code>Spearman</code> 而非皮尔逊:「棒 / 还行 / 差」是<b>有序</b>而非等距,
+                    皮尔逊的线性假设会给出偏乐观的相关。ρ 只看名次,对档位间距不敏感。
+                    {' '}「无方差」= 该维所有样本同分或评价全打了同一档,这个问题本身无解,
+                    <b>不是 0,也不该当 0 读</b>。
+                    <br />
+                    判定线 <code>|ρ| &lt; {calib.cut.toFixed(2)}</code> 不是随手拍的常数,而是零相关的
+                    95% 置信半宽 <code>1.96/√(n−3)</code>(n={calib.n})—— <b>评得越少,线越高</b>。
+                    这条线只会把「明确测不出信号」的维挑出来,方向偏保守:宁可少标几个,
+                    不冤枉还在干活的维度。
+                  </p>
                 </>
               )}
             </div>
@@ -487,6 +679,25 @@ export function ScoreLab() {
                       ? 'mid'
                       : 'bad'
                   : undefined
+                /**
+                 * 这只在批内的最近邻距离。低于 0.2 = 批里有别的生物几乎和它一样,
+                 * 是「换 seed 才看得见差异」的典型样本 —— 把它单独标出来,
+                 * 免得调参时被这些重复样本误导。
+                 */
+                const nv = diversity?.byId.get(i.id)
+                const noveltyCell = nv?.nn != null ? (
+                  <span
+                    className="sc-nv"
+                    data-lo={nv.novelty < 0.35 ? '1' : '0'}
+                    title={
+                      nv.nnIdx >= 0
+                        ? `批内最近邻距离 ${nv.nn!.toFixed(3)}(新颖度 ${(nv.novelty * 100).toFixed(0)});最近邻是第 ${nv.nnIdx + 1} 个样本。接近 0 = 批里有东西和它几乎一样。`
+                        : '批内没有可比的邻居'
+                    }
+                  >
+                    新颖度 {nv.novelty.toFixed(2)}
+                  </span>
+                ) : null
                 return (
                   <div
                     key={i.id}
@@ -497,103 +708,121 @@ export function ScoreLab() {
                     data-density={i.density}
                     data-picked={picked === i.id ? '1' : '0'}
                   >
-                    <span className="sc-rank">{rank ?? '—'}</span>
-                    <button
-                      type="button"
-                      className="sc-thumb"
-                      onClick={() => setPicked(picked === i.id ? null : i.id)}
-                      title="点开看大图与成长条带"
-                    >
-                      <RigCreature
-                        dna={i.dna ?? fallbackDna(i.descr)}
-                        rig={i.rig ?? speciesFor(i.descr)}
-                        box={78}
-                        fixedDay={18}
-                        matureDay={i.matureDay}
-                      />
-                    </button>
-                    <div className="sc-info">
-                      <div className="sc-line1">
-                        <span className="sc-name">
-                          {i.blueprint?.dna.name ?? (i.error ? '失败' : i.wait ? '重试中' : '…')}
+                    <div className="sc-rowtop">
+                      <span className="sc-rank">{rank ?? '—'}</span>
+                      <button
+                        type="button"
+                        className="sc-thumb"
+                        onClick={() => setPicked(picked === i.id ? null : i.id)}
+                        title={picked === i.id ? '收起这只的生命周期' : '展开这只的完整生命周期'}
+                        aria-expanded={picked === i.id}
+                      >
+                        <RigCreature
+                          dna={i.dna ?? fallbackDna(i.descr)}
+                          rig={i.rig ?? speciesFor(i.descr)}
+                          box={78}
+                          fixedDay={18}
+                          matureDay={i.matureDay}
+                        />
+                        <span className="sc-thumb-caret" aria-hidden="true">
+                          {picked === i.id ? '收起' : '生命周期'}
                         </span>
-                        <span className="sc-dens" title="描述丰富度(同组三档共用一个原型)">
-                          {DENSITY_LABEL[i.density]}
-                        </span>
-                        <span className="sc-chip" data-score={verdict}>
-                          {i.score ? vv.toFixed(0) : ''}
-                        </span>
-                        {i.blueprint && <span className="sc-mini">{i.ms > 0 ? `${(i.ms / 1000).toFixed(0)}s` : ''}</span>}
-                      </div>
-                      <div className="sc-descr" title={i.descr}>
-                        {i.wait || i.descr}
-                      </div>
-                      <div className="sc-dims">
-                        {SCORE_KEYS.map((k) => (
-                          <span
-                            key={k}
-                            className="sc-dim"
-                            title={`${SCORE_LABELS[k]} ${i.score ? i.score[k].toFixed(2) : '—'}（权重 ${WEIGHTS[k]}）`}
-                          >
-                            <i>
-                              <b style={{ width: `${Math.round(((i.score?.[k] ?? 0) as number) * 100)}%` }} />
-                            </i>
+                      </button>
+                      <div className="sc-info">
+                        <div className="sc-line1">
+                          <span className="sc-name">
+                            {i.blueprint?.dna.name ?? (i.error ? '失败' : i.wait ? '重试中' : '…')}
                           </span>
-                        ))}
-                        {i.score?.fidelityNotes?.length ? (
-                          <span className="sc-fid" title="落实度在比什么:描述里点名的特征,有没有真的长在身上">
-                            {i.score.fidelityNotes.join(' ')}
+                          <span className="sc-dens" title="描述丰富度(同组三档共用一个原型)">
+                            {DENSITY_LABEL[i.density]}
                           </span>
-                        ) : null}
-                        <span className="sc-my">
-                          {RATINGS.map((r) => (
-                            <button
-                              key={r}
-                              type="button"
-                              className={i.rating === r ? 'is-on' : ''}
-                              onClick={() => rate(i.id, r)}
+                          <span className="sc-chip" data-score={verdict}>
+                            {i.score ? vv.toFixed(0) : ''}
+                          </span>
+                          {i.blueprint && <span className="sc-mini">{i.ms > 0 ? `${(i.ms / 1000).toFixed(0)}s` : ''}</span>}
+                        </div>
+                        <div className="sc-descr" title={i.descr}>
+                          {i.wait || i.descr}
+                        </div>
+                        <div className="sc-dims">
+                          {SCORE_KEYS.map((k) => (
+                            <span
+                              key={k}
+                              className="sc-dim"
+                              title={`${SCORE_LABELS[k]} ${i.score ? i.score[k].toFixed(2) : '—'}（权重 ${WEIGHTS[k]}）`}
                             >
-                              {r}
-                            </button>
+                              <i>
+                                <b style={{ width: `${Math.round(((i.score?.[k] ?? 0) as number) * 100)}%` }} />
+                              </i>
+                            </span>
                           ))}
-                        </span>
+                          {i.score?.fidelityNotes?.length ? (
+                            <span className="sc-fid" title="落实度在比什么:描述里点名的特征,有没有真的长在身上">
+                              {i.score.fidelityNotes.join(' ')}
+                            </span>
+                          ) : null}
+                          {noveltyCell}
+                        <span className="sc-my">
+                            {RATINGS.map((r) => (
+                              <button
+                                key={r}
+                                type="button"
+                                className={i.rating === r ? 'is-on' : ''}
+                                onClick={() => rate(i.id, r)}
+                              >
+                                {r}
+                              </button>
+                            ))}
+                          </span>
+                        </div>
+                        {it && sortKey !== 'total' && <span className="sc-sortval">按{SCORE_LABELS[sortKey]}排第 {rank}</span>}
                       </div>
-                      {it && sortKey !== 'total' && <span className="sc-sortval">按{SCORE_LABELS[sortKey]}排第 {rank}</span>}
+
+                      {/*
+                       * 生命周期预览:**就地展开在这一条下面**,而不是跳到页面最底下。
+                       *
+                       * 原来展开后大图出现在整个列表下方,看的是第 3 行却要滚到列表末尾
+                       * 才能找到 —— 而且行与行之间的对应关系彻底丢了。放回行内才能真正
+                       * 「这只就是这只」。
+                       *
+                       * 全批**同时只开一只**:展开区是带动画的 rAF 渲染器(缩略图都是
+                       * `fixedDay` 静态帧),30 行全开会把 CPU 吃光。
+                       */}
+                      {picked === i.id && i.blueprint && i.rig && (
+                        <div className="sc-open">
+                          <div className="sc-open-stage">
+                            <RigCreature dna={i.dna!} rig={i.rig} box={260} matureDay={i.matureDay} />
+                            <span className="sc-open-tip">会动的那一只 · 阶段随天数连续插值</span>
+                          </div>
+                          <div className="sc-open-life">
+                            <h3>
+                              完整生命周期
+                              <em>孢子 → 幼体 → 成体 → 觉醒</em>
+                            </h3>
+                            <div className="sc-open-strip">
+                              {LIFECYCLE_DAYS.map((d) => (
+                                <figure key={d} data-stage={STAGE_LABELS[stageOfDay(d)]}>
+                                  <RigCreature
+                                    dna={i.dna!}
+                                    rig={i.rig!}
+                                    box={84}
+                                    fixedDay={d}
+                                    matureDay={i.matureDay}
+                                  />
+                                  <figcaption>D{d}</figcaption>
+                                </figure>
+                              ))}
+                            </div>
+                            <p className="sc-open-descr">{i.descr}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
               })}
             </div>
           </section>
-
-          {active && active.blueprint && active.rig && (
-            <section className="sc-detail">
-              <h2>
-                {active.blueprint.dna.name}
-                <button type="button" className="sc-x" onClick={() => setPicked(null)}>
-                  收起
-                </button>
-              </h2>
-              <div className="sc-detail-stage">
-                <RigCreature dna={active.dna!} rig={active.rig} box={300} matureDay={active.matureDay} />
-              </div>
-              <div className="sc-detail-strip">
-                {[0, 2, 4, 7, 10, 14, 19, 25, 34, 45, 60].map((d) => (
-                  <figure key={d}>
-                    <RigCreature
-                      dna={active.dna!}
-                      rig={active.rig!}
-                      box={92}
-                      fixedDay={d}
-                      matureDay={active.matureDay}
-                    />
-                    <figcaption>D{d}</figcaption>
-                  </figure>
-                ))}
-              </div>
-              <p className="sc-detail-descr">{active.descr}</p>
-            </section>
-          )}
         </>
       )}
     </div>

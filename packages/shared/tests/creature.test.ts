@@ -23,6 +23,8 @@ import {
 import { fallbackDna, DEFAULT_DNA, keywordMatch } from '../dist/creature/fallback.js'
 import { randomBatch } from '../dist/creature/random.js'
 import { heuristicScore, craftScore, rankOf, rankScore, WEIGHT_TOTAL } from '../dist/creature/score.js'
+import { diversityOf } from '../dist/creature/diversity.js'
+import { rhoOf, distOf, calibrate, deadThreshold, MIN_N_FOR_RHO } from '../dist/creature/calibrate.js'
 
 /* ---------------------------- 夹具 ---------------------------- */
 
@@ -559,4 +561,291 @@ test('随机批次:原型不放回取样,相邻组不会撞同一个主体', () 
   const sparse = items.filter((i) => i.density === 'sparse').map((i) => i.descr)
   assert.equal(new Set(sparse).size, sparse.length, 'sparse 档原型应互不相同')
   assert.equal(new Set(bodies.slice(0, 12)).size > 1, true)
+})
+
+/* ---------------------------- P1:气质轴落实 ---------------------------- */
+
+test('P1 气质轴:描述点名「赛博」而 cyber 轴没亮 → 落实度扣分,点亮后不再扣', () => {
+  const cold = normalizeDna(fallbackDna('测试'))
+  const lit = normalizeDna({ ...fallbackDna('测试'), traits: { ...cold.traits, cyber: 4 } })
+
+  // 只点气质词,不点任何物理特征(无触须/腿/眼/发光/翼/尾/颜色/动作),
+  // 这样分母就只有「赛博」一项,能干净地验证单项分支。
+  // ⚠ 别在这句里加「霓虹」等颜色词 —— 会额外命中「配色」那一项,把分母变成 2。
+  const descr = '一只赛博朋克电子造物'
+  const a = heuristicScore(cold, descr, {}).fidelity
+  const b = heuristicScore(lit, descr, {}).fidelity
+  assert.ok(a < b, `cyber 轴点亮后应提分:${a} → ${b}`)
+  assert.equal(a, 0.4, '轴为 0 是彻底没兑现,走单项未达成的 0.4')
+  assert.equal(b, 1)
+})
+
+test('P1 气质轴:备注里能看到是哪根轴没亮', () => {
+  const cold = normalizeDna(fallbackDna('测试'))
+  const s = heuristicScore(cold, '一只赛博朋克电子造物', {})
+  assert.deepEqual(s.fidelityNotes, ['✗赛博(0)'])
+})
+
+test('P1 气质轴:轴值 1 记半亮(~),不按「没做到」也不按「照做」', () => {
+  const base = normalizeDna(fallbackDna('测试'))
+  const half = normalizeDna({ ...base, traits: { ...base.traits, cyber: 1 } })
+  const s = heuristicScore(half, '一只赛博朋克电子造物', {})
+  assert.deepEqual(s.fidelityNotes, ['~赛博(1)'])
+  // 半亮算「做到了」这一支(≥0.5),单项分支不给 0.4
+  assert.equal(s.fidelity, 1)
+})
+
+test('P1 气质轴:通用字不算气质词(否则「一只小东西」会被判成点名了可爱)', () => {
+  const dna = normalizeDna(fallbackDna('测试'))
+  const ctx = { parts: [{ id: 'body', role: 'body' }] }
+  // 与既有测试同款:都不该触发任何可验特征 → 中性 0.55
+  const a = heuristicScore(dna, '一只安安静静的、很好看的、让人喜欢的小东西', ctx).fidelity
+  const b = heuristicScore(dna, '嗯', ctx).fidelity
+  assert.equal(a, 0.55)
+  assert.equal(b, 0.55)
+  assert.deepEqual(heuristicScore(dna, '一只安安静静的、很好看的、让人喜欢的小东西', ctx).fidelityNotes, [])
+})
+
+test('P1 气质轴:发光不重复计票(luminous 归第 4 项管,不进气质轴)', () => {
+  const dark = normalizeDna(fallbackDna('测试'))
+  // 只写「发光」这一个词:应当只有「发光」一项,不能再多出一条 luminous 轴
+  const s = heuristicScore(dark, '一只发光的灯', { parts: [{ id: 'glow', role: 'glow' }] })
+  assert.deepEqual(s.fidelityNotes, ['✓发光'])
+})
+
+/* ---------------------------- P0-1:多样性 / 新颖度 ---------------------------- */
+
+test('P0-1 一批完全相同的 DNA → 新颖度趋 0、覆盖率趋 0、diversity 为 0', () => {
+  const one = normalizeDna(fallbackDna('齿轮装置'))
+  const same = Array.from({ length: 8 }, () => normalizeDna(one))
+  const r = diversityOf(same)
+  assert.equal(r.meanNovelty, 0, '最近邻距离为 0 → 平均新颖度 0')
+  assert.equal(r.diversity, 0, '没有任何一对达到距离阈值')
+  assert.equal(r.occupied, 1, '只占满一个格子')
+  assert.ok(r.closest, '应报出最挤的一对')
+  assert.equal(r.closest!.dist, 0)
+  assert.ok(r.perItem.every((p) => p.nn === 0))
+})
+
+test('P0-1 换原型/换色相/换形态 → 距离变大、新颖度上升、coverage 上升', () => {
+  const a = normalizeDna(fallbackDna('齿轮装置'))
+  const mixed = [
+    a,
+    normalizeDna({ ...a, archetype: 'dragon', palette: { body: '#ff3366', accent: '#00ffcc', glow: '#ffee00' } }),
+    normalizeDna({ ...a, archetype: 'bird', palette: { body: '#2244ff', accent: '#ffffff', glow: '#ff0000' }, shape: { limbPairs: 2, spineSegments: 12, symmetry: 0.1 } }),
+    normalizeDna({ ...a, archetype: 'plant', palette: { body: '#228833', accent: '#88ff22', glow: '#004400' }, shape: { limbPairs: 4, spineSegments: 3, symmetry: 1 } }),
+  ]
+  const r = diversityOf(mixed)
+  const flat = diversityOf(Array.from({ length: 4 }, () => normalizeDna(a)))
+  assert.ok(r.meanNovelty > flat.meanNovelty, `应有更高新颖度:${r.meanNovelty} vs ${flat.meanNovelty}`)
+  assert.ok(r.diversity > flat.diversity, `应有更高 diversity:${r.diversity} vs ${flat.diversity}`)
+  assert.ok(r.occupied > flat.occupied, '应占用更多格子')
+})
+
+test('P0-1 用最近邻而不是均值:一半雷同 + 一半孤点时,雷同那批的新颖度必须低', () => {
+  const base = normalizeDna(fallbackDna('齿轮装置'))
+  // 3 个雷同 + 3 个彼此很远
+  const batch = [
+    base,
+    normalizeDna(base),
+    normalizeDna(base),
+    normalizeDna({ ...base, archetype: 'dragon', palette: { body: '#ff0000', accent: '#00ff00', glow: '#0000ff' } }),
+    normalizeDna({ ...base, archetype: 'orb', palette: { body: '#ffff00', accent: '#ff00ff', glow: '#00ffff' } }),
+    normalizeDna({ ...base, archetype: 'plant', palette: { body: '#00ff88', accent: '#8800ff', glow: '#ffffff' } }),
+  ]
+  const r = diversityOf(batch)
+  const twins = r.perItem.slice(0, 3).map((p) => p.novelty)
+  assert.ok(twins.every((v) => v < 0.3), `雷同的三只新颖度应都很低:${twins}`)
+  // 雷同那三只互相是最近邻(下标互指),孤点彼此不相邻
+  assert.deepEqual(r.perItem.slice(0, 3).map((p) => p.nnIdx), [1, 0, 0])
+})
+
+test('P0-1 dims 直接指出「哪一维整批没在变」', () => {
+  const base = normalizeDna(fallbackDna('齿轮装置'))
+  const bodies = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff']
+  // 只换主体色相,原型 / 特质 / 动效 / 形状全同
+  const batch = bodies.map((body) => normalizeDna({ ...base, palette: { ...base.palette, body } }))
+  const r = diversityOf(batch)
+  const motion = r.dims.find((d) => d.key === 'motion')!
+  const hue = r.dims.find((d) => d.key === 'hue')!
+  // 离散度是连续量,判 0 要给容差:六个相同浮点数求均值的舍入会留下 ~1e-17 的残差
+  assert.ok(motion.spread < 1e-12, `动效没改 → 离散度应≈0,实为 ${motion.spread}`)
+  assert.ok(hue.spread > 0.1, `色相改了 → 离散度应明显大于 0,实为 ${hue.spread}`)
+})
+
+test('P0-1 边界:空批不炸;单只没有邻居可比(nn=null)', () => {
+  const empty = diversityOf([])
+  assert.deepEqual(empty.perItem, [])
+  assert.equal(empty.meanNovelty, 0)
+  assert.equal(empty.closest, null)
+
+  const one = diversityOf([normalizeDna(fallbackDna('齿轮装置'))])
+  assert.equal(one.perItem.length, 1)
+  assert.equal(one.perItem[0]!.nn, null)
+  assert.equal(one.perItem[0]!.nnIdx, -1)
+  assert.equal(one.diversity, 0, '没有可比较的对')
+})
+
+/* ---------------------------- P0-2:逐维相关性 ---------------------------- */
+
+test('P0-2 Spearman:完全同序 = 1,完全逆序 = -1', () => {
+  assert.equal(rhoOf([1, 2, 3, 4, 5, 6, 7, 8], [10, 20, 30, 40, 50, 60, 70, 80]), 1)
+  assert.equal(rhoOf([1, 2, 3, 4, 5, 6, 7, 8], [80, 70, 60, 50, 40, 30, 20, 10]), -1)
+})
+
+test('P0-2 Spearman:并列取平均秩,常数序列无定义 → null', () => {
+  // 一侧全同值(全打「棒」)→ 没有方差,不该报 0
+  assert.equal(rhoOf([1, 2, 3, 4, 5, 6, 7, 8], [2, 2, 2, 2, 2, 2, 2, 2]), null)
+  assert.equal(rhoOf([5, 5, 5, 5, 5, 5, 5, 5], [1, 2, 3, 4, 5, 6, 7, 8]), null)
+})
+
+test('P0-2 Spearman:样本不足不报数(宁可不报也不报假结论)', () => {
+  assert.equal(rhoOf([1, 2, 3], [3, 2, 1]), null)
+  const n = MIN_N_FOR_RHO
+  assert.notEqual(rhoOf(Array.from({ length: n }, (_, i) => i), Array.from({ length: n }, (_, i) => i)), null)
+  assert.equal(rhoOf(Array.from({ length: n - 1 }, (_, i) => i), Array.from({ length: n - 1 }, (_, i) => i)), null)
+})
+
+test('P0-2 Spearman:对单调非线性变换不变(秩相关的意义)', () => {
+  const xs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  const ys = [1, 4, 9, 16, 25, 36, 49, 64, 81] // 平方,严格单调
+  assert.equal(rhoOf(xs, ys), 1)
+})
+
+test('P0-2 calibrate:逐维拆出「权重大但在划水」的维', () => {
+  const n = 12
+  const mk = (rating: number, fidelity: number) => ({
+    score: {
+      palette: 0.5,
+      traits: 0.5,
+      motion: 0.5,
+      narrative: 0.63,
+      match: 0.5,
+      structure: 0.5,
+      fidelity,
+      total: fidelity * 100,
+    },
+    rating,
+  })
+  // 前 4 只评「差」、中 4 只「还行」、后 4 只「棒」;fidelity 单调跟随
+  const rows = Array.from({ length: n }, (_, i) => mk(i < 4 ? 0 : i < 8 ? 1 : 2, i / (n - 1)))
+
+  const c = calibrate(rows)
+  assert.equal(c.n, n)
+  assert.equal(c.enough, true)
+  // 不是 1:12 条里评价只有三个档(4/4/4),并列取平均秩得 2.5/6.5/10.5,
+  // 而 fidelity 是 12 个互不相同的值(秩 1..12)—— 两侧秩向量不完全相同,ρ 略小于 1。
+  const fid = c.perDim.find((d) => d.key === 'fidelity')!
+  assert.ok(fid.rho! > 0.94, `fidelity 与评价应高度同序,实为 ${fid.rho}`)
+  assert.equal(c.perDim.find((d) => d.key === 'narrative')!.rho, null, '常数维无方差 → null 而不是 0')
+  assert.equal(c.total.rho, fid.rho, 'total 就等于 fidelity 的序列')
+  // 每一维都要有分布,且 fidelity 的中位数应落在批内中段
+  assert.ok(c.perDim.every((d) => d.dist), '每维都要报分布')
+  assert.ok(c.total.dist!.median > 0 && c.total.dist!.median < 100)
+})
+
+test('P0-2 calibrate:评价无并列时同序才是严格的 1', () => {
+  const rows = Array.from({ length: 8 }, (_, i) => ({
+    score: { palette: 0.5, traits: 0.5, motion: 0.5, narrative: 0.5, match: 0.5, structure: 0.5, fidelity: i / 7, total: (i / 7) * 100 },
+    // 8 个互不相同的评价,没有并列
+    rating: i,
+  }))
+  const c = calibrate(rows)
+  assert.equal(c.perDim.find((d) => d.key === 'fidelity')!.rho, 1)
+})
+
+test('P0-2 calibrate:deadWeight 只收「ρ 测得出但接近 0」的维,不含 null', () => {
+  const n = 10
+  const rows = Array.from({ length: n }, (_, i) => ({
+    score: {
+      // 与评价无关的锯齿 → ρ≈0
+      palette: i % 2 === 0 ? 0.9 : 0.1,
+      traits: 0.5,
+      motion: 0.5,
+      narrative: 0.63, // 常数 → null
+      match: 0.5,
+      structure: 0.5,
+      fidelity: 0.5,
+      total: i / (n - 1),
+    },
+    rating: i % 3,
+  }))
+  const c = calibrate(rows)
+  const keys = c.deadWeight.map((d) => d.key)
+  assert.ok(keys.includes('palette'), 'ρ≈0 的 palette 应进 deadWeight')
+  assert.ok(!keys.includes('narrative'), 'null(无方差)不该算 deadWeight —— 那不是死重是没测出来')
+  assert.equal(c.deadWeight.length, keys.length)
+})
+
+test('P0-2 dist:报分布而不是只报均值(均值会把双峰抹平)', () => {
+  const bimodal = distOf([10, 10, 10, 90, 90, 90])!
+  assert.equal(bimodal.avg, 50)
+  assert.equal(bimodal.median, 50)
+  assert.ok(bimodal.p25 < bimodal.p75, '双峰样本四分位距应很宽')
+  assert.equal(distOf([]), null)
+})
+
+/* ---------------------------- 回归:色相换算 ---------------------------- */
+
+test('回归 色相换算:三个分支的 /6 必须包住整个分子(照抄 rgbToHsl 时漏过括号)', () => {
+  // 三支主色各自的代表色,期望落在标准色相上
+  const cases: [string, number][] = [
+    ['#ff0000', 0], // 红
+    ['#00ff00', 120], // 绿 —— 正是漏括号那支
+    ['#0000ff', 240], // 蓝 —— 漏括号的另一支
+    ['#ffff00', 60], // 黄
+    ['#00ffff', 180], // 青
+    ['#ff00ff', 300], // 品红
+  ]
+  for (const [hex, want] of cases) {
+    const base = normalizeDna(fallbackDna('测试'))
+    const a = diversityOf([normalizeDna({ ...base, palette: { ...base.palette, body: hex } })])
+    const b = diversityOf([
+      normalizeDna({ ...base, palette: { ...base.palette, body: hex } }),
+      normalizeDna({ ...base, palette: { ...base.palette, body: hex } }),
+    ])
+    // 用「两个同色样本的色相直方图落在第几桶」反推色相,避免直接导出内部函数
+    const binA = a.hueHistogram.findIndex((v) => v > 0)
+    const binB = b.hueHistogram.findIndex((v) => v > 0)
+    assert.ok(binA >= 0 && binB >= 0, `${hex} 应落进某个色相桶`)
+    // 色相应落在正确的那一桶:桶宽 30°,四舍五入到最近桶
+    const expect = Math.round(want / 30) % 12
+    assert.equal(binA, expect, `${hex} 期望桶 ${expect},实为 ${binA}`)
+  }
+})
+
+test('回归 色相离散度不可能超过 1(负色相/越界色相会撑破这个上界)', () => {
+  const base = normalizeDna(fallbackDna('测试'))
+  const bodies = ['#00ff00', '#0000ff', '#00ffff', '#ff00ff', '#008000', '#000080', '#00fa00', '#0000fa']
+  const batch = bodies.map((body) => normalizeDna({ ...base, palette: { ...base.palette, body } }))
+  const r = diversityOf(batch)
+  const hue = r.dims.find((d) => d.key === 'hue')!
+  // 色相已归一到 [0,360],除以 180 后是 [0,2] → 总体标准差的理论上界是 1
+  assert.ok(hue.spread <= 1, `色相离散度应 ≤1,实为 ${hue.spread}`)
+  // 直方图不能因为负下标漏到数组之外(负下标会让 sum 不等于批内总数)
+  assert.equal(r.hueHistogram.reduce((a, b) => a + b, 0), batch.length, '直方图计数应等于批内总数')
+})
+
+/* ---------------------------- 回归:死重判定线 ---------------------------- */
+
+test('回归 死重判定线随样本量变,不是固定 0.2', () => {
+  assert.ok(Math.abs(deadThreshold(30) - 1.96 / Math.sqrt(27)) < 1e-9)
+  // 样本越少,线越高 —— n=10 时 0.2 会把真有信号的问成死重
+  assert.ok(deadThreshold(10) > deadThreshold(30))
+  assert.ok(deadThreshold(8) > deadThreshold(20))
+  // 封顶 1:|ρ| 不可能超过 1,所以 n=4 时整条线顶到 1 = 什么都判死重
+  assert.equal(deadThreshold(3), 1, '样本太少时直接全判死重')
+  assert.equal(deadThreshold(4), 1, '1.96/√1 被封顶到 1')
+  assert.ok(Math.abs(deadThreshold(30) - 1.96 / Math.sqrt(27)) < 1e-9)
+})
+
+test('回归 n=30 时 |ρ|=0.30 不算死重:旧的固定 0.2 线会冤枉它', () => {
+  const cut = deadThreshold(30)
+  // 这正是这次改动要修的错误:固定 0.2 落在零相关的置信带(±0.36)里面,
+  // 于是 0.30 这样的**有信号**的维也会被标成「死重」,而 0.2 听上去又很合理。
+  const rho = 0.3
+  assert.ok(0.2 < rho, '前提:旧的固定 0.2 线确实在 0.30 之下(所以旧线会把它误判成死重)')
+  assert.ok(Math.abs(rho) < cut, `前提:n=30 的判定线 ${cut.toFixed(3)} 应在 0.30 之上(所以新线不会误判)`)
+  // 再看一眼 n=10 的反面:同一份数据在 n=10 时就该判成死重了(线更高)
+  assert.ok(Math.abs(rho) < deadThreshold(10), '同一 |ρ| 在样本更少时应被判成死重')
 })

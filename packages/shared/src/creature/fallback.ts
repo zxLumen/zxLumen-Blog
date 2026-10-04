@@ -85,7 +85,13 @@ const ARCHETYPE_WORDS: Record<Archetype, string[]> = {
   machine: ['机器', '机械', '机甲', '机器人', '电路', '数码', '装置', '齿轮', '电子'],
 }
 
-const TRAIT_WORDS: Record<TraitAxis, string[]> = {
+/**
+ * 每条特质轴的描述词表。
+ *
+ * 导出给 `score.ts` 的落实度检查复用 —— 必须是**同一份**词表,否则「描述点了赛博」
+ * 和「模型有没有点亮 cyber 轴」就会用两套标准,检查出来的结果是假的。
+ */
+export const TRAIT_WORDS: Record<TraitAxis, string[]> = {
   mechanical: ['机械', '金属', '齿轮', '钢铁', '机油', '铆钉'],
   organic: ['有机', '血肉', '生物', '肉', '藤蔓', '活着'],
   ethereal: ['空灵', '幽灵', '虚', '缥缈', '仙', '雾', '轻'],
