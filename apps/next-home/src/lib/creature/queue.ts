@@ -15,6 +15,16 @@
 /** 同时在途的生成数上限 */
 export const MAX_INFLIGHT = 12
 
+/**
+ * 排队等待的**长度上限**。
+ *
+ * 为什么需要:原来只靠「每 IP 每分钟 N 次」挡刷,而 `waiters` 本身是**无上限**的 ——
+ * 一个失控脚本可以在几秒内塞进几千个 job,内存先被吃满,更要命的是 12 个槽位会
+ * 连续不断地把队头烧掉,几分钟就能把日预算烧穿。限流器挡的是「请求频率」,
+ * 队列深度才是「一次最多欠多少」,后者才是和花费直接挂钩的那个量。
+ */
+export const MAX_WAITERS = 60
+
 /** 排队最长等待;超过就让客户端自己重试,不占着 socket */
 const MAX_QUEUE_WAIT_MS = 90_000
 
@@ -114,9 +124,9 @@ class QueueImpl {
    * 取号:有空位立刻返回 `now`;否则排进 FIFO 队列。
    * 返回 `now` 表示**调用方负责跑完并调用 `done`**,返回 promise 则等轮到自己。
    * @param id 本次任务的 id(同时用作排队时的凭据)
-   * @returns `null` = 立即开跑;否则是一个「轮到自己就 resolve」的 promise
+   * @returns `null` = 立即开跑;`QUEUE_FULL` = 队列已满,别再排了;否则是一个「轮到自己就 resolve」的 promise
    */
-  acquire(id: string, descr = ''): Promise<void> | null {
+  acquire(id: string, descr = ''): Promise<void> | 'QUEUE_FULL' | null {
     this.sweep()
     if (this.running < MAX_INFLIGHT) {
       this.running++
@@ -132,6 +142,8 @@ class QueueImpl {
       })
       return null
     }
+    // 队满:直接拒,而不是排进去等着 —— 排进去只会让 ETA 变得毫无意义
+    if (this.waiters.length >= MAX_WAITERS) return 'QUEUE_FULL'
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         const i = this.waiters.findIndex((w) => w.jobId === id)

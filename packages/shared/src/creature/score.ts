@@ -14,15 +14,43 @@
 import { TRAIT_AXES, type CreatureDna } from './spec.js'
 import { keywordMatch } from './fallback.js'
 
+/**
+ * 权重。
+ *
+ * 重新分配的依据是 `/lab/score` 上实测的「丰富度提升」(同原型三档,rich 减 sparse):
+ * 原来 5 维里 `palette/traits/motion` 三维(共 65 分)**只看 DNA、不看描述**,
+ * 所以它们对「描述写得细不细」没有任何反应 —— 实测提升分别是 −0.1 / +0.6 / +0.4,
+ * 基本是噪声。把权重往「看得见描述」的方向挪:
+ *
+ *  - `fidelity`(新,20):唯一直接回答「你有没有听我说话」的一维,而且只在描述
+ *    真的点了某类特征时才计入那类,不会被描述长度灌水。
+ *  - `structure`(新,15):实测 12 部件和 27 部件的生物分数几乎一样 ——
+ *    原来没有一维在看「搭得认不认真」。
+ *  - `narrative` 20 → 8:实测它把三段雷同和完全不同的 note 都打 0.63,
+ *    区分不出任何东西,**降权但保留**(它对非 blueprint 的 DNA 路径仍然有效)。
+ *  - `match` 15 → 8:它有长度效应(描述越长关键词越多越容易命中),
+ *    在 rich 档天然占便宜;职责交给 `fidelity` 后降为辅助信号。
+ *  - `palette/traits` 是纯确定性工艺检查(真色彩数学、熵与退化检测),
+ *    换任何模型都不会失效,保留较高权重。
+ */
 export const WEIGHTS = {
-  palette: 25,
-  traits: 20,
-  motion: 20,
-  narrative: 20,
-  match: 15,
+  palette: 18,
+  traits: 12,
+  motion: 13,
+  narrative: 8,
+  match: 8,
+  structure: 15,
+  fidelity: 20,
 } as const
 
-export const WEIGHT_TOTAL = WEIGHTS.palette + WEIGHTS.traits + WEIGHTS.motion + WEIGHTS.narrative + WEIGHTS.match
+export const WEIGHT_TOTAL =
+  WEIGHTS.palette +
+  WEIGHTS.traits +
+  WEIGHTS.motion +
+  WEIGHTS.narrative +
+  WEIGHTS.match +
+  WEIGHTS.structure +
+  WEIGHTS.fidelity
 
 /* ---------------------------- 颜色工具 ---------------------------- */
 
@@ -161,19 +189,45 @@ function scoreTraits(dna: CreatureDna): number {
  * 参数落在「能看出在动、又不会乱」的区间中心最好。**过慢比过快扣得更狠**:
  * 慢到看不出动等于白做,快到 6Hz 以上既难看又有频闪风险。
  */
-function scoreMotion(dna: CreatureDna): number {
+/**
+ * **动效**。
+ *
+ * 原来这里是「离目标值近不近」:`flapHz` 离 3 近给满分、`bobPx` 离 5 近给满分……
+ * 问题是那些目标值全是**拍脑袋定的** —— 模型给 `flapHz=2.4` 会被扣分,给 3.0 就满分,
+ * 可「2.4Hz 是不是不好看」没有任何依据。实测这一维对描述丰富度的提升是 +0.4,
+ * 基本等于噪声:它压根没在衡量任何和描述有关的东西。
+ *
+ * 改成评**自洽性**:一组动效参数之间该不该有关联。比如身体晃得越厉害,尾鳍摆幅
+ * 通常越大;整体要「活」就得有变化,但变化又不能是抽搐(频率和振幅不能同时爆表)。
+ * 这些关系不依赖任何具体的数值目标,所以换个模型也不会失效。
+ */
+function scoreMotion(dna: CreatureDna, ctx: ScoreContext = {}): number {
   const m = dna.motion
-  const centered = (x: number, c: number, lo: number, hi: number) =>
-    clamp01(1 - Math.abs(x - c) / (x < c ? lo : hi))
 
-  const freq = centered(m.flapHz, 3, 2.0, 3.5)
-  const drift = centered(m.driftAmp, 20, 14, 20)
-  const trail = centered(m.trail, 0.35, 0.3, 0.5)
-  const bob = centered(m.bobPx, 5, 5, 8)
-  // 自旋是加分项,不是必需项 —— 中等最好,0 也不该重罚
-  const spin = clamp01(1 - Math.abs(m.spin - 0.25) / 0.6)
+  // 1) 活力:不能完全不动。三个通道取最高,鼓励至少有一处明显在动。
+  const activity = clamp01(Math.max(m.flapHz / 6, m.driftAmp / 40, m.bobPx / 12))
 
-  return 0.34 * freq + 0.28 * drift + 0.16 * trail + 0.12 * bob + 0.1 * spin
+  // 2) 不要抽搐:频率与振幅同时到顶 = 高频大幅 = 视觉噪声
+  const frantic = m.flapHz >= 5.5 && m.driftAmp >= 30 ? 1 - clamp01((m.flapHz * m.driftAmp) / 220) : 1
+
+  // 3) 通道间要自洽:晃得越厉害,尾鳍/漂移摆幅不该是 0(反之,整体静止时摆尾反而怪)
+  const coherence = m.bobPx >= 4 && m.driftAmp < 4 ? 0.35 : m.driftAmp >= 10 && m.bobPx >= 6 ? 0.75 : 1
+
+  // 4) 拖尾要跟得上:动得快却没有拖尾 = 糊;动得慢却拖尾很长 = 脏
+  const trailFit = m.trail <= 0 ? 0.6 : 1 - clamp01(Math.abs(m.trail - (0.15 + m.driftAmp / 90)) / 0.5)
+
+  // 5) 有 blueprint 时看 family:和 DNA 的振幅量级是否匹配
+  //    (idle/breathe 配大幅摆动是矛盾的;flap/glide 配零飘移也是)
+  let familyFit = 0.8
+  const fam = ctx.motionFamily
+  if (fam) {
+    const still = fam === 'idle' || fam === 'breathe'
+    familyFit = still && (m.driftAmp >= 20 || m.flapHz >= 5) ? 0.4 : 1
+  }
+
+  return clamp01(
+    (0.3 * activity + 0.18 * frantic + 0.2 * coherence + 0.2 * trailFit + 0.12 * familyFit) * 1.06,
+  )
 }
 
 /** 归一化编辑距离(两字符串差异度 0..1) */
@@ -244,6 +298,197 @@ function scoreMatch(dna: CreatureDna, descr: string): number {
   return keywordMatch(descr, dna)
 }
 
+/* ---------------------------- 新增:结构 ---------------------------- */
+
+/**
+ * **结构复杂度**:这只东西搭得认不认真。
+ *
+ * 为什么单列一维:原来 5 维全在评「材质与参数」(配色/特质/动效/文案/关键词),
+ * **没有一维在看搭得像不像回事**。实测里 12 部件和 27 部件的生物分数几乎一样
+ * —— 也就是说「随便给个圆身子加两条线」和「认真搭了 27 个零件」在评分里等价。
+ *
+ * 有 `parts` 时(走 blueprint 管线)看真实部件;没有就退回 DNA 的 `shape.plan`,
+ * 信息少但不为 0,不会因为老调用点缺上下文而整体掉分。
+ */
+function scoreStructure(dna: CreatureDna, ctx: ScoreContext): number {
+  const parts = ctx.parts
+  if (parts?.length) {
+    const n = parts.length
+    // 部件数:12~26 是「认真搭了」的区间,过少潦草、过多堆料。
+    // 用平滑曲线而非硬阈值,免得 12 和 13 差出一个悬崖。
+    const ideal = 18
+    const countScore = n >= 10 && n <= 30 ? norm(1 - Math.abs(n - ideal) / 26) : norm(n / 10) * 0.5
+
+    // 角色多样性:光靠 body 堆 20 个零件没有意义,得有眼/嘴/纹样等分工
+    const roles = new Set(parts.map((p) => p.role ?? ''))
+    const roleScore = norm(Math.min(roles.size, 6) / 6)
+
+    // 可动部件占比:全静态的生物再好看也是一张图
+    const movable = parts.filter((p) => p.role === 'accent' || p.role === 'accentLight' || p.role === 'line').length
+    const motionScore = norm(movable / Math.max(4, n * 0.22))
+
+    // 骨架完整度:不能全是 body —— 主体占比过高压
+    const bodyRatio = parts.filter((p) => p.role === 'body').length / n
+    const balanceScore = bodyRatio > 0.75 ? 1 - (bodyRatio - 0.75) * 3 : 1
+
+    return clamp01(0.4 * countScore + 0.28 * roleScore + 0.18 * motionScore + 0.14 * balanceScore)
+  }
+
+  // 无 parts:退回 DNA 的形状提示(老调用点)。
+  // shape 只有 limbPairs / spineSegments / symmetry 三项,信息远少于真实部件树,
+  // 所以这里只判「有没有把身体结构说清楚」,给一个窄区间、不制造虚假区分度。
+  const s = dna.shape
+  const hinted = s ? s.limbPairs * 2 + s.spineSegments : 0
+  if (!hinted) return 0.55
+  const segScore = norm(s!.spineSegments / 8)
+  const limbScore = norm(s!.limbPairs / 4)
+  const symScore = norm(1 - Math.abs(s!.symmetry - 0.9) / 0.9)
+  return clamp01(0.4 + 0.25 * (0.4 * segScore + 0.35 * limbScore + 0.25 * symScore))
+}
+
+/* ---------------------------- 新增:落实度 ---------------------------- */
+
+/**
+ * **描述落实度**:描述里点名的东西,有多少真的**长在身上**。
+ *
+ * 这是整个评分里唯一直接回答「你有没有听我说话」的一维,也是补 `match` 缺口的正解。
+ *
+ * 与 `keywordMatch` 的关键区别 —— 别把这两个混为一谈:
+ *  - `keywordMatch` 问「描述里的词,DNA 里有对应属性吗」,于是**描述越长命中越多**,
+ *    稀疏描述天然吃亏。它拿 +2.1/2.9 的「丰富度提升」,几乎全是这个长度效应。
+ *  - 这一维问「描述里点名的**每类特征**,生成了对应的部件/动效吗」,并且
+ *    **只在描述真的点了某类特征时才计那类**。没提触须不会因为没长触须而扣分;
+ *    提了三类特征就按三类算命中率。所以它既不会被长度灌水,也能分辨「照做了」与「没照做」。
+ */
+function scoreFidelity(
+  dna: CreatureDna,
+  descr: string,
+  ctx: ScoreContext,
+): { v: number; notes: string[] } {
+  const text = descr.trim()
+  if (!text) return { v: 0.5, notes: [] }
+
+  /** 各类特征:描述里出现了才进入分母,避免「没提」被算成「没做到」 */
+  const checks: { hit: boolean; note: string }[] = []
+
+  // 1) 触须/触手/角/鳍 —— 有没有细长末梢部件
+  if (/触须|触手|触角|鹿角|龙角|触|须/.test(text)) {
+    const has = ctx.parts?.some(
+      (p) => /触|须|角|antenna|tentacle|horn|fin/i.test(`${p.id ?? ''}${p.role ?? ''}`),
+    )
+    checks.push({ hit: has ?? false, note: '触须/角' })
+  }
+  // 2) 腿/足 —— 腿的条数是否与描述一致(「六条腿」这种硬要求必须能验)
+  if (/条腿|腿|足|爪|蹄/.test(text)) {
+    const legs = countLimbs(ctx, LIMB_RE)
+    const want = NUM_CN_TO_N[text.match(/([一二三四五六七八九十两\d]+)\s*(?:条腿|只脚|只足|条足|对足)/)?.[1] ?? '']
+    // 描述给了具体条数就精确比对,只说「有腿」则只看存不存在。
+    // 差一条不算失败(模型数错很正常),差一半才算没照做。
+    const legHit = want ? legs === want || Math.abs(legs - want) === 1 : legs > 0
+    checks.push({ hit: legHit, note: `腿(${legs}${want ? `/${want}` : ''})` })
+  }
+  // 3) 眼 —— 有没有眼部件
+  if (/眼|睛|瞳/.test(text)) {
+    checks.push({ hit: (ctx.parts?.some((p) => /眼|eye/i.test(`${p.id ?? ''}${p.role ?? ''}`)) ?? false) || dna.traits.luminous > 0, note: '眼' })
+  }
+  // 4) 发光/辉光 —— 要么有 glow 部件,要么 luminous 特质够高
+  if (/发光|辉光|光|亮|荧|闪/.test(text)) {
+    const glowPart = ctx.parts?.some((p) => p.role === 'glow' || /glow|光/i.test(p.id ?? ''))
+    checks.push({ hit: !!glowPart || dna.traits.luminous >= 3, note: '发光' })
+  }
+  // 5) 翼/翅 —— 飞行动效或翼部件
+  if (/翼|翅|飞/.test(text)) {
+    const wing = ctx.parts?.some((p) => /翼|翅|wing/i.test(`${p.id ?? ''}${p.role ?? ''}`))
+    checks.push({ hit: !!wing || ctx.motionFamily === 'flap' || ctx.motionFamily === 'glide', note: '翼' })
+  }
+  // 6) 尾 —— 尾巴部件
+  if (/尾/.test(text)) {
+    checks.push({ hit: ctx.parts?.some((p) => /尾|tail/i.test(`${p.id ?? ''}${p.role ?? ''}`)) ?? false, note: '尾' })
+  }
+  // 7) 描述点名了颜色 —— 配色里是否真的带上了那个色相
+  if (/[青蓝绿金银紫橙白黑粉红霓虹]/.test(text)) {
+    checks.push({ hit: paletteEchoesColor(dna, text), note: '配色' })
+  }
+  // 8) 描述给了动作(游/爬/跳/飞/摆) —— 动效 family 是否对得上
+  const fam = ctx.motionFamily
+  if (fam) {
+    const wantSwim = /游|泳|滑/.test(text)
+    const wantCrawl = /爬|走|行|迈|步/.test(text)
+    const wantHop = /跳|跃|蹦/.test(text)
+    if (wantSwim) checks.push({ hit: fam === 'swim', note: '游' })
+    if (wantCrawl) checks.push({ hit: fam === 'walk', note: '走' })
+    if (wantHop) checks.push({ hit: fam === 'hop', note: '跳' })
+  }
+
+  // 描述里没点到任何可验证的特征 —— 不奖不罚,给中性
+  if (!checks.length) return { v: 0.55, notes: [] }
+
+  /**
+   * ⚠ 这里有个**长度效应的镜像坑**,踩过一次:
+   * 分母 = 「描述点了哪几类可验特征」。于是描述越具体,可验项越多、越容易漏,
+   * 稀疏描述反而占便宜 —— 这是 `match` 那个长度效应的翻版,只是方向相反。
+   * 实测就撞上过:稀疏档「一只深海发光水母」只命中「发光」1 项,轻松拿满分;
+   * 丰富档点了「翼/尾/配色/走」4 项,漏一项就掉到 0.78。
+   *
+   * 解法不是把分母改成常数(那等于放弃「有没有照做」这个判断),而是**只在描述
+   * 点到 ≥2 类时才严格计数**:单一要求做到就是满分,不足以说明模型偷工减料;
+   * 而当描述提了多项要求时,漏掉就该扣 —— 那正是 rich 档该被认出来的地方。
+   */
+  if (checks.length === 1) {
+    const notes = [`${checks[0]!.hit ? '✓' : '✗'}${checks[0]!.note}`]
+    return { v: checks[0]!.hit ? 1 : 0.4, notes }
+  }
+
+  const hit = checks.filter((c) => c.hit).length
+  // 全中给满分;漏一半给 0.5(不是线性惩罚,漏一两条不至于致命)
+  const v = clamp01(0.35 + 0.65 * (hit / checks.length))
+  const notes = checks.map((c) => `${c.hit ? '✓' : '✗'}${c.note}`)
+  return { v, notes }
+}
+
+/** 中文/阿拉伯数字 → 数值,用于「六条腿」这种硬要求 */
+const NUM_CN_TO_N: Record<string, number> = {
+  一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
+  1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10,
+}
+
+/** 腿/足类部件的 id 特征 —— 同时用于「描述点名腿」与「数腿」两处 */
+const LIMB_RE = /腿|足|爪|蹄|肢|leg|foot|paw|claw|limb/i
+
+/**
+ * 数一数腿/足类部件。
+ *
+ * ⚠ 曾经的 bug:把 `leg-1`/`leg-2`/`leg-3` 的**末尾序号**当数量求和,
+ * 于是 3 条腿算出 6、6 条腿算出 21 ——「六条腿」永远判不中,fidelity 卡在 0.35。
+ * 序号只是命名,不是数量。正确做法是**数部件个数**。
+ * 例外:`legs-3` 这种带复数前缀的表示「一组 3 条」,才读末尾数字。
+ */
+function countLimbs(ctx: ScoreContext, re: RegExp): number {
+  const parts = ctx.parts
+  if (!parts?.length) return 0
+  let n = 0
+  for (const p of parts) {
+    const id = `${p.id ?? ''}`
+    if (!re.test(id) && !re.test(`${p.role ?? ''}`)) continue
+    // `legs-3` / `feet-2`:复数前缀 + 数字 = 一组的数量
+    const group = id.match(/(?:legs|feet|limbs|paws|claws)[-_](\d+)/i)
+    n += group ? Number(group[1]) : 1
+  }
+  return n
+}
+
+/** 描述里点名的色相,配色三色里是否真的用上了(按色相距离判定) */
+function paletteEchoesColor(dna: CreatureDna, text: string): boolean {
+  const named: [RegExp, number][] = [
+    [/青|蓝/, 210], [/绿/, 130], [/金/, 45], [/银|白/, 0], [/紫/, 280],
+    [/橙/, 30], [/黑/, 0], [/粉/, 330], [/红/, 0], [/霓虹/, 0],
+  ]
+  const wants = named.filter(([re]) => re.test(text)).map(([, h]) => h)
+  if (!wants.length) return true
+  const have = [dna.palette.body, dna.palette.accent, dna.palette.glow].map(hsl)
+  return wants.some((w) => have.some((c) => hueDist(c[0], w) < 40))
+}
+
 /* ---------------------------- 对外 ---------------------------- */
 
 export interface ScoreBreakdown {
@@ -252,23 +497,56 @@ export interface ScoreBreakdown {
   motion: number
   narrative: number
   match: number
+  /** 结构复杂度:部件数量/角色多样性与骨架完整度 */
+  structure: number
+  /** 描述落实度:描述里的要求有多少真的变成了部件与动效 */
+  fidelity: number
   /** 0..100 */
   total: number
+  /**
+   * 调试用:这维到底在比什么。空字符串 = 这只没点到任何可验证的特征,拿的是中性分。
+   * 页面上把它打出来,免得出现「0.35 分」却不知道在扣什么。
+   */
+  fidelityNotes?: string[]
+}
+
+/**
+ * 打分的可选上下文。
+ *
+ * 为什么需要:只看 `dna` 的话,「部件到底有几个」「用的哪个 motion family」
+ * 「有没有触须」这些信息全都不在 DNA 里 —— 而它们恰恰是判断「描述有没有被落实」
+ * 的主要依据。所以允许把编译产物传进来;不传时相关维度退回**只看 DNA** 的弱版本,
+ * 保持 `heuristicScore(dna)` 老调用点全部可用、结果不崩。
+ */
+export interface ScoreContext {
+  parts?: readonly { role?: string; id?: string }[]
+  motionFamily?: string
+  /** 描述里点名的特征词,用于 fidelity */
+  mentioned?: readonly string[]
 }
 
 /** 对一份合法 DNA 打分;分项均为 0..1 */
-export function heuristicScore(dna: CreatureDna, descr = ''): ScoreBreakdown {
+export function heuristicScore(
+  dna: CreatureDna,
+  descr = '',
+  ctx: ScoreContext = {},
+): ScoreBreakdown {
   const palette = scorePalette(dna)
   const traits = scoreTraits(dna)
-  const motion = scoreMotion(dna)
+  const motion = scoreMotion(dna, ctx)
   const narrative = scoreNarrative(dna)
   const match = descr.trim() ? scoreMatch(dna, descr) : 0.5
+  const structure = scoreStructure(dna, ctx)
+  const fid = descr.trim() ? scoreFidelity(dna, descr, ctx) : { v: 0.5, notes: [] as string[] }
+  const fidelity = fid.v
   const total =
     (palette * WEIGHTS.palette +
       traits * WEIGHTS.traits +
       motion * WEIGHTS.motion +
       narrative * WEIGHTS.narrative +
-      match * WEIGHTS.match) /
+      match * WEIGHTS.match +
+      structure * WEIGHTS.structure +
+      fidelity * WEIGHTS.fidelity) /
     WEIGHT_TOTAL
   return {
     palette: round3(palette),
@@ -276,7 +554,10 @@ export function heuristicScore(dna: CreatureDna, descr = ''): ScoreBreakdown {
     motion: round3(motion),
     narrative: round3(narrative),
     match: round3(match),
+    structure: round3(structure),
+    fidelity: round3(fidelity),
     total: round3(total * 100),
+    fidelityNotes: fid.notes,
   }
 }
 

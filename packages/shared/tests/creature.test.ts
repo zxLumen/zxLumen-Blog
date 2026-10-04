@@ -310,10 +310,86 @@ test('keywordMatch:描述与 DNA 越贴合分越高', () => {
 test('heuristicScore 分项 0..1、总分 0..100', () => {
   const descr = '一只赛博朋克风格的机械蝴蝶,翅脉里流淌着蓝光'
   const s = heuristicScore(fallbackDna(descr), descr)
-  for (const k of ['palette', 'traits', 'motion', 'narrative', 'match'] as const) {
+  for (const k of ['palette', 'traits', 'motion', 'narrative', 'match', 'structure', 'fidelity'] as const) {
     assert.ok(s[k] >= 0 && s[k] <= 1, `${k}=${s[k]}`)
   }
   assert.ok(s.total >= 0 && s.total <= 100, s.total)
+})
+
+test('新维度 structure:部件多且角色多样 > 只有一个 body', () => {
+  const dna = fallbackDna('一只测试生物')
+  const thin = heuristicScore(dna, '一只测试生物', {
+    parts: [{ id: 'body', role: 'body' }],
+  }).structure
+  const rich = heuristicScore(dna, '一只测试生物', {
+    parts: [
+      { id: 'body', role: 'body' }, { id: 'bodyDark', role: 'bodyDark' },
+      { id: 'eye', role: 'eye' }, { id: 'nose', role: 'nose' },
+      { id: 'accent', role: 'accent' }, { id: 'glow', role: 'glow' },
+      ...Array.from({ length: 12 }, (_, i) => ({ id: `accent-${i}`, role: 'accent' })),
+    ],
+  }).structure
+  assert.ok(rich > thin, `部件多的应更高: ${rich} vs ${thin}`)
+})
+
+test('新维度 fidelity:「六条腿」要能验出腿数,而不是靠描述长度灌水', () => {
+  const dna = fallbackDna('一只测试生物')
+  const ctx6 = { parts: Array.from({ length: 6 }, (_, i) => ({ id: `leg-${i + 1}`, role: 'accent' })) }
+  const ctx4 = { parts: Array.from({ length: 4 }, (_, i) => ({ id: `leg-${i + 1}`, role: 'accent' })) }
+  const ctx0 = { parts: [{ id: 'body', role: 'body' }] }
+
+  const six = heuristicScore(dna, '一只长着六条腿的甲虫', ctx6).fidelity
+  const four = heuristicScore(dna, '一只长着六条腿的甲虫', ctx4).fidelity
+  const none = heuristicScore(dna, '一只长着六条腿的甲虫', ctx0).fidelity
+  assert.equal(six, 1, '6/6 应满分')
+  assert.ok(six > four, `腿数对得上应更高:${six} vs ${four}`)
+  // 4/6 差 2 条 = 没照做,和 0 条同档(都不是「差一条」的近似)
+  assert.equal(four, none, '差一半与完全没腿同档')
+  assert.ok(four < six, `照做了应更高:${four} vs ${six}`)
+})
+
+test('fidelity 反向长度陷阱:只点 1 类要求时不该比点多类更容易满分', () => {
+  const dna = fallbackDna('一只测试生物')
+  const ctx = { parts: [{ id: 'body', role: 'body' }, { id: 'glow', role: 'glow' }] }
+  // 只提「发光」一项 → 做到即满分(单项不足以说明偷工减料)
+  const one = heuristicScore(dna, '一只深海发光水母', ctx).fidelity
+  // 提多项且全做到 → 也该满分
+  const multiAll = heuristicScore(dna, '一只发光的、蓝色的、有尾巴、会走的东西', {
+    ...ctx,
+    parts: [...ctx.parts, { id: 'tail', role: 'accent' }],
+    motionFamily: 'walk',
+  }).fidelity
+  assert.equal(one, 1, '单一要求做到即满分')
+  assert.equal(multiAll, 1, '多项全做到同样满分')
+  // 关键:多项且漏掉 → 必须扣分,否则 rich 档永远追不上稀疏档
+  const multiMiss = heuristicScore(dna, '一只发光的、蓝色的、有尾巴、会走的东西', {
+    parts: ctx.parts,
+    motionFamily: 'glide',
+  }).fidelity
+  assert.ok(multiMiss < 1, `多项漏掉应扣分:${multiMiss}`)
+})
+
+test('fidelity 不被描述长度灌水:没点到任何可验特征的长描述拿中性分', () => {
+  const dna = fallbackDna('一只测试生物')
+  const ctx = { parts: [{ id: 'body', role: 'body' }, { id: 'eye', role: 'eye' }] }
+  // 两段都没有「腿/触须/眼/发光/翼/尾/颜色/动作」这类可验特征
+  const a = heuristicScore(dna, '一只安安静静的、很好看的、让人喜欢的小东西', ctx).fidelity
+  const b = heuristicScore(dna, '嗯', ctx).fidelity
+  assert.equal(a, b, `不该因描述更长而变高:${a} vs ${b}`)
+})
+
+test('motion 评自洽而非魔法数:同一 DNA 换 family 会改分,但不因接近某常数得满分', () => {
+  const dna = fallbackDna('一只测试生物')
+  // idle/breathe 却大幅漂移 = 自相矛盾,应低于自洽组合
+  const clash = heuristicScore(dna, '测试', { motionFamily: 'breathe' }).motion
+  const calm = heuristicScore(dna, '测试', { motionFamily: 'idle' }).motion
+  assert.ok(calm >= clash, `自洽组合应不低:${calm} vs ${clash}`)
+  // 高频 + 大幅 = 抽搐,应被扣分
+  const frantic = { ...dna, motion: { ...dna.motion, flapHz: 6, driftAmp: 40 } }
+  assert.ok(
+    heuristicScore(frantic, '测试').motion < heuristicScore(dna, '测试').motion,
+    '抽搐参数应低于正常参数',
+  )
 })
 
 test('craftScore:无 judge 采样时退化为纯启发分(模型不可用不能阻塞)', () => {

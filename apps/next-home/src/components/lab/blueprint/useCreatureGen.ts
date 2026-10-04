@@ -321,7 +321,12 @@ export function useCreatureGen(opts: GenOptions = {}) {
       // 先编译:打分要用编译后的完整 CreatureDna(带 plan/shape),
       // 直接传 blueprint 的裸 dna 会让 heuristicScore 在 dna.plan 上崩。
       const cc = compileBlueprint(got.blueprint)
-      const score = heuristicScore(cc.dna, descr)
+      // 把编译产物传进评分:structure / fidelity 要看真实部件树与 motion family,
+      // 只给 dna 的话这两维会退化成弱版本(而且认不出「六条腿」有没有做到)。
+      const score = heuristicScore(cc.dna, descr, {
+        parts: cc.rig.parts,
+        motionFamily: got.blueprint.motionCfg?.family,
+      })
       setBlueprint(got.blueprint)
       setCompiled(cc)
       setState({

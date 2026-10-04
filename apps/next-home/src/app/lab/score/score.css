@@ -364,8 +364,9 @@
   align-items: center;
 }
 
+/* 七条,窄一点免得挤到「我的评价」按钮 */
 .sc-dim {
-  flex: 0 0 34px;
+  flex: 0 0 24px;
 }
 
 .sc-dim i {
@@ -547,3 +548,13 @@
   border-radius: 4px;
   background: color-mix(in srgb, var(--cl-fg) 8%, transparent);
 }
+
+/* 逐项落实判定:✓/✗ + 特征名,一眼看出「描述要什么、它做到了没」 */
+.sc-fid {
+  margin-left: 8px;
+  color: var(--cl-dim);
+  font-size: 10px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+

@@ -43,10 +43,13 @@ const SCORE_LABELS: Record<string, string> = {
   palette: '配色',
   traits: '特质',
   motion: '动效',
-  narrative: '叙事',
-  match: '契合',
+  narrative: '成长',
+  match: '关键词',
+  structure: '结构',
+  fidelity: '落实',
 }
-const SCORE_KEYS = ['palette', 'traits', 'motion', 'narrative', 'match'] as const
+/** `narrative` / `match` 权重已降,排前面会让人误以为它们最重要 */
+const SCORE_KEYS = ['fidelity', 'structure', 'palette', 'traits', 'motion', 'narrative', 'match'] as const
 type ScoreKey = (typeof SCORE_KEYS)[number]
 
 /** 默认一批的规模 */
@@ -76,6 +79,8 @@ interface Item {
   matureDay: number
   ms: number
   error: string
+  /** 瞬时状态(排队 / 限流退避 / 重试),与 error 分开:它不是失败 */
+  wait: string
   rating: Rating | null
 }
 
@@ -113,6 +118,7 @@ export function ScoreLab() {
           matureDay: 34,
           ms: 0,
           error: '',
+          wait: '',
           rating: null,
         })),
       )
@@ -126,21 +132,12 @@ export function ScoreLab() {
           if (my !== seq.current) return
           const it = batch.items[idx]!
           try {
-            const res = await fetch('/api/creature/generate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ descr: it.descr }),
-            })
-            const j = (await res.json().catch(() => ({}))) as {
-              blueprint?: CreatureBlueprint
-              ms?: number
-              error?: string
-              state?: string
-              jobId?: string
-              position?: number
-              etaMs?: number
-            }
-            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+            const j = await postWithRetry(
+              it.descr,
+              (msg) => {
+                if (my === seq.current) note(it.id, msg)
+              },
+            )
             if (my !== seq.current) return
             if (j.jobId) {
               const r = await pollJob(j.jobId)
@@ -153,10 +150,15 @@ export function ScoreLab() {
             if (my !== seq.current) return
             const msg = e instanceof Error ? e.message : String(e)
             setItems((prev) =>
-              prev.map((p) => (p.id === it.id ? { ...p, error: msg } : p)),
+              prev.map((p) => (p.id === it.id ? { ...p, error: msg, wait: '' } : p)),
             )
           }
         }
+      }
+
+      /** 瞬时状态(排队/限流退避/重试),不是错误 */
+      function note(id: number, msg: string) {
+        setItems((prev) => prev.map((p) => (p.id === id ? { ...p, wait: msg } : p)))
       }
 
       /** 把一条结果落到 state;**先编译再打分**(裸 dna 没有 plan/shape,heuristicScore 会崩) */
@@ -169,7 +171,10 @@ export function ScoreLab() {
         const norm = normalizeBlueprint(bp)
         if (!norm) throw new Error('骨架不可用')
         const cc = compileBlueprint(norm)
-        const score = heuristicScore(cc.dna, it.descr)
+        const score = heuristicScore(cc.dna, it.descr, {
+          parts: cc.rig.parts,
+          motionFamily: norm.motionCfg?.family,
+        })
         setItems((prev) =>
           prev.map((p) =>
             p.id === it.id
@@ -181,6 +186,7 @@ export function ScoreLab() {
                   rig: cc.rig,
                   matureDay: cc.matureDay,
                   ms: r.ms ?? 0,
+                  wait: '',
                 }
               : p,
           ),
@@ -233,6 +239,8 @@ export function ScoreLab() {
       motion: { sum: 0, n: 0 },
       narrative: { sum: 0, n: 0 },
       match: { sum: 0, n: 0 },
+      structure: { sum: 0, n: 0 },
+      fidelity: { sum: 0, n: 0 },
     }
     let lift = 0
     let liftN = 0
@@ -313,7 +321,9 @@ export function ScoreLab() {
         <h1>打分校验台</h1>
         <p>
           随机出 <b>{BATCH_N}</b> 条描述生成一批生物,按<b>启发式评分</b>排名,并给出两个**能证伪**的参照 ——
-          同原型三档的丰富度对照、以及机器排名与你的评价是否一致。评分公式见{' '}
+          同原型三档的丰富度对照、以及机器排名与你的评价是否一致。
+          <b>落实</b>与<b>结构</b>是这一版新增的两维:前者问「描述里点名的有没有真长在身上」,
+          后者问「搭得认不认真」(部件数、角色分工、主体占比)。权重见{' '}
           <code>
             {SCORE_KEYS.map((k) => `${SCORE_LABELS[k]} ${WEIGHTS[k]}`).join(' / ')}
           </code>
@@ -466,10 +476,12 @@ export function ScoreLab() {
                 const it = ranked.find((r) => r.id === i.id)
                 const rank = rankOfId.get(i.id)
                 const vv = i.score ? (sortKey === 'total' ? i.score.total : i.score[sortKey]) : 0
+                // 档位按实测分布重定。第一版 55/75 而分布是 48.9~67.4,75 从没到过;
+                // 加权调整后分布变成 61.7~81.8,故取 ~1/3 与 ~2/3 分位。
                 const verdict = i.score
-                  ? i.score.total >= 75
+                  ? i.score.total >= 78
                     ? 'ok'
-                    : i.score.total >= 55
+                    : i.score.total >= 68
                       ? 'mid'
                       : 'bad'
                   : undefined
@@ -477,7 +489,9 @@ export function ScoreLab() {
                   <div
                     key={i.id}
                     className="sc-row"
-                    data-status={i.blueprint ? 'done' : i.error ? 'error' : running ? 'loading' : 'idle'}
+                    data-status={
+                      i.blueprint ? 'done' : i.error ? 'error' : i.wait || running ? 'loading' : 'idle'
+                    }
                     data-density={i.density}
                     data-picked={picked === i.id ? '1' : '0'}
                   >
@@ -498,7 +512,9 @@ export function ScoreLab() {
                     </button>
                     <div className="sc-info">
                       <div className="sc-line1">
-                        <span className="sc-name">{i.blueprint?.dna.name ?? (i.error ? '失败' : '…')}</span>
+                        <span className="sc-name">
+                          {i.blueprint?.dna.name ?? (i.error ? '失败' : i.wait ? '重试中' : '…')}
+                        </span>
                         <span className="sc-dens" title="描述丰富度(同组三档共用一个原型)">
                           {DENSITY_LABEL[i.density]}
                         </span>
@@ -508,16 +524,25 @@ export function ScoreLab() {
                         {i.blueprint && <span className="sc-mini">{i.ms > 0 ? `${(i.ms / 1000).toFixed(0)}s` : ''}</span>}
                       </div>
                       <div className="sc-descr" title={i.descr}>
-                        {i.descr}
+                        {i.wait || i.descr}
                       </div>
                       <div className="sc-dims">
                         {SCORE_KEYS.map((k) => (
-                          <span key={k} className="sc-dim">
+                          <span
+                            key={k}
+                            className="sc-dim"
+                            title={`${SCORE_LABELS[k]} ${i.score ? i.score[k].toFixed(2) : '—'}（权重 ${WEIGHTS[k]}）`}
+                          >
                             <i>
                               <b style={{ width: `${Math.round(((i.score?.[k] ?? 0) as number) * 100)}%` }} />
                             </i>
                           </span>
                         ))}
+                        {i.score?.fidelityNotes?.length ? (
+                          <span className="sc-fid" title="落实度在比什么:描述里点名的特征,有没有真的长在身上">
+                            {i.score.fidelityNotes.join(' ')}
+                          </span>
+                        ) : null}
                         <span className="sc-my">
                           {RATINGS.map((r) => (
                             <button
@@ -576,6 +601,58 @@ export function ScoreLab() {
 /** 粗略折算花费,只用来看「这一批大概烧了多少」 */
 function costOf(ms: number): number {
   return (ms / 1000) * 0.00025
+}
+
+type GenResp = {
+  blueprint?: CreatureBlueprint
+  ms?: number
+  error?: string
+  state?: string
+  jobId?: string
+  position?: number
+  etaMs?: number
+}
+
+/** 退避上限:总共最多等 ~2 分钟,超过就认失败 */
+const RETRY_DEADLINE_MS = 120_000
+
+/**
+ * POST 生成,**把限流当退避而不是失败**。
+ *
+ * 踩过的坑:原先任何非 2xx 都直接写进该行的 error。结果一批 30 只里只要有一瞬间
+ * 撞上每 IP 每分钟的上限,8 路并发会在一两秒内把 30 行全部标成失败 —— 一次限流
+ * 变成整批报废,而且**没有任何重试**。滑动窗口 60 次/分钟对「一次跑一批」这种
+ * 正常用法本来就偏紧(开发态所有客户端还共用同一个 `local` 桶)。
+ *
+ * 只有 4xx(429 除外)是语义错误、重试没有意义;429 与 5xx 都退避重试。
+ */
+async function postWithRetry(descr: string, onWait: (msg: string) => void): Promise<GenResp> {
+  const t0 = Date.now()
+  let attempt = 0
+  for (;;) {
+    attempt++
+    const res = await fetch('/api/creature/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ descr }),
+    })
+    const j = (await res.json().catch(() => ({}))) as GenResp
+    if (res.ok) return j
+
+    const retryable = res.status === 429 || res.status >= 500
+    if (!retryable || Date.now() - t0 > RETRY_DEADLINE_MS) {
+      throw new Error(j.error || `HTTP ${res.status}`)
+    }
+    // 1s 起,指数退避到 ~8s 封顶,加抖动免得 8 路一起醒过来再撞一次
+    const wait = Math.min(8000, 1000 * 2 ** (attempt - 1)) * (0.7 + Math.random() * 0.6)
+    const secs = Math.round(wait / 100) / 10
+    onWait(
+      res.status === 429
+        ? `限流,${secs}s 后重试(第 ${attempt} 次)`
+        : `服务异常 ${res.status},${secs}s 后重试(第 ${attempt} 次)`,
+    )
+    await new Promise((r) => setTimeout(r, wait))
+  }
 }
 
 /** 服务端返回 202(排队)时轮询取结果 */
