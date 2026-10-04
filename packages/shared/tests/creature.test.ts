@@ -21,6 +21,7 @@ import {
   INTERACT_XP,
 } from '../dist/creature/growth.js'
 import { fallbackDna, DEFAULT_DNA, keywordMatch } from '../dist/creature/fallback.js'
+import { randomBatch } from '../dist/creature/random.js'
 import { heuristicScore, craftScore, rankOf, rankScore, WEIGHT_TOTAL } from '../dist/creature/score.js'
 
 /* ---------------------------- 夹具 ---------------------------- */
@@ -407,4 +408,79 @@ test('端到端:描述 → DNA → 60 天 → 形态,全程有限且合法', () 
       assert.match(c, /^#[0-9a-f]{6}$/)
     }
   }
+})
+/* --------------------- 结构化随机描述(校验样本源) --------------------- */
+
+test('随机批次:同种子必出同一批(调权重时才能复跑对比)', () => {
+  const a = randomBatch(12, 4242)
+  const b = randomBatch(12, 4242)
+  assert.deepEqual(
+    a.items.map((i) => i.descr),
+    b.items.map((i) => i.descr),
+  )
+  assert.equal(a.seed, 4242)
+})
+
+test('随机批次:换种子应换题(否则「换一批」没意义)', () => {
+  const a = randomBatch(30, 1)
+  const b = randomBatch(30, 2)
+  assert.notDeepEqual(
+    a.items.map((i) => i.descr),
+    b.items.map((i) => i.descr),
+  )
+})
+
+test('随机批次:三档丰富度数量大致相等,否则均值没法跨档比', () => {
+  const items = randomBatch(30, 7).items
+  const count = (d: string) => items.filter((i) => i.density === d).length
+  assert.equal(count('sparse'), 10)
+  assert.equal(count('medium'), 10)
+  assert.equal(count('rich'), 10)
+})
+
+test('随机批次:描述按丰富度递增变长,且 rich 档五项料齐全', () => {
+  const items = randomBatch(30, 7).items
+  const sparse = items.filter((i) => i.density === 'sparse')
+  const medium = items.filter((i) => i.density === 'medium')
+  const rich = items.filter((i) => i.density === 'rich')
+  const avg = (xs: string[]) => xs.reduce((n, s) => n + s.length, 0) / xs.length
+  assert.ok(avg(sparse.map((i) => i.descr)) < avg(medium.map((i) => i.descr)), 'sparse 应短于 medium')
+  assert.ok(avg(medium.map((i) => i.descr)) < avg(rich.map((i) => i.descr)), 'medium 应短于 rich')
+  // rich 档埋的料要能对上评分关心的点:双色、辉光、两个特质、动态、怪癖
+  for (const it of rich) {
+    assert.ok(it.descr.includes(';'), `rich 缺分段: ${it.descr}`)
+    assert.ok(it.descr.split(';').length >= 4, `rich 料不够: ${it.descr}`)
+  }
+})
+
+test('随机批次:批内描述不重复,id 从 1 连续', () => {
+  const items = randomBatch(30, 99).items
+  assert.equal(new Set(items.map((i) => i.descr)).size, items.length)
+  assert.deepEqual(
+    items.map((i) => i.id),
+    Array.from({ length: 30 }, (_, k) => k + 1),
+  )
+})
+
+test('随机批次:同组三档共用一个原型(丰富度才是唯一自变量)', () => {
+  const items = randomBatch(30, 7).items
+  for (let g = 0; g < 10; g++) {
+    const triple = items.slice(g * 3, g * 3 + 3)
+    assert.deepEqual(
+      triple.map((t) => t.density),
+      ['sparse', 'medium', 'rich'],
+    )
+    // 主体词在组内三档里都要出现:稀疏档「一只X」、中等档「…的X,」、丰富档「…的X,…」
+    const body = triple[0].descr.replace(/^一只/, '')
+    assert.ok(triple[1].descr.includes(body), `组 ${g} 中等档丢了原型: ${triple[1].descr}`)
+    assert.ok(triple[2].descr.includes(body), `组 ${g} 丰富档丢了原型: ${triple[2].descr}`)
+  }
+})
+
+test('随机批次:原型不放回取样,相邻组不会撞同一个主体', () => {
+  const items = randomBatch(30, 5).items
+  const bodies = items.map((i) => i.descr.replace(/^一只/, '').split(/[、,;]/)[0])
+  const sparse = items.filter((i) => i.density === 'sparse').map((i) => i.descr)
+  assert.equal(new Set(sparse).size, sparse.length, 'sparse 档原型应互不相同')
+  assert.equal(new Set(bodies.slice(0, 12)).size > 1, true)
 })

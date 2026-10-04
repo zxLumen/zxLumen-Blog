@@ -37,7 +37,8 @@ export function SpeciesLab() {
         <p>
           描述任意生物,由**大模型现场生成骨架与 DNA**(部件树 + 配色 + 运动),再渲染并用本地启发式打分。
           **每格互不干扰** —— 六个预设 + 一个「自己写」可以同时在跑。对照{' '}
-          <a href="/lab/creature">六渲染技术版</a>。
+          <a href="/lab/creature">六渲染技术版</a>;想看<b>分数可不可信</b>去{' '}
+          <a href="/lab/score">打分校验台</a>。
         </p>
         <div className="sp-bulk">
           <button type="button" className="sp-go" onClick={() => setTrigger((n) => n + 1)}>

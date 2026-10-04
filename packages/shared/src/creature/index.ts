@@ -31,6 +31,7 @@ export {
 export type { InteractCounts, GrowthInput, Growth } from './growth.js'
 
 export { fallbackDna, keywordMatch, DEFAULT_DNA, PRESET_DESCRIPTIONS } from './fallback.js'
+export { randomBatch, DENSITY_LABEL, type Density, type RandomItem, type RandomBatch } from './random.js'
 
 export { normalizeBlueprint, compileBlueprint, BP_ROLES, MOTION_FAMILIES } from './blueprint.js'
 export type {
