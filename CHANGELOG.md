@@ -6,23 +6,6 @@
 
 ### 新增
 
-- **访客生物评分体系(创建 → 打分 → 全站排行榜)的底座**。目标形态:每个访客创建
-  自己的生物,系统给分,主页按分取 **Top5** 展示。分三层:
-  - **分只来自 `heur`**(确定性、零成本、抗作弊)。这是「单张打分」的正解 —— 同一纯
-    函数 = 同一把尺子,所以**跨批次天然可比**,不需要锚定。
-  - **新增 `creatures` 表**:落库的是**原始分**(craft/appeal/total)+ `score_version`,
-    排名读取时算(改权重零迁移)。`SCORE_VERSION` 一变旧分即不可比,榜单只取当前版本。
-  - **VLM 只在 Top 边界精排,不参与打分**:缓存过期时对候选池相邻对做成对比较,
-    `fitBradleyTerry` 重排;失败/无 key/无图 → 自动退回纯 heur 顺序。
-  - **配额**:每访客最多 5 只(`MAX_CREATURES_PER_CID`),再创建须带 `replaceId`
-    覆盖某只(保留 id、不占新槽);每日生成次数仍由生成侧预算单独管。
-  - 新接口:`POST /api/creature/commit`(服务端打分 + 落库 + 落图)、
-    `GET /api/creature/mine`(我的生物)、`GET /api/creatures/top`(榜单 + meta 缓存)。
-  - 出图工具 `renderToPng` 抽到 `lib/creature/render-png`(裁判台与创建页共用);
-    VLM 裁判提示词/解析抽到 `lib/creature/judge-vlm`(`/lab/judge` 与精排共用一处定义)。
-  - 生物 PNG 落 `docker/site-content/creatures/<id>.png`,Caddy 经 `/creatures/*`
-    静态服务(本地由 `public/creatures` 软链提供)。⚠ 上线见 AGENTS.md 的 `chown`.
-
 - **`npm run sync:apps`:把本地「应用栏」配置同步到线上**。应用条目存在库
   `meta.apps_config`,此前只能靠手改线上库或后台逐条加;现在本地 `/admin` 调好后一条
   命令推到线上(走线上 `/api/admin/apps`,按 id **只加不减**,`--dry-run` / `--update` /
@@ -30,15 +13,17 @@
   `http://localhost:<port>/`,原样推上去线上 iframe 会白开,默认挡下;要同步先改成公网
   地址,或显式 `--allow-localhost`。
 
-- **`/lab/judge` 裁判验证台:验证「视觉模型成对比较能否作为审美排序器」**。回答一个
-  **可证伪**的问题 —— `ρ(VLM-BT, 人工)` 是否明显高于 `ρ(启发式, 人工)`。方法:浏览器用
-  真实渲染器出 PNG;视觉模型(`deepseek-v4.1-flash`)只对**人工评分不同**的样本对**双向各判
-  一次**,不一致判平局;聚合用 Davidson Bradley-Terry(`fitBradleyTerry`)。**不做锚定** ——
-  锚点若取自本评分就是循环论证。「明显更高」的阈值 `RHO_MARGIN = 0.15` **事先定死**,防事后
-  挪门柱。新增 `POST /api/lab/judge`(admin-only + 限流)代理调用,**结果不落库**。这是
-  **实验接口**,不是生产链路。(⚠ 尚未标定:权重仍需真实 LLM 批次 + 人工评价校准。)
-
 ### 变更
+
+- **访客生物(生灵)功能迁出为独立应用 `luminari`**。原先在博客里长出来的
+  「创建 → 打分 → 全站排行榜」整条链路(以及 `/lab/judge` 视觉裁判实验、Davidson BT、
+  `creatures` 表与接口、四周展示)已迁到独立仓库 `luminari`(与 Opentodo / yijing64
+  同一套子应用模式:独立容器 + 子域 `luminari.${DOMAIN}` + 应用栏 `openIn:'panel'` 入口)。
+  博客侧只保留:一条应用栏条目 + Caddy 反代 + compose 服务 + `deploy.sh` 的
+  `LUMINARI_TAG`。`/lab/score`、`/lab/creature`、`/lab/species` 等实验台仍保留(仍依赖
+  `packages/shared/creature` 的评分引擎)。
+
+
 
 - **评分拆成 `craft`(工艺)/ `appeal`(吸引力)两轴,总分由两轴合成**。原来的单一加权
   几何平均把「做得对不对」和「想不想看」揉成一个数,于是两头都不好用:一个配色平庸
@@ -51,16 +36,6 @@
   - **两轴的权重各自成环,不能跨轴相加**。`WEIGHT_TOTAL` 现在等于两轴之和(200),
     只为兼容旧引用;新的代码请用 `CRAFT_TOTAL` / `APPEAL_TOTAL`。
   - 数据库**无需迁移**:评分一直是读取时计算,不落库。
-
-- **`packages/shared` 新增 Davidson Bradley-Terry**(`creature/bt.ts` 的 `fitBradleyTerry` /
-  `reconcilePair`,为 `/lab/judge` 服务)。π 走 **log 参数化 `θ=log π` + 梯度上升**
-  (小步长 0.5、回退缩步、仅在**对数似然不降**时接受、每步中心化使 θ 均值 0),ν 仍走标准
-  MM —— 之前 MM 在 π/ν 交错时似然会抖。完全未出场的样本单独给 `score=0.5`(不走 min-max);
-  结果新增未归一化的 `theta`(BT 规范输出)。纯函数、确定性、可单测。
-
-- **`llm.ts` 支持多模态**:`ChatMessage.content` 放宽为 `string | ContentPart[]`,新增
-  `ContentPart` 与 `isPlainTextContent()`;纯文本分支保持原状,含图消息走多模态结构。
-  注意**图片只能放在 user 消息**里(system/assistant 带图会 400),且只有视觉模型收图。
 
 - **`traits` 不再奖励「把每根轴都点亮」**。这是「好看却低分」的直接机制之一:旧判据用
   `intensity = total / 12`,于是八轴全 3(平庸)拿满分档、`cyber=3`(有主张)反而只有

@@ -39,8 +39,6 @@ import {
   AXIS_MIX,
 } from '../dist/creature/score.js'
 import { leverageOf } from '../dist/creature/leverage.js'
-import { fitBradleyTerry, reconcilePair } from '../dist/creature/bt.js'
-import type { PairResult } from '../dist/creature/bt.js'
 import { diversityOf } from '../dist/creature/diversity.js'
 import { rhoOf, distOf, calibrate, deadThreshold, MIN_N_FOR_RHO } from '../dist/creature/calibrate.js'
 
@@ -1196,79 +1194,4 @@ test('几何平均下常数维不改变名次 —— 所以「低方差」不等
   // 有害的是「权重高、方差大、却与观感无关」的噪声维 —— 那要靠 calibrate 的 ρ 抓,
   // 不是靠 leverageOf 的方差份额
   assert.ok(lo.every((x, i) => x > 0 && x < hi[i]!))
-})
-
-/* ------------------- Davidson BT:成对偏好聚合 + 位置偏差 ------------------- */
-
-test('BT:全序一致的胜负 → 强度分严格单调,且归一到 0..1', () => {
-  const ids = ['a', 'b', 'c', 'd']
-  const pairs: PairResult[] = []
-  const order = ['a', 'b', 'c', 'd'] // a 最强, d 最弱
-  for (let i = 0; i < order.length; i++) {
-    for (let j = i + 1; j < order.length; j++) {
-      pairs.push({ a: order[i]!, b: order[j]!, outcome: 'a' }) // 强者总赢
-    }
-  }
-  const r = fitBradleyTerry(ids, pairs)
-  assert.ok(r.score.a! > r.score.b!, `${r.score.a} > ${r.score.b}`)
-  assert.ok(r.score.b! > r.score.c!)
-  assert.ok(r.score.c! > r.score.d!)
-  assert.equal(r.score.a, 1, '最强应为 1')
-  assert.equal(r.score.d, 0, '最弱应为 0')
-  // 对数似然应单调不降(MM 的性质)
-  for (let i = 1; i < r.logLik.length; i++) {
-    assert.ok(r.logLik[i]! >= r.logLik[i - 1]! - 1e-6, `第 ${i} 步似然不该下降`)
-  }
-})
-
-test('BT:全平局 → 所有强度相等(0.5),不假装分得出高下', () => {
-  const ids = ['a', 'b', 'c']
-  const pairs: PairResult[] = []
-  for (const [i, j] of [[0, 1], [0, 2], [1, 2]] as const)
-    pairs.push({ a: ids[i]!, b: ids[j]!, outcome: 'tie' })
-  const r = fitBradleyTerry(ids, pairs)
-  assert.equal(r.score.a, 0.5)
-  assert.equal(r.score.b, 0.5)
-  assert.equal(r.score.c, 0.5)
-})
-
-test('BT:没出场的样本拿中性 0.5,不会被漏掉', () => {
-  const r = fitBradleyTerry(['a', 'b', 'ghost'], [{ a: 'a', b: 'b', outcome: 'a' }])
-  assert.ok('ghost' in r.score)
-  assert.equal(r.score.ghost, 0.5)
-})
-
-test('BT:胜负计数正确(用于诊断裁判是否在乱判)', () => {
-  const r = fitBradleyTerry(
-    ['a', 'b', 'c'],
-    [
-      { a: 'a', b: 'b', outcome: 'a' },
-      { a: 'a', b: 'c', outcome: 'a' },
-      { a: 'b', b: 'c', outcome: 'tie' },
-    ],
-  )
-  assert.equal(r.record.a!.win, 2)
-  assert.equal(r.record.c!.loss, 1)
-  assert.equal(r.record.b!.tie, 1)
-})
-
-test('reconcilePair:双向一致才采信,不一致退化为平局', () => {
-  // (A,B) 说 a 好,(B,A) 也说 a 好(即第二次的答案是 'b')
-  assert.deepEqual(reconcilePair('a', 'b', 'a', 'b'), { outcome: 'a', disagreed: false })
-  assert.deepEqual(reconcilePair('a', 'b', 'b', 'a'), { outcome: 'b', disagreed: false })
-  // 两次指向相反 → 平局 + 标记分歧
-  assert.deepEqual(reconcilePair('a', 'b', 'a', 'a'), { outcome: 'tie', disagreed: true })
-  assert.deepEqual(reconcilePair('a', 'b', 'b', 'b'), { outcome: 'tie', disagreed: true })
-  // 任一次判平 → 平局
-  assert.deepEqual(reconcilePair('a', 'b', 'tie', 'b'), { outcome: 'tie', disagreed: true })
-})
-
-test('reconcilePair + BT:位置偏差(总选第一个)会被抵消,不会把 a 抬上去', () => {
-  // 模型永远选「第一个」。双向问: (a,b)→a, (b,a)→b(即 a 又赢)。
-  // 这不是「一致」,而是纯位置偏差 → 两次永远一致地指向 a —— 等等,这恰恰是陷阱:
-  // 永远选第一个时 (a,b) 答 'a'、(b,a) 答 'a'(第一个是 b,它答 b=第一个)。
-  // 合并后 secondAsA = ba==='a'?'b':'a' → 'b' === first('a')? 否 → 平局。
-  const rec = reconcilePair('a', 'b', 'a', 'a')
-  assert.equal(rec.outcome, 'tie', '永远选第一个时,双向问会互相抵消成平局')
-  assert.equal(rec.disagreed, true)
 })

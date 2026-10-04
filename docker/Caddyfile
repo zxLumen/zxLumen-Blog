@@ -52,13 +52,6 @@
 		file_server
 	}
 
-	# 访客生物 PNG:创建时浏览器端出图,提交写 /creatures/<id>.png
-	# 与本地 dev 同路径(本地由 apps/next-home/public/creatures 软链提供)
-	handle /creatures/* {
-		root * /srv/site
-		file_server
-	}
-
 	# 内部指标端点绝不对外暴露(仅 Alloy 经容器内网抓取;纵深防御)
 	handle /api/metrics* {
 		respond 404
@@ -169,6 +162,21 @@ stock.{$DOMAIN} {
 	}
 
 	reverse_proxy stock:8789
+}
+
+# Luminari 生灵(独立容器,加入 docker_web 网络;见 luminari 仓库)
+luminari.{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		# 会被主站用 iframe 嵌进应用栏 → 不能 DENY;只放行主站(与自身)内嵌
+		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy luminari:8790
 }
 
 # (可选)Alloy 自带 UI/调试页:仅在需要时启用,并务必加 basic_auth

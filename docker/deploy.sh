@@ -26,6 +26,9 @@ echo "[deploy] IMAGE_TAG=${IMAGE_TAG} (工作目录: $(pwd))"
   # StockApp 股票速览:同上
   ${SUDO:-} env STOCK_TAG="${STOCK_TAG:-latest}" docker compose pull stock \
     || echo "[deploy] stock 镜像拉取失败(可能尚未推送),跳过"
+  # Luminari 生灵:同上
+  ${SUDO:-} env LUMINARI_TAG="${LUMINARI_TAG:-latest}" docker compose pull luminari \
+    || echo "[deploy] luminari 镜像拉取失败(可能尚未推送),跳过"
   ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
 
 # 服务器侧配置(Caddyfile / compose)由 CI scp 同步过来;`up -d` 不会因挂载文件

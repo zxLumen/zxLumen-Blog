@@ -2,7 +2,6 @@ import Database from 'better-sqlite3'
 import { SCHEMA_SQL } from '../../schema.js'
 import { chatStore } from './chat.js'
 import { commentStore } from './comments.js'
-import { creatureStore } from './creatures.js'
 import { eventStore } from './events.js'
 import { feedbackStore } from './feedback.js'
 import { kbStore } from './kb.js'
@@ -91,7 +90,6 @@ export function openDb(path: string): Db {
     ...visitorStore(db),
     ...chatStore(db),
     ...kbStore(db),
-    ...creatureStore(db),
     close() {
       db.close()
     },
