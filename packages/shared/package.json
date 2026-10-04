@@ -36,6 +36,7 @@
     "icons:apps": "node scripts/app-icons.mjs",
     "cover:push": "node scripts/cover-push.mjs",
     "sync:projects": "node scripts/sync-projects.mjs",
+    "sync:apps": "node scripts/sync-apps.mjs",
     "seed:chatbot": "node scripts/seed-chatbot.mjs",
     "ai-voice:prep": "node scripts/ai-voice-prep.mjs",
     "build": "tsc -p tsconfig.json",

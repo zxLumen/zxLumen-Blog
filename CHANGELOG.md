@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **`npm run sync:apps`:把本地「应用栏」配置同步到线上**。应用条目存在库
+  `meta.apps_config`,此前只能靠手改线上库或后台逐条加;现在本地 `/admin` 调好后一条
+  命令推到线上(走线上 `/api/admin/apps`,按 id **只加不减**,`--dry-run` / `--update` /
+  `--after` 与 `sync:projects` 对齐)。带 **localhost 守卫**:本地 dev 常填
+  `http://localhost:<port>/`,原样推上去线上 iframe 会白开,默认挡下;要同步先改成公网
+  地址,或显式 `--allow-localhost`。
+
 ### 变更
 
 - **评分拆成 `craft`(工艺)/ `appeal`(吸引力)两轴,总分由两轴合成**。原来的单一加权

@@ -2,6 +2,15 @@
 
 本仓库(zxLumen-Blog)的协作规范。**所有改动必须遵守下面的工作流。**
 
+## 沟通语言(硬性要求)
+
+- **一律用中文**:与用户对话、汇报进展、给结论 / 总结 / 解释、提意见,全部中文。
+- 代码注释、文档、`CHANGELOG.md`、commit message 同样用中文(commit 另见
+  「Git 规范」的中文 subject)。
+- **最终结论必须是中文** —— 哪怕中途分析、工具输出或引用资料是英文,交付给用户的
+  总结也不要用英文重述一遍。专有名词(`heuristicScore`、`craft` / `appeal`、
+  Spearman、commit type 等)照原样保留,不翻译。
+
 ## 仓库结构
 
 - `apps/next-home`:Next.js 16 应用(端口 3000)
@@ -74,6 +83,13 @@ cd packages/shared && npm run cover:vlog -- --force   # 连已有的兜底图也
 cd packages/shared && npm run export:content          # 先把 content.local.ts 导出到 content.json
 cd packages/shared && npm run sync:projects -- --dry-run  # 只看线上会加什么
 cd packages/shared && npm run sync:projects           # 真正同步(走线上 /api/admin/projects)
+
+# 应用栏同步到线上(源=本地 dev 库的 meta.apps_config;同样按 id 只加不减)
+#   本地 /admin「应用」面板调好 → 下面这条推到线上(走线上 /api/admin/apps)
+cd packages/shared && npm run sync:apps -- --dry-run    # 只看线上会加什么
+cd packages/shared && npm run sync:apps                 # 真正同步
+#   npm run sync:apps -- stock --after yijing --update    # 只同步某条 / 指定位置 / 覆盖已有
+#   注意:本地若是 http://localhost:xxxx/ 会被默认挡下(推上去线上 iframe 打不开)
 
 # 本地开发
 cd apps/next-home && npm run dev      # http://localhost:3000
@@ -204,6 +220,8 @@ cd apps/next-home && npm run lint && npm run build
    面板上传时才会出现在服务器上(上传即写库 `meta.apps_config` + 落盘,**不需要 scp**)。
    文件名 = `<应用 id>.<ext>`(jpg/png/webp),由 Caddy 经 `/apps/*` 静态服务。
    目录**在库里不入库**(空目录由代码 `mkdir` 兜底),所以线上首次上传前目录可能不存在。
+   应用**条目**(顺序 / 名称 / 地址)存在 `meta.apps_config`,本地 `/admin` 调好后用
+   `npm run sync:apps` 推到线上(见「常用命令」);图标文件仍在面板上传或 scp 到该目录。
 
    ⚠️ 与 vlog 同样的可写性要求:`docker-compose.yml` 已加
    `./site-content/apps:/srv/site/apps` 子挂载覆盖只读的 `/srv/site`,**首次上线前在服务器
