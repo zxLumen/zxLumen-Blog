@@ -121,6 +121,28 @@ CREATE TABLE IF NOT EXISTS kb_chunks (
 CREATE INDEX IF NOT EXISTS idx_kb_chunks_doc ON kb_chunks(doc_id);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS kb_chunks_fts USING fts5(content, source);
+
+-- 访客创建的生物(评分排行榜的数据源)。
+-- 落库的是**原始分**(heur 的 craft/appeal),排名读取时算 —— 改权重零成本、无需迁移。
+-- score_version = 打分算法/权重版本:一变旧分即不可比,榜单只取当前版本的行。
+CREATE TABLE IF NOT EXISTS creatures (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  cid           TEXT NOT NULL,                  -- 访客匿名 ID(归属;NOT NULL 防无主生物)
+  descr         TEXT NOT NULL,                  -- 生成时用的描述
+  blueprint     TEXT NOT NULL,                  -- normalizeBlueprint 后的 JSON
+  dna           TEXT NOT NULL,                  -- compileBlueprint 展开的 DNA(JSON)
+  craft         REAL NOT NULL DEFAULT 0,        -- heur craft 0..100(原始分)
+  appeal        REAL NOT NULL DEFAULT 0,        -- heur appeal 0..100(原始分)
+  total         REAL NOT NULL DEFAULT 0,        -- combineAxes 合成 0..100(缓存,便于排序)
+  score_version TEXT NOT NULL DEFAULT '',       -- 打分版本;榜单只取当前版本
+  png_path      TEXT DEFAULT '',                -- 落盘 PNG 文件名(<id>.png),空=无图
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_creatures_cid ON creatures(cid);
+CREATE INDEX IF NOT EXISTS idx_creatures_rank ON creatures(score_version, total DESC);
+CREATE INDEX IF NOT EXISTS idx_creatures_day ON creatures(cid, created_at);
 `
 
 export interface CommentRow {
@@ -136,6 +158,41 @@ export interface CommentRow {
   author_cid?: string
   /** 是否为当前访客本人所发(用于显示"删除"按钮) */
   mine?: boolean
+  created_at: string
+}
+
+/** 访客创建的一只生物(评分排行榜的数据源) */
+export interface CreatureRow {
+  id: number
+  /** 访客匿名 ID(归属) */
+  cid: string
+  descr: string
+  /** normalizeBlueprint 后的 JSON 字符串 */
+  blueprint: string
+  /** compileBlueprint 展开的 DNA JSON 字符串 */
+  dna: string
+  /** heur craft 0..100(原始分) */
+  craft: number
+  /** heur appeal 0..100(原始分) */
+  appeal: number
+  /** combineAxes 合成 0..100 */
+  total: number
+  /** 打分版本;一变旧分即不可比 */
+  score_version: string
+  /** 落盘 PNG 文件名;空 = 无图 */
+  png_path: string
+  created_at: string
+  updated_at: string
+}
+
+/** 榜单展示用的一行(含 VLM 精排后的名次) */
+export interface RankedCreature {
+  id: number
+  descr: string
+  total: number
+  craft: number
+  appeal: number
+  png_path: string
   created_at: string
 }
 

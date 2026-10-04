@@ -6,6 +6,23 @@
 
 ### 新增
 
+- **访客生物评分体系(创建 → 打分 → 全站排行榜)的底座**。目标形态:每个访客创建
+  自己的生物,系统给分,主页按分取 **Top5** 展示。分三层:
+  - **分只来自 `heur`**(确定性、零成本、抗作弊)。这是「单张打分」的正解 —— 同一纯
+    函数 = 同一把尺子,所以**跨批次天然可比**,不需要锚定。
+  - **新增 `creatures` 表**:落库的是**原始分**(craft/appeal/total)+ `score_version`,
+    排名读取时算(改权重零迁移)。`SCORE_VERSION` 一变旧分即不可比,榜单只取当前版本。
+  - **VLM 只在 Top 边界精排,不参与打分**:缓存过期时对候选池相邻对做成对比较,
+    `fitBradleyTerry` 重排;失败/无 key/无图 → 自动退回纯 heur 顺序。
+  - **配额**:每访客最多 5 只(`MAX_CREATURES_PER_CID`),再创建须带 `replaceId`
+    覆盖某只(保留 id、不占新槽);每日生成次数仍由生成侧预算单独管。
+  - 新接口:`POST /api/creature/commit`(服务端打分 + 落库 + 落图)、
+    `GET /api/creature/mine`(我的生物)、`GET /api/creatures/top`(榜单 + meta 缓存)。
+  - 出图工具 `renderToPng` 抽到 `lib/creature/render-png`(裁判台与创建页共用);
+    VLM 裁判提示词/解析抽到 `lib/creature/judge-vlm`(`/lab/judge` 与精排共用一处定义)。
+  - 生物 PNG 落 `docker/site-content/creatures/<id>.png`,Caddy 经 `/creatures/*`
+    静态服务(本地由 `public/creatures` 软链提供)。⚠ 上线见 AGENTS.md 的 `chown`.
+
 - **`npm run sync:apps`:把本地「应用栏」配置同步到线上**。应用条目存在库
   `meta.apps_config`,此前只能靠手改线上库或后台逐条加;现在本地 `/admin` 调好后一条
   命令推到线上(走线上 `/api/admin/apps`,按 id **只加不减**,`--dry-run` / `--update` /

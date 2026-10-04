@@ -5,6 +5,7 @@ import type {
   ChatSessionPage,
   ChatSessionRow,
   CommentRow,
+  CreatureRow,
   KbChunkRow,
   KbDocRow,
   NewChatLogInput,
@@ -162,6 +163,15 @@ export interface Db {
   countKbChunks(): number
   clearKb(): void
 
+  // 访客生物(评分排行榜)
+  addCreature(input: NewCreatureInput): CreatureRow
+  replaceCreature(id: number, cid: string, input: Omit<NewCreatureInput, 'cid'>): CreatureRow | null
+  getCreature(id: number): CreatureRow | null
+  listByCid(cid: string): CreatureRow[]
+  countByCid(cid: string): number
+  topCreatures(scoreVersion: string, limit?: number): CreatureRow[]
+  deleteCreature(id: number, cid: string): boolean
+
   close(): void
 }
 
@@ -211,3 +221,27 @@ export type KbStore = Pick<
   | 'listKbChunksWithVector'
   | 'ftsSearch'
   | 'clearKb' | 'hasKbChunks' | 'countKbChunks'>
+
+export type CreatureStore = Pick<
+  Db,
+  | 'addCreature'
+  | 'replaceCreature'
+  | 'getCreature'
+  | 'listByCid'
+  | 'countByCid'
+  | 'topCreatures'
+  | 'deleteCreature'
+>
+
+/** 新增生物入参(与 server/db/creatures.ts 的 NewCreatureInput 对齐) */
+export interface NewCreatureInput {
+  cid: string
+  descr: string
+  blueprint: string
+  dna: string
+  craft: number
+  appeal: number
+  total: number
+  score_version: string
+  png_path?: string
+}

@@ -52,6 +52,13 @@
 		file_server
 	}
 
+	# 访客生物 PNG:创建时浏览器端出图,提交写 /creatures/<id>.png
+	# 与本地 dev 同路径(本地由 apps/next-home/public/creatures 软链提供)
+	handle /creatures/* {
+		root * /srv/site
+		file_server
+	}
+
 	# 内部指标端点绝不对外暴露(仅 Alloy 经容器内网抓取;纵深防御)
 	handle /api/metrics* {
 		respond 404

@@ -59,6 +59,7 @@ export {
   AXIS_OF,
   AXIS_MIX,
   SCORE_DIM_FLOOR,
+  SCORE_VERSION,
   weightedGeometricMean,
   combineAxes,
   heuristicScore,

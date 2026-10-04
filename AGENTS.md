@@ -105,6 +105,11 @@ cd apps/next-home && npm run lint && npm run build
 > 这样本地上传的图标也能像线上一样经 `/apps/<id>.<ext>` 访问:
 > `ln -s ../../../docker/site-content/apps apps/next-home/public/apps`
 
+> **生物图本地联调**:同理,`apps/next-home/public/creatures` 是指向
+> `docker/site-content/creatures` 的软链(被 `.gitignore` 忽略,新克隆需重建),
+> 本地创建的生物图经 `/creatures/<id>.png` 访问:
+> `ln -s ../../../docker/site-content/creatures apps/next-home/public/creatures`
+
 ## 命令调用规范(避免卡死 / 中断)
 
 经验:工具调用「卡死 / 中断」几乎都发生在**调用过重或过多**时。务必遵守:
@@ -250,9 +255,18 @@ cd apps/next-home && npm run lint && npm run build
    `./site-content/apps:/srv/site/apps` 子挂载覆盖只读的 `/srv/site`,**首次上线前在服务器
    手动执行一次**(之后换图标不需要):
    `sudo chown -R 10001:10001 ~/zxLumen-Blog/docker/site-content/apps`
-5. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
+5. **`docker/site-content/creatures/`** —— 访客生物 PNG 目录,文件在**访客创建生物**时
+   由服务端写入(`<生物 id>.png`),由 Caddy 经 `/creatures/*` 静态服务。不入库(空目录
+   由代码 `mkdir` 兜底)。生物**条目**(描述 / 骨架 / 分数)存在 `creatures` 表。
+   评分与榜单见 `packages/shared/src/creature/score.ts`(SCORE_VERSION)与
+   `apps/next-home/src/lib/creature/`。
+
+   ⚠️ 同样可写:`docker-compose.yml` 加了 `./site-content/creatures:/srv/site/creatures`
+   子挂载,**首次上线前在服务器**执行一次:
+   `sudo chown -R 10001:10001 ~/zxLumen-Blog/docker/site-content/creatures`
+6. **数据库里的联系方式**(`meta.contact_email` 等)是 admin 覆盖值,**与源码无关**;
    改了邮箱/联系方式要**同时更新线上库**(线上 `/admin → 个人信息`,或直接改 `meta`)。
-6. **项目卡**(`meta.projects_config`)也是 admin 覆盖值 —— **只把新项目写进
+7. **项目卡**(`meta.projects_config`)也是 admin 覆盖值 —— **只把新项目写进
    `content.local.ts` 不会让它出现在线上**:线上库只要有过 `projects_config`
    (用过 admin「项目」面板就会有),就以库为准,`content.json` 的 `PROJECTS`
    只是「从未配置过」时的初始值。上线时跑一次脚本即可(它按 id **只加不减**,
