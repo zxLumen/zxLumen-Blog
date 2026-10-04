@@ -13,6 +13,14 @@
   `http://localhost:<port>/`,原样推上去线上 iframe 会白开,默认挡下;要同步先改成公网
   地址,或显式 `--allow-localhost`。
 
+- **`/lab/judge` 裁判验证台:验证「视觉模型成对比较能否作为审美排序器」**。回答一个
+  **可证伪**的问题 —— `ρ(VLM-BT, 人工)` 是否明显高于 `ρ(启发式, 人工)`。方法:浏览器用
+  真实渲染器出 PNG;视觉模型(`deepseek-v4.1-flash`)只对**人工评分不同**的样本对**双向各判
+  一次**,不一致判平局;聚合用 Davidson Bradley-Terry(`fitBradleyTerry`)。**不做锚定** ——
+  锚点若取自本评分就是循环论证。「明显更高」的阈值 `RHO_MARGIN = 0.15` **事先定死**,防事后
+  挪门柱。新增 `POST /api/lab/judge`(admin-only + 限流)代理调用,**结果不落库**。这是
+  **实验接口**,不是生产链路。(⚠ 尚未标定:权重仍需真实 LLM 批次 + 人工评价校准。)
+
 ### 变更
 
 - **评分拆成 `craft`(工艺)/ `appeal`(吸引力)两轴,总分由两轴合成**。原来的单一加权
@@ -26,6 +34,16 @@
   - **两轴的权重各自成环,不能跨轴相加**。`WEIGHT_TOTAL` 现在等于两轴之和(200),
     只为兼容旧引用;新的代码请用 `CRAFT_TOTAL` / `APPEAL_TOTAL`。
   - 数据库**无需迁移**:评分一直是读取时计算,不落库。
+
+- **`packages/shared` 新增 Davidson Bradley-Terry**(`creature/bt.ts` 的 `fitBradleyTerry` /
+  `reconcilePair`,为 `/lab/judge` 服务)。π 走 **log 参数化 `θ=log π` + 梯度上升**
+  (小步长 0.5、回退缩步、仅在**对数似然不降**时接受、每步中心化使 θ 均值 0),ν 仍走标准
+  MM —— 之前 MM 在 π/ν 交错时似然会抖。完全未出场的样本单独给 `score=0.5`(不走 min-max);
+  结果新增未归一化的 `theta`(BT 规范输出)。纯函数、确定性、可单测。
+
+- **`llm.ts` 支持多模态**:`ChatMessage.content` 放宽为 `string | ContentPart[]`,新增
+  `ContentPart` 与 `isPlainTextContent()`;纯文本分支保持原状,含图消息走多模态结构。
+  注意**图片只能放在 user 消息**里(system/assistant 带图会 400),且只有视觉模型收图。
 
 - **`traits` 不再奖励「把每根轴都点亮」**。这是「好看却低分」的直接机制之一:旧判据用
   `intensity = total / 12`,于是八轴全 3(平庸)拿满分档、`cyber=3`(有主张)反而只有

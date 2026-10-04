@@ -5,9 +5,31 @@ import { sanitizeText } from './sanitize'
 const DEFAULT_TIMEOUT = 60_000
 const UA = 'zx-home-chatbot/1.0 (+https://zxlumen.cn)'
 
+/**
+ * OpenAI 兼容的多模态内容块。目前只用到 text / image_url 两种。
+ *
+ * 为什么需要它:`ChatMessage.content` 原先是纯 `string`,而视觉裁判(见 `/lab/judge`)
+ * 必须把渲染好的生物图**内联**进 user 消息。OpenAI 兼容协议用
+ * `{type:'image_url', image_url:{url}}` 承载图片,url 可以是 `data:image/png;base64,...`。
+ *
+ * ⚠ 两条硬约束(踩过):
+ *  1. **图片只能放在 `user` 消息里** —— 放进 `system` / `assistant` 会 400。
+ *     所以「裁判规则」与「两张图」要合并进同一条 user 消息。
+ *  2. 只有支持视觉的模型收图(OpenCode Go 的 `deepseek-v4.1-flash` 可以);
+ *     往纯文本模型发 `image_url` 会 400。
+ */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ContentPart[]
+}
+
+/** content 是否是纯文本(脱敏/日志只处理纯文本,多模态块原样透传) */
+export function isPlainTextContent(c: ChatMessage['content']): c is string {
+  return typeof c === 'string'
 }
 
 export interface StreamChatOpts {
@@ -190,7 +212,12 @@ export async function streamChat(
   if (opts.sanitize) {
     opts = {
       ...opts,
-      messages: opts.messages.map((m) => ({ ...m, content: sanitizeText(m.content).text })),
+      // ⚠ 只脱敏**纯文本**消息。多模态 content 是 ContentPart[],`sanitizeText` 只接受
+      //   string,强塞进去会把数组压成 "[object Object]" —— 图就没了。视觉裁判的 prompt
+      //   不含用户隐私,本来也不需要脱敏;这里显式跳过,防止以后有人开了 sanitize 把裁判打坏。
+      messages: opts.messages.map((m) =>
+        isPlainTextContent(m.content) ? { ...m, content: sanitizeText(m.content).text } : m,
+      ),
     }
   }
   return opts.protocol === 'ollama' ? streamOllama(opts, onToken) : streamOpenAi(opts, onToken)
