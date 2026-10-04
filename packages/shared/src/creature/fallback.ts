@@ -180,16 +180,46 @@ function traitsOf(text: string, rng: () => number): Record<TraitAxis, number> {
   return raw
 }
 
+const clampN = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+/**
+ * 描述 → 三色配色(确定性)。
+ *
+ * ⚠ 这里**必须让明度与饱和度也真的变化**。旧实现只随机**色相**:主体固定
+ * `(s0.7, l0.62)`、点缀 `(0.75, 0.60)`、辉光 `(0.9, 0.80)`,色相间距只从
+ * `[30,150,180]` 里挑,辉光永远是 `h+30`。于是整批配色只在色相环上转,
+ * **明度/饱和度的「分离度」近似常数** —— `palette` 维量的正是它,实测方差份额只有
+ * 1.4%,那一维等于在测常数(而且会误伤真正做了明暗分层的好配色)。
+ * 现在整体调子从「暗身亮辉」到「亮身暗辉」铺开,亮暗两种方向都合法。
+ */
 function paletteOf(text: string, rng: () => number): [string, string, string] {
   for (const m of MOOD_PALETTES) {
     if (count(text, m.words) > 0) return m.pal
   }
   const h = Math.floor(rng() * 360)
-  const spread = pickOf(rng, [30, 150, 180])
+  // 色相间距:包含 0(单色系,靠明暗分层)到 270(近互补)。**必须含小间距/单色**,
+  // 否则整批都是「色相大跳」的配色,`colorPop` 会全部顶到满分(实测中位 1.0),
+  // 那一维照样失效 —— 只是从「全 0.2」换成了「全 1.0」。
+  const spread = pickOf(rng, [0, 15, 25, 40, 90, 150, 180, 210, 270])
+  // 主体:明度从夜行(暗)到高明调(亮)整段铺开;饱和度从近灰到高饱和
+  const bodyL = 0.2 + rng() * 0.62
+  const bodyS = 0.15 + rng() * 0.8
+  // 辉光:多数比主体亮(光感),少数更暗(暗辉);把明度差拉开才有层次
+  const glowL = clampN(
+    rng() < 0.72 ? bodyL + 0.14 + rng() * 0.24 : bodyL - 0.12 - rng() * 0.2,
+    0.1,
+    0.94,
+  )
+  const glowS = clampN(bodyS + (rng() - 0.25) * 0.4, 0.2, 1)
+  // 点缀:明度与主体反向偏、饱和度偏高,做「跳色」
+  const accentL = clampN(bodyL + (rng() < 0.5 ? -1 : 1) * (0.08 + rng() * 0.28), 0.08, 0.92)
+  const accentS = clampN(bodyS + (rng() - 0.1) * 0.45, 0.25, 1)
+  // 辉光色相:多数给个偏移(顺/逆都可),少数同色系(只靠明度分层)
+  const glowShift = rng() < 0.72 ? spread * (rng() < 0.5 ? 1 : -1) : 0
   return [
-    hslHex(h, 0.7, 0.62),
-    hslHex(h + spread, 0.75, 0.6),
-    hslHex(h + 30, 0.9, 0.8),
+    hslHex(h, bodyS, bodyL),
+    hslHex(h + spread, accentS, accentL),
+    hslHex(h + glowShift + 25, glowS, glowL),
   ]
 }
 
@@ -223,11 +253,15 @@ export function fallbackDna(descr: string, salt = ''): CreatureDna {
     palette: { body, accent, glow },
     traits,
     motion: {
-      flapHz: 1.4 + rng() * 2.6 + fastHint,
-      driftAmp: 10 + rng() * 18,
-      bobPx: 2 + rng() * 5,
-      trail: Math.min(1, 0.1 + rng() * 0.25 + traits.ethereal * 0.08),
-      spin: Math.min(1, rng() * 0.25 + traits.cyber * 0.06),
+      // ⚠ 合法区间很宽(见 spec.ts 的 R_FREQ/R_DRIFT/R_BOB/R_UNIT),旧实现却只用了一半
+      //   —— flapHz 1.4~4.0、driftAmp 10~28、trail 0.10~0.35、spin 0~0.25。于是
+      //   `motion` 维在整批上几乎恒定(方差份额 0.8%),「抽搐」「拖尾配不配」这些判据
+      //   根本没有样本可判。这里铺开到接近整个合法区间。
+      flapHz: 0.8 + rng() * 4.4 + fastHint,
+      driftAmp: 6 + rng() * 26,
+      bobPx: rng() * 9,
+      trail: Math.min(1, 0.05 + rng() * 0.55 + traits.ethereal * 0.08),
+      spin: Math.min(1, rng() * 0.4 + traits.cyber * 0.06),
     },
     shape: {
       limbPairs: Math.min(4, Math.max(0, shape.limbPairs + (rng() < 0.3 ? 1 : 0))),

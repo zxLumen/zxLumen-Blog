@@ -1159,3 +1159,39 @@ test('leverage:能指出「权重大但在划水」的死重维', () => {
     assert.ok(Math.abs(sum - 1) < 1e-9, `${ax} 轴权重份额应和为 1,实为 ${sum}`)
   }
 })
+
+test('fallbackDna 产出足够分散:配色/动效不再整批是常数(否则相关维度等于在测常数)', () => {
+  const items = randomBatch(400, 424242).items
+  const dnas = items.map((it) => fallbackDna(it.descr))
+  const q = (xs: number[], p: number) => {
+    const s = [...xs].sort((a, b) => a - b)
+    return s[Math.floor((s.length - 1) * p)]!
+  }
+  // 动效:合法区间很宽(spec.ts 的 R_FREQ/R_DRIFT/R_UNIT),旧实现只用了不到一半
+  const flap = dnas.map((d) => d.motion.flapHz)
+  const drift = dnas.map((d) => d.motion.driftAmp)
+  const trail = dnas.map((d) => d.motion.trail)
+  assert.ok(q(flap, 0.9) - q(flap, 0.1) > 2.5, `flapHz 铺开不足: ${q(flap, 0.1)}~${q(flap, 0.9)}`)
+  assert.ok(q(drift, 0.9) - q(drift, 0.1) > 12, `driftAmp 铺开不足: ${q(drift, 0.1)}~${q(drift, 0.9)}`)
+  assert.ok(q(trail, 0.9) - q(trail, 0.1) > 0.3, `trail 铺开不足: ${q(trail, 0.1)}~${q(trail, 0.9)}`)
+  // 配色:palette 维量的正是「明度/饱和度分离度」,旧实现只随机色相 → 这项是常数
+  const pal = items.map((it, i) => heuristicScore(dnas[i]!, it.descr).dims.palette)
+  assert.ok(q(pal, 0.9) - q(pal, 0.1) > 0.12, `palette 维仍在测常数: 跨度 ${q(pal, 0.9) - q(pal, 0.1)}`)
+  // 撞色不能全顶到满分 —— spread 里必须含单色/邻近色,否则这一维从「全 0」变成「全 1」
+  const pop = items.map((it, i) => heuristicScore(dnas[i]!, it.descr).dims.colorPop)
+  const low = pop.filter((v) => v < 0.6).length / pop.length
+  assert.ok(low > 0.15, `撞色几乎全封顶,这一维失效:低于 0.6 的只占 ${(low * 100).toFixed(0)}%`)
+})
+
+test('几何平均下常数维不改变名次 —— 所以「低方差」不等于「有害」', () => {
+  const base = { fidelity: 0.8, structure: 0.8, palette: 0.8, motion: 0.8, narrative: 0.8, match: 0.8 }
+  const rank = (a: number[]) => a.map((x) => a.filter((y) => y > x).length)
+  const vals = [0.5, 0.62, 0.7, 0.8]
+  // motion 从 0.8 整体改成 0.4(常数平移)→ 名次必须一模一样
+  const hi = vals.map((v) => weightedGeometricMean({ ...base, fidelity: v, motion: 0.8 }, CRAFT_WEIGHTS))
+  const lo = vals.map((v) => weightedGeometricMean({ ...base, fidelity: v, motion: 0.4 }, CRAFT_WEIGHTS))
+  assert.deepEqual(rank(hi), rank(lo), '常数维不该改变名次')
+  // 有害的是「权重高、方差大、却与观感无关」的噪声维 —— 那要靠 calibrate 的 ρ 抓,
+  // 不是靠 leverageOf 的方差份额
+  assert.ok(lo.every((x, i) => x > 0 && x < hi[i]!))
+})

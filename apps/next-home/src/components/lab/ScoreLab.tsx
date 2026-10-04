@@ -36,6 +36,7 @@ import {
   AXIS_MIX,
   CRAFT_WEIGHTS,
   APPEAL_WEIGHTS,
+  leverageOf,
   heuristicScore,
   compileBlueprint,
   normalizeBlueprint,
@@ -236,6 +237,11 @@ export function ScoreLab() {
           // cc.rig.parts 里这两者已经被编译成函数,取不到起止值了
           parts: norm.parts,
           motionFamily: norm.motionCfg?.family,
+          // ⚠ 这两个也得传,否则 `silhouette`(要 span 归一化)与 `motionRich`
+          //   (要部件级动效规则)会退回中性 0.55 的弱版本 —— 界面上看着有这两维,
+          //   其实根本没在算。
+          span: norm.span,
+          motionRules: Object.values(norm.motionCfg?.rules ?? {}),
         })
         setItems((prev) =>
           prev.map((p) =>
@@ -385,13 +391,29 @@ export function ScoreLab() {
   const totals = useMemo(() => {
     const xs = items.filter((i) => i.score).map((i) => i.score!.total)
     if (!xs.length) return null
+    const sorted = [...xs].sort((a, b) => a - b)
+    const at = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))]
     return {
       avg: xs.reduce((a, b) => a + b, 0) / xs.length,
-      min: Math.min(...xs),
-      max: Math.max(...xs),
+      min: sorted[0]!,
+      max: sorted[sorted.length - 1]!,
       /** 极差太小 = 所有样本挤在一起,排名没信息量 */
-      spread: Math.max(...xs) - Math.min(...xs),
+      spread: sorted[sorted.length - 1]! - sorted[0]!,
+      /**
+       * 档位阈值取**批内 ~1/3 与 ~2/3 分位**,不写死常数。
+       * 写死常数(如 78/68)的问题不是「不准」,是**换个模型/改个权重就悄悄失效**:
+       * 分布一平移,要么全 'ok' 要么全 'bad',而且没有任何东西会报错。
+       */
+      p33: at(1 / 3),
+      p66: at(2 / 3),
+      sorted,
     }
+  }, [items])
+
+  /** 逐维杠杆:权重份额 vs 实际方差份额。低比值 = 拿了权重却没怎么改变排名。 */
+  const leverage = useMemo(() => {
+    const rows = items.filter((i) => i.score).map((i) => i.score!)
+    return rows.length >= 5 ? leverageOf(rows) : null
   }, [items])
 
   return (
@@ -681,6 +703,63 @@ export function ScoreLab() {
                 </>
               )}
             </div>
+
+            {/* 参照五:权重份额 vs 实际方差份额(杠杆) */}
+            <div className="sc-ref">
+              <h2>
+                参照五 · 哪些维真的在改变名次
+                <em>权重份额 vs 方差份额</em>
+              </h2>
+              {!leverage ? (
+                <p className="sc-warn">样本太少(少于 5 只),这些比例没有意义。</p>
+              ) : (
+                <>
+                  <table className="sc-rho">
+                    <thead>
+                      <tr>
+                        <th>轴</th>
+                        <th>维度</th>
+                        <th>轴内权重</th>
+                        <th>权重占比</th>
+                        <th>方差份额</th>
+                        <th>方差 / 权重</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leverage.perDim.map((r) => (
+                        <tr key={r.key} data-dead={r.dead ? '1' : '0'}>
+                          <td>{r.axis === 'craft' ? '工艺' : '吸引'}</td>
+                          <td>{SCORE_LABELS[r.key]}</td>
+                          <td className="sc-rho-w">{r.weight}</td>
+                          <td className="sc-rho-d">{(r.weightShare * 100).toFixed(0)}%</td>
+                          <td className="sc-rho-d">{(r.varShare * 100).toFixed(1)}%</td>
+                          <td className="sc-rho-d">
+                            <b data-sign={r.ratio >= 0.5 ? '1' : '-1'}>{r.ratio.toFixed(2)}</b>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {leverage.dead.length > 0 && (
+                    <p className="sc-warn">
+                      <b>{leverage.dead.map((r) => SCORE_LABELS[r.key]).join('、')}</b>{' '}
+                      的方差份额远低于权重占比(比值 &lt; {(1 / 3).toFixed(2)})—— 在这批样本上它们
+                      <b>几乎是个常数</b>,基本不影响名次。
+                    </p>
+                  )}
+                  <p className="sc-hint">
+                    比值 = 方差份额 ÷ 权重占比。<b>≈1</b> 说明这维既在权重上被重视、也真的在拉开差距;
+                    <b>远小于 1</b> 说明它近似常数 —— 要么生成器在这些维度上本就整齐划一(常见于配色、动效),
+                    要么这一维的判据写死了。<b>远大于 1</b>(如「听读」)说明它被<b>低估</b>了。
+                    <br />
+                    ⚠️ 别把「方差份额低」直接等同于「有害」。在加权<b>几何</b>平均下,
+                    一个常数维只是把所有总分同乘一个常数,<b>不改变名次</b>;真正有害的是
+                    「权重高、方差大、却与观感无关」的**噪声维** —— 那种在本页「参照四」的
+                    ρ 才会暴露。这张表回答的是「权重是不是花在了它以为的地方」。
+                  </p>
+                </>
+              )}
+            </div>
           </section>
 
           <section className="sc-list-wrap">
@@ -722,15 +801,21 @@ export function ScoreLab() {
                 const it = ranked.find((r) => r.id === i.id)
                 const rank = rankOfId.get(i.id)
                 const vv = i.score ? sortVal(i.score, sortKey) : 0
-                // 档位按实测分布重定。第一版 55/75 而分布是 48.9~67.4,75 从没到过;
-                // 加权调整后分布变成 61.7~81.8,故取 ~1/3 与 ~2/3 分位。
+                // 档位按**本批分位**切(~1/3、~2/3),不再写死 78/68 —— 写死常数一换模型
+                // 或一改权重就悄悄失效(全 'ok' / 全 'bad'),而且不会有任何东西报错。
                 const verdict = i.score
-                  ? i.score.total >= 78
+                  ? totals && i.score.total >= totals.p66
                     ? 'ok'
-                    : i.score.total >= 68
+                    : totals && i.score.total >= totals.p33
                       ? 'mid'
                       : 'bad'
                   : undefined
+                // 当前排序轴上的批内百分位(0~100,越大越好)
+                const pct = (() => {
+                  if (!i.score || !totals || sortKey !== 'total') return null
+                  const below = totals.sorted.filter((x) => x < i.score!.total).length
+                  return Math.round((below / Math.max(1, totals.sorted.length - 1)) * 100)
+                })()
                 /**
                  * 这只在批内的最近邻距离。低于 0.2 = 批里有别的生物几乎和它一样,
                  * 是「换 seed 才看得见差异」的典型样本 —— 把它单独标出来,
@@ -788,7 +873,16 @@ export function ScoreLab() {
                           <span className="sc-dens" title="描述丰富度(同组三档共用一个原型)">
                             {DENSITY_LABEL[i.density]}
                           </span>
-                          <span className="sc-chip" data-score={verdict}>
+                          <span
+                            className="sc-chip"
+                            data-score={verdict}
+                            title={
+                              i.score
+                                ? `工艺 ${i.score.craft.toFixed(0)} / 吸引 ${i.score.appeal.toFixed(0)}` +
+                                  (pct !== null ? `;总分批内百分位 ${pct}` : '')
+                                : undefined
+                            }
+                          >
                             {i.score ? vv.toFixed(0) : ''}
                           </span>
                           {i.blueprint && <span className="sc-mini">{i.ms > 0 ? `${(i.ms / 1000).toFixed(0)}s` : ''}</span>}

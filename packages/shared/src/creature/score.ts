@@ -405,10 +405,26 @@ function scoreMotion(dna: CreatureDna, ctx: ScoreContext = {}): number {
     familyFit = still && (m.driftAmp >= 20 || m.flapHz >= 5) ? 0.3 : 1
   }
 
-  // 5) 不能完全静止 —— 三个通道里至少要有一处在明显动,这是缺陷不是风格
-  const alive = norm(Math.max(m.flapHz / 2.5, m.driftAmp / 18, m.bobPx / 4))
+  // 5) 不能完全静止 —— 三个通道里至少要有一处在明显动,这是缺陷不是风格。
+  //    ⚠ 这是**下限守卫**,不是质量分:绝大多数正常生物都该拿满。所以权重压到 0.12,
+  //    不让一个「人人满分」的项把这一维整体抬成常数(旧权重 0.2,是这一维方差被
+  //    压平的原因之一)。
+  const alive = norm(Math.max(m.flapHz / 4.5, m.driftAmp / 30, m.bobPx / 8))
 
-  return clamp01(0.24 * frantic + 0.22 * coherence + 0.18 * trailFit + 0.16 * familyFit + 0.2 * alive)
+  // 6) 旋转要与「有结构」相称:spin 是全局自转,转得太快会盖过部件级动作、显得廉价。
+  //    spin 早就生成出来了,但没有任何一维在用 —— 白扔一路信号。
+  const spinFit = 1 - norm((m.spin - 0.35) / 0.5)
+
+  // 权重向**真正有分辨力**的项倾斜:coherence / trailFit 随参数连续变化,
+  // frantic / alive 在常见区间会封顶(实测 p50 就是 1.0),给高权重等于稀释这一维。
+  return clamp01(
+    0.16 * frantic +
+      0.26 * coherence +
+      0.24 * trailFit +
+      0.14 * familyFit +
+      0.12 * alive +
+      0.08 * spinFit,
+  )
 }
 
 /**
@@ -817,12 +833,18 @@ function scoreColorPop(dna: CreatureDna): number {
     // 而最跳的三色配色恰恰是「三个都很饱和、色相各差 140°」:它的饱和度**差为零**,
     // 一相乘就被判成 0(实测亮丽三色与全灰同分,这一维直接失效)。
     // 色相跳开本身就够了;明度/饱和度落差是给「色相相邻」的情况准备的另一条路。
-    const hueJump = norm((hueDist(bh, h) - 25) / 35)
+    // 阈值(30/70)要够大:除数给 35 时,只要色相间距≥60° 就封顶,于是绝大多数
+    // 三色配色(间距常在 90~270°)全部顶到 1.0,中位数就是满分 —— 那一维照样失效。
+    const hueJump = norm((hueDist(bh, h) - 30) / 70)
     const sep = Math.max(
       norm((Math.abs(s - bs) - 0.08) / 0.28),
       norm((Math.abs(l - bl) - 0.1) / 0.28),
     )
-    const q = Math.max(hueJump, sep)
+    // ⚠ sep 只作**次要**路线(系数 0.45),不是与色相等权。理由:明度/饱和度的
+    //   分离度已经由 `palette` 的 sepGlow/sepAccent 在评了,这里再等权计一遍等于
+    //   重复奖励,而且会让**单色系**(色相不动、只靠明暗分层)也拿满「撞色」分,
+    //   colorPop 又变回近似常数。撞色说的就是「色相跳开」。
+    const q = Math.max(hueJump, 0.45 * sep)
     if (q > best) best = q
     if (q >= 0.5) both++
   }
