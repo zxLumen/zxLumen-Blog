@@ -29,9 +29,16 @@ import {
   rankOf,
   rankScore,
   weightedGeometricMean,
-  WEIGHT_TOTAL,
+  combineAxes,
+  CRAFT_TOTAL,
+  APPEAL_TOTAL,
+  CRAFT_WEIGHTS,
+  APPEAL_WEIGHTS,
+  SCORE_KEYS,
   SCORE_DIM_FLOOR,
+  AXIS_MIX,
 } from '../dist/creature/score.js'
+import { leverageOf } from '../dist/creature/leverage.js'
 import { diversityOf } from '../dist/creature/diversity.js'
 import { rhoOf, distOf, calibrate, deadThreshold, MIN_N_FOR_RHO } from '../dist/creature/calibrate.js'
 
@@ -321,17 +328,30 @@ test('keywordMatch:描述与 DNA 越贴合分越高', () => {
 test('heuristicScore 分项 0..1、总分 0..100', () => {
   const descr = '一只赛博朋克风格的机械蝴蝶,翅脉里流淌着蓝光'
   const s = heuristicScore(fallbackDna(descr), descr)
-  for (const k of ['palette', 'traits', 'motion', 'narrative', 'match', 'structure', 'fidelity'] as const) {
-    assert.ok(s[k] >= 0 && s[k] <= 1, `${k}=${s[k]}`)
+  for (const k of SCORE_KEYS) {
+    assert.ok(s.dims[k] >= 0 && s.dims[k] <= 1, `${k}=${s.dims[k]}`)
   }
-  assert.ok(s.total >= 0 && s.total <= 100, s.total)
+  // 两轴是 0..100 的**真分数**(逐维是 0..1),量纲不同别混
+  for (const k of ['craft', 'appeal', 'total'] as const) {
+    assert.ok(s[k] >= 0 && s[k] <= 100, `${k}=${s[k]}`)
+  }
+  // 两轴权重各自成环:不能把 craft 的权重加到 appeal 上(跨轴相加没有意义)
+  assert.equal(
+    Object.values(CRAFT_WEIGHTS).reduce((a, b) => a + b, 0),
+    CRAFT_TOTAL,
+  )
+  assert.equal(
+    Object.values(APPEAL_WEIGHTS).reduce((a, b) => a + b, 0),
+    APPEAL_TOTAL,
+  )
+  assert.deepEqual(Object.keys(CRAFT_WEIGHTS).filter((k) => k in APPEAL_WEIGHTS), [])
 })
 
 test('新维度 structure:部件多且角色多样 > 只有一个 body', () => {
   const dna = fallbackDna('一只测试生物')
   const thin = heuristicScore(dna, '一只测试生物', {
     parts: [{ id: 'body', role: 'body' }],
-  }).structure
+  }).dims.structure
   const rich = heuristicScore(dna, '一只测试生物', {
     parts: [
       { id: 'body', role: 'body' }, { id: 'bodyDark', role: 'bodyDark' },
@@ -339,7 +359,7 @@ test('新维度 structure:部件多且角色多样 > 只有一个 body', () => {
       { id: 'accent', role: 'accent' }, { id: 'glow', role: 'glow' },
       ...Array.from({ length: 12 }, (_, i) => ({ id: `accent-${i}`, role: 'accent' })),
     ],
-  }).structure
+  }).dims.structure
   assert.ok(rich > thin, `部件多的应更高: ${rich} vs ${thin}`)
 })
 
@@ -349,9 +369,9 @@ test('新维度 fidelity:「六条腿」要能验出腿数,而不是靠描述长
   const ctx4 = { parts: Array.from({ length: 4 }, (_, i) => ({ id: `leg-${i + 1}`, role: 'accent' })) }
   const ctx0 = { parts: [{ id: 'body', role: 'body' }] }
 
-  const six = heuristicScore(dna, '一只长着六条腿的甲虫', ctx6).fidelity
-  const four = heuristicScore(dna, '一只长着六条腿的甲虫', ctx4).fidelity
-  const none = heuristicScore(dna, '一只长着六条腿的甲虫', ctx0).fidelity
+  const six = heuristicScore(dna, '一只长着六条腿的甲虫', ctx6).dims.fidelity
+  const four = heuristicScore(dna, '一只长着六条腿的甲虫', ctx4).dims.fidelity
+  const none = heuristicScore(dna, '一只长着六条腿的甲虫', ctx0).dims.fidelity
   assert.equal(six, 1, '6/6 应满分')
   assert.ok(six > four, `腿数对得上应更高:${six} vs ${four}`)
   // 4/6 差 2 条 = 没照做,和 0 条同档(都不是「差一条」的近似)
@@ -363,20 +383,20 @@ test('fidelity 反向长度陷阱:只点 1 类要求时不该比点多类更容�
   const dna = fallbackDna('一只测试生物')
   const ctx = { parts: [{ id: 'body', role: 'body' }, { id: 'glow', role: 'glow' }] }
   // 只提「发光」一项 → 做到即满分(单项不足以说明偷工减料)
-  const one = heuristicScore(dna, '一只深海发光水母', ctx).fidelity
+  const one = heuristicScore(dna, '一只深海发光水母', ctx).dims.fidelity
   // 提多项且全做到 → 也该满分
   const multiAll = heuristicScore(dna, '一只发光的、蓝色的、有尾巴、会走的东西', {
     ...ctx,
     parts: [...ctx.parts, { id: 'tail', role: 'accent' }],
     motionFamily: 'walk',
-  }).fidelity
+  }).dims.fidelity
   assert.equal(one, 1, '单一要求做到即满分')
   assert.equal(multiAll, 1, '多项全做到同样满分')
   // 关键:多项且漏掉 → 必须扣分,否则 rich 档永远追不上稀疏档
   const multiMiss = heuristicScore(dna, '一只发光的、蓝色的、有尾巴、会走的东西', {
     parts: ctx.parts,
     motionFamily: 'glide',
-  }).fidelity
+  }).dims.fidelity
   assert.ok(multiMiss < 1, `多项漏掉应扣分:${multiMiss}`)
 })
 
@@ -384,21 +404,21 @@ test('fidelity 不被描述长度灌水:没点到任何可验特征的长描述�
   const dna = fallbackDna('一只测试生物')
   const ctx = { parts: [{ id: 'body', role: 'body' }, { id: 'eye', role: 'eye' }] }
   // 两段都没有「腿/触须/眼/发光/翼/尾/颜色/动作」这类可验特征
-  const a = heuristicScore(dna, '一只安安静静的、很好看的、让人喜欢的小东西', ctx).fidelity
-  const b = heuristicScore(dna, '嗯', ctx).fidelity
+  const a = heuristicScore(dna, '一只安安静静的、很好看的、让人喜欢的小东西', ctx).dims.fidelity
+  const b = heuristicScore(dna, '嗯', ctx).dims.fidelity
   assert.equal(a, b, `不该因描述更长而变高:${a} vs ${b}`)
 })
 
 test('motion 评自洽而非魔法数:同一 DNA 换 family 会改分,但不因接近某常数得满分', () => {
   const dna = fallbackDna('一只测试生物')
   // idle/breathe 却大幅漂移 = 自相矛盾,应低于自洽组合
-  const clash = heuristicScore(dna, '测试', { motionFamily: 'breathe' }).motion
-  const calm = heuristicScore(dna, '测试', { motionFamily: 'idle' }).motion
+  const clash = heuristicScore(dna, '测试', { motionFamily: 'breathe' }).dims.motion
+  const calm = heuristicScore(dna, '测试', { motionFamily: 'idle' }).dims.motion
   assert.ok(calm >= clash, `自洽组合应不低:${calm} vs ${clash}`)
   // 高频 + 大幅 = 抽搐,应被扣分
   const frantic = { ...dna, motion: { ...dna.motion, flapHz: 6, driftAmp: 40 } }
   assert.ok(
-    heuristicScore(frantic, '测试').motion < heuristicScore(dna, '测试').motion,
+    heuristicScore(frantic, '测试').dims.motion < heuristicScore(dna, '测试').dims.motion,
     '抽搐参数应低于正常参数',
   )
 })
@@ -410,7 +430,7 @@ const traitProfile = (vals: Partial<Record<TraitAxis, number>>) =>
     normalizeDna({ ...fallbackDna('测试'), traits: vals }),
     '测试',
     {},
-  ).traits
+  ).dims.traits
 
 test('traits 不再把「八轴均匀」当满分 —— 均匀恰恰是没性格', () => {
   const flat = TRAIT_AXES.reduce((a, k) => ({ ...a, [k]: 3 }), {} as Record<TraitAxis, number>)
@@ -430,7 +450,11 @@ test('traits 区分「有性格」与「真塌缩」:判据是次高轴的量级
   const duo = traitProfile({ cyber: 5, luminous: 4 }) // 双主角,不是塌缩
   const twinFull = traitProfile({ mechanical: 5, organic: 5 }) // 两根轴都满
   assert.ok(duo > lonely, `cyber=5+lum=4 不该与 cyber=5 同分:${duo} vs ${lonely}`)
-  assert.ok(lonely < 0.2, `真塌缩仍应被重罚:${lonely}`)
+  // ⚠ 阈值从 0.2 放宽到 0.45:`lonelyPeak` 系数由 0.35 调到 0.45。理由是
+  // 「cyber=5 单轴拉满」其实是**很强的**性格表达,不该和「塌缩」同罚;真正的塌缩
+  // 由 `peak` 项扣(轴值全在 1 附近 → peak≈0),孤峰只做**成比例**的减分。
+  // 关键的不变量是 duo > lonely,以及 lonely 明显低于 0.45。
+  assert.ok(lonely < 0.45, `真塌缩应被重罚:${lonely}`)
   assert.ok(twinFull > lonely, `双轴满更不该当塌缩:${twinFull}`)
   // 原实现三者都是 0.150(判据写的是 nonzero <= 2,数的是条数)
 })
@@ -456,7 +480,7 @@ test('narrative 在 blueprint 路径不再是常量(plan 为空时改看 parts �
   // 无任何时间信息 → 中性分
   const flat = heuristicScore(dna, '测试', {
     parts: Array.from({ length: 18 }, (_, i) => ({ id: `p${i}`, role: 'body' })),
-  }).narrative
+  }).dims.narrative
   // 分阶段出场 + 一直在长大
   const staged = heuristicScore(dna, '测试', {
     parts: Array.from({ length: 18 }, (_, i) => ({
@@ -465,7 +489,7 @@ test('narrative 在 blueprint 路径不再是常量(plan 为空时改看 parts �
       appear: { start: i * 1.2, end: i * 1.2 + 6 },
       grow: { from: i * 0.8, to: 45 + i * 2, a: 0.5, b: 1 },
     })),
-  }).narrative
+  }).dims.narrative
   // 有 grow 但很早就不长了
   const stunted = heuristicScore(dna, '测试', {
     parts: Array.from({ length: 18 }, (_, i) => ({
@@ -474,7 +498,7 @@ test('narrative 在 blueprint 路径不再是常量(plan 为空时改看 parts �
       appear: { start: i * 0.4, end: i * 0.4 + 4 },
       grow: { from: i * 0.3, to: 10, a: 0.5, b: 1 },
     })),
-  }).narrative
+  }).dims.narrative
   assert.ok(staged > flat, `分阶段成长应高于全同帧冒出来:${staged} vs ${flat}`)
   assert.ok(staged > stunted, `长得久应更高:${staged} vs ${stunted}`)
   // 原实现这条路径恒为 0.49(占 8/94 权重 = 纯常数,是分数收窄的直接成因)
@@ -482,15 +506,13 @@ test('narrative 在 blueprint 路径不再是常量(plan 为空时改看 parts �
 
 test('总分用加权几何平均:单项灾难不再被其余六维平均掉', () => {
   const all = 0.9
-  const uniform = weightedGeometricMean({
-    palette: all, traits: all, motion: all,
-    narrative: all, match: all, structure: all, fidelity: all,
-  })
-  // 只有 fidelity 崩了(权重最高 20)
-  const oneBad = weightedGeometricMean({
-    palette: all, traits: all, motion: all,
-    narrative: all, match: all, structure: all, fidelity: 0.1,
-  })
+  const craftAll = {
+    fidelity: all, structure: all, palette: all,
+    motion: all, narrative: all, match: all,
+  }
+  const uniform = weightedGeometricMean(craftAll, CRAFT_WEIGHTS)
+  // 只有 fidelity 崩了(craft 轴权重最高 24)
+  const oneBad = weightedGeometricMean({ ...craftAll, fidelity: 0.1 }, CRAFT_WEIGHTS)
   // 算术平均下 fidelity 崩到 0.1 时:0.9*74/94 + 0.1*20/94 = 0.73 → 只掉 17 分
   // 几何平均要掉得更多,短板才藏不住
   assert.ok(uniform > 0.89, `全优应接近 1:${uniform}`)
@@ -499,34 +521,34 @@ test('总分用加权几何平均:单项灾难不再被其余六维平均掉', (
     `单项灾难应显著拉低总分:${uniform} → ${oneBad}`,
   )
   assert.ok(
-    oneBad < uniform * (74 / 94 + (0.1 * 20) / 94),
+    oneBad < uniform * (74 / 100 + (0.1 * 24) / 100),
     `几何平均的结果必须低于同权重的算术平均:${oneBad}`,
   )
 })
 
 test('几何平均的单维地板:一维归零不会把整只打成 0', () => {
   const base = {
-    palette: 0.8, traits: 0.8, motion: 0.8,
-    narrative: 0.8, match: 0.8, structure: 0.8, fidelity: 0.8,
+    fidelity: 0.8, structure: 0.8, palette: 0.8,
+    motion: 0.8, narrative: 0.8, match: 0.8,
   }
-  const zeroed = weightedGeometricMean({ ...base, match: 0 })
+  const zeroed = weightedGeometricMean({ ...base, match: 0 }, CRAFT_WEIGHTS)
   assert.ok(zeroed > 0, '不能归零')
   // 地板 0.08:权重最小的 match 归零,其余六维的 0.8 把它拉到 ~0.66(不是 0)
   assert.ok(zeroed > 0.5, `一维归零后其余维度仍应撑住大部分分:${zeroed}`)
   // 高权重维度归零才应该明显掉 —— 权重越大,短板越痛
-  const fidZero = weightedGeometricMean({ ...base, fidelity: 0 })
-  assert.ok(fidZero < zeroed, `fidelity(权重 20)归零应比 match 更痛:${fidZero} vs ${zeroed}`)
+  const fidZero = weightedGeometricMean({ ...base, fidelity: 0 }, CRAFT_WEIGHTS)
+  assert.ok(fidZero < zeroed, `fidelity(craft 权重 24)归零应比 match(10)更痛:${fidZero} vs ${zeroed}`)
   assert.ok(fidZero > 0.3, `但也不该被打到接近 0:${fidZero}`)
 })
 
 test('地板取值不会把低权重维度压成常数(否则等于换了种方式制造死重)', () => {
   // 0.15 时 match 有 44% 样本被兜到同一个值;这里确认地板足够低
   const base = {
-    palette: 0.8, traits: 0.8, motion: 0.8,
-    narrative: 0.8, match: 0.8, structure: 0.8, fidelity: 0.8,
+    fidelity: 0.8, structure: 0.8, palette: 0.8,
+    motion: 0.8, narrative: 0.8, match: 0.8,
   }
-  const a = weightedGeometricMean({ ...base, match: 0.2 })
-  const b = weightedGeometricMean({ ...base, match: 0.3 })
+  const a = weightedGeometricMean({ ...base, match: 0.2 }, CRAFT_WEIGHTS)
+  const b = weightedGeometricMean({ ...base, match: 0.3 }, CRAFT_WEIGHTS)
   assert.ok(b > a, `地板以下仍应保留区分度:${a} → ${b}`)
   assert.ok(SCORE_DIM_FLOOR <= 0.1, `地板 ${SCORE_DIM_FLOOR} 偏大会吃掉低权重维度的信号`)
 })
@@ -709,8 +731,8 @@ test('P1 气质轴:描述点名「赛博」而 cyber 轴没亮 → 落实度扣�
   // 这样分母就只有「赛博」一项,能干净地验证单项分支。
   // ⚠ 别在这句里加「霓虹」等颜色词 —— 会额外命中「配色」那一项,把分母变成 2。
   const descr = '一只赛博朋克电子造物'
-  const a = heuristicScore(cold, descr, {}).fidelity
-  const b = heuristicScore(lit, descr, {}).fidelity
+  const a = heuristicScore(cold, descr, {}).dims.fidelity
+  const b = heuristicScore(lit, descr, {}).dims.fidelity
   assert.ok(a < b, `cyber 轴点亮后应提分:${a} → ${b}`)
   assert.equal(a, 0.4, '轴为 0 是彻底没兑现,走单项未达成的 0.4')
   assert.equal(b, 1)
@@ -728,15 +750,15 @@ test('P1 气质轴:轴值 1 记半亮(~),不按「没做到」也不按「照做
   const s = heuristicScore(half, '一只赛博朋克电子造物', {})
   assert.deepEqual(s.fidelityNotes, ['~赛博(1)'])
   // 半亮算「做到了」这一支(≥0.5),单项分支不给 0.4
-  assert.equal(s.fidelity, 1)
+  assert.equal(s.dims.fidelity, 1)
 })
 
 test('P1 气质轴:通用字不算气质词(否则「一只小东西」会被判成点名了可爱)', () => {
   const dna = normalizeDna(fallbackDna('测试'))
   const ctx = { parts: [{ id: 'body', role: 'body' }] }
   // 与既有测试同款:都不该触发任何可验特征 → 中性 0.55
-  const a = heuristicScore(dna, '一只安安静静的、很好看的、让人喜欢的小东西', ctx).fidelity
-  const b = heuristicScore(dna, '嗯', ctx).fidelity
+  const a = heuristicScore(dna, '一只安安静静的、很好看的、让人喜欢的小东西', ctx).dims.fidelity
+  const b = heuristicScore(dna, '嗯', ctx).dims.fidelity
   assert.equal(a, 0.55)
   assert.equal(b, 0.55)
   assert.deepEqual(heuristicScore(dna, '一只安安静静的、很好看的、让人喜欢的小东西', ctx).fidelityNotes, [])
@@ -852,13 +874,15 @@ test('P0-2 calibrate:逐维拆出「权重大但在划水」的维', () => {
   const n = 12
   const mk = (rating: number, fidelity: number) => ({
     score: {
-      palette: 0.5,
-      traits: 0.5,
-      motion: 0.5,
-      narrative: 0.63,
-      match: 0.5,
-      structure: 0.5,
-      fidelity,
+      // 逐维一律放 `dims`;顶层只留两轴 + 总分
+      dims: Object.fromEntries([
+        ['palette', 0.5], ['traits', 0.5], ['motion', 0.5],
+        ['narrative', 0.63], ['match', 0.5], ['structure', 0.5],
+        ['fidelity', fidelity],
+        ['silhouette', 0.5], ['face', 0.5], ['colorPop', 0.5], ['motionRich', 0.5],
+      ]) as never,
+      craft: fidelity * 100,
+      appeal: 50,
       total: fidelity * 100,
     },
     rating,
@@ -882,7 +906,16 @@ test('P0-2 calibrate:逐维拆出「权重大但在划水」的维', () => {
 
 test('P0-2 calibrate:评价无并列时同序才是严格的 1', () => {
   const rows = Array.from({ length: 8 }, (_, i) => ({
-    score: { palette: 0.5, traits: 0.5, motion: 0.5, narrative: 0.5, match: 0.5, structure: 0.5, fidelity: i / 7, total: (i / 7) * 100 },
+    score: {
+      dims: Object.fromEntries([
+        ['palette', 0.5], ['traits', 0.5], ['motion', 0.5], ['narrative', 0.5],
+        ['match', 0.5], ['structure', 0.5], ['fidelity', i / 7],
+        ['silhouette', 0.5], ['face', 0.5], ['colorPop', 0.5], ['motionRich', 0.5],
+      ]) as never,
+      craft: (i / 7) * 100,
+      appeal: 50,
+      total: (i / 7) * 100,
+    },
     // 8 个互不相同的评价,没有并列
     rating: i,
   }))
@@ -894,15 +927,23 @@ test('P0-2 calibrate:deadWeight 只收「ρ 测得出但接近 0」的维,不含
   const n = 10
   const rows = Array.from({ length: n }, (_, i) => ({
     score: {
-      // 与评价无关的锯齿 → ρ≈0
-      palette: i % 2 === 0 ? 0.9 : 0.1,
-      traits: 0.5,
-      motion: 0.5,
-      narrative: 0.63, // 常数 → null
-      match: 0.5,
-      structure: 0.5,
-      fidelity: 0.5,
-      total: i / (n - 1),
+      dims: Object.fromEntries([
+        // 与评价无关的锯齿 → ρ≈0
+        ['palette', i % 2 === 0 ? 0.9 : 0.1],
+        ['traits', 0.5],
+        ['motion', 0.5],
+        ['narrative', 0.63], // 常数 → null
+        ['match', 0.5],
+        ['structure', 0.5],
+        ['fidelity', 0.5],
+        ['silhouette', 0.5],
+        ['face', 0.5],
+        ['colorPop', 0.5],
+        ['motionRich', 0.5],
+      ]) as never,
+      craft: 50,
+      appeal: 50,
+      total: (i / (n - 1)) * 100,
     },
     rating: i % 3,
   }))
@@ -984,4 +1025,137 @@ test('回归 n=30 时 |ρ|=0.30 不算死重:旧的固定 0.2 线会冤枉它', 
   assert.ok(Math.abs(rho) < cut, `前提:n=30 的判定线 ${cut.toFixed(3)} 应在 0.30 之上(所以新线不会误判)`)
   // 再看一眼 n=10 的反面:同一份数据在 n=10 时就该判成死重了(线更高)
   assert.ok(Math.abs(rho) < deadThreshold(10), '同一 |ρ| 在样本更少时应被判成死重')
+})
+
+/* ------------------- 拆两轴 + 去偏:这一版的核心 ------------------- */
+
+test('两轴:逐维全 1 时两轴都满分,total 由 combineAxes 合成', () => {
+  // 把 11 维全喂 1.0(不走 heuristicScore,直接测合成层)
+  const craft = weightedGeometricMean(
+    Object.fromEntries(Object.keys(CRAFT_WEIGHTS).map((k) => [k, 1])),
+    CRAFT_WEIGHTS,
+  )
+  const appeal = weightedGeometricMean(
+    Object.fromEntries(Object.keys(APPEAL_WEIGHTS).map((k) => [k, 1])),
+    APPEAL_WEIGHTS,
+  )
+  assert.ok(craft > 0.999 && appeal > 0.999)
+  assert.ok(combineAxes(craft, appeal) > 0.999)
+  // 轴的权重是**各自成环**的:craft 的 100 分不该被 appeal 稀释成 50
+  assert.equal(AXIS_MIX.craft + AXIS_MIX.appeal, 1)
+})
+
+test('两轴能互相拆开:同一份 DNA,craft 高而 appeal 低是可能的', () => {
+  const dna = fallbackDna('一只长着六条腿的甲虫')
+  // 不给 parts → silhouette / face 退回中性 0.55;motionRules 空 → motionRich 低
+  const s = heuristicScore(dna, '一只长着六条腿的甲虫')
+  assert.ok(s.craft > 0 && s.appeal > 0)
+  // 顶层不再有逐维字段,免得「score.palette」和「score.dims.palette」两处同名不同义
+  assert.equal((s as unknown as Record<string, unknown>).palette, undefined)
+  assert.equal((s as unknown as Record<string, unknown>).traits, undefined)
+})
+
+test('听读(match)改成精确率:点亮更多轴不再自动拿高分 —— 「克制但照做」应高于「全亮但没在听」', () => {
+  const restrained = heuristicScore(
+    normalizeDna({ ...fallbackDna('测试'), traits: { cyber: 3 } }),
+    '一只赛博朋克风格的东西',
+  )
+  const shotgun = heuristicScore(
+    normalizeDna({
+      ...fallbackDna('测试'),
+      traits: { cyber: 3, cute: 3, cool: 3, fierce: 3, luminous: 3, organic: 3 },
+    }),
+    '一只赛博朋克风格的东西',
+  )
+  assert.ok(
+    restrained.dims.match > shotgun.dims.match,
+    `描述只点名赛博,那就把 cyber 点亮就该更高:${restrained.dims.match} vs ${shotgun.dims.match}`,
+  )
+  // 旧实现是反的:`traitHit.length / 4` 数的是「命中了几根轴」,全亮必胜
+})
+
+test('听读(match)不再有描述长度效应:同样照做,长短描述同分', () => {
+  const dna = normalizeDna({ ...fallbackDna('测试'), traits: { cyber: 3 } })
+  const short = heuristicScore(dna, '赛博朋克')
+  const long = heuristicScore(dna, '赛博朋克风格的一个小东西,带一点点的机械感')
+  assert.ok(
+    Math.abs(short.dims.match - long.dims.match) < 0.25,
+    `长度效应应大幅减弱:${short.dims.match} vs ${long.dims.match}`,
+  )
+})
+
+test('撞色(colorPop)有下限:全灰的配色拿 0.2 而不是 0', () => {
+  const grey = heuristicScore(normalizeDna({
+    ...fallbackDna('测试'),
+    palette: { body: '#808080', accent: '#7f7f7f', glow: '#818181' },
+  }))
+  const vivid = heuristicScore(normalizeDna({
+    ...fallbackDna('测试'),
+    palette: { body: '#ff2d95', accent: '#00e5ff', glow: '#fff200' },
+  }))
+  assert.ok(grey.dims.colorPop >= 0.19, `灰暗不该归零:${grey.dims.colorPop}`)
+  assert.ok(vivid.dims.colorPop > grey.dims.colorPop + 0.3)
+})
+
+test('剪影:挤在中心的一团 应低于 铺开但不出画布的一群', () => {
+  const dna = fallbackDna('测试')
+  const bunched = heuristicScore(dna, '测试', {
+    span: 100,
+    parts: Array.from({ length: 20 }, (_, i) => ({ id: `p${i}`, role: 'body', x: i % 2 ? 1 : -1, y: 0, d: 'M0 0 '.repeat(20) })),
+  })
+  const spread = heuristicScore(dna, '测试', {
+    span: 100,
+    parts: Array.from({ length: 20 }, (_, i) => ({
+      id: `p${i}`, role: 'body',
+      x: Math.cos((i / 20) * Math.PI * 2) * 45, y: Math.sin((i / 20) * Math.PI * 2) * 45,
+      d: 'M0 0 '.repeat(4 + (i % 5) * 8),
+    })),
+  })
+  assert.ok(spread.dims.silhouette > bunched.dims.silhouette,
+    `${spread.dims.silhouette} vs ${bunched.dims.silhouette}`)
+})
+
+test('动势(motionRich):多个不同节奏 优于 全体同频', () => {
+  const dna = fallbackDna('测试')
+  const unison = heuristicScore(dna, '测试', {
+    motionRules: Array.from({ length: 6 }, () => ({ amp: 20, periodScale: 1 })),
+  })
+  const layered = heuristicScore(dna, '测试', {
+    motionRules: [
+      { amp: 6, periodScale: 1 },
+      { amp: 14, periodScale: 0.6 },
+      { amp: 22, periodScale: 1.4 },
+      { amp: 30, periodScale: 0.85 },
+      { amp: 38, periodScale: 1.15 },
+    ],
+  })
+  assert.ok(layered.dims.motionRich > unison.dims.motionRich + 0.15,
+    `${layered.dims.motionRich} vs ${unison.dims.motionRich}`)
+})
+
+test('leverage:能指出「权重大但在划水」的死重维', () => {
+  // 11 维里只有两维在动,其余全是常数 → 常数维必然是死重
+  const rows = Array.from({ length: 30 }, (_, i) => {
+    const v = i / 29
+    return heuristicScore(
+      normalizeDna({ ...fallbackDna('测试'), traits: { cyber: 1 + (i % 5) } }),
+      '测试',
+    ) && {
+      craft: v * 100,
+      appeal: (1 - v) * 100,
+      total: 50 + v * 10,
+      dims: Object.fromEntries(SCORE_KEYS.map((k) => [k, k === 'match' ? v : k === 'traits' ? 1 - v : 0.5])) as never,
+    }
+  })
+  const rep = leverageOf(rows)
+  assert.equal(rep.perDim.length, SCORE_KEYS.length)
+  const dead = rep.dead.map((r) => r.key)
+  assert.ok(dead.length > 0, '常数维应被判死重')
+  assert.ok(!dead.includes('match'), '唯一真正在变的维不该被判死重')
+  assert.ok(!dead.includes('traits'), '另一维在反向变化,也不该死重')
+  // 每个轴内的权重份额之和为 1
+  for (const ax of ['craft', 'appeal'] as const) {
+    const sum = rep.perDim.filter((r) => r.axis === ax).reduce((a, r) => a + r.weightShare, 0)
+    assert.ok(Math.abs(sum - 1) < 1e-9, `${ax} 轴权重份额应和为 1,实为 ${sum}`)
+  }
 })

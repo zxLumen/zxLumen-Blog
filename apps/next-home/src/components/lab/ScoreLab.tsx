@@ -32,7 +32,10 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   randomBatch,
   DENSITY_LABEL,
-  WEIGHTS,
+  AXIS_OF,
+  AXIS_MIX,
+  CRAFT_WEIGHTS,
+  APPEAL_WEIGHTS,
   heuristicScore,
   compileBlueprint,
   normalizeBlueprint,
@@ -49,19 +52,52 @@ import { fallbackDna } from '@zx/shared/creature'
 import { speciesFor } from './species'
 
 const SCORE_LABELS: Record<string, string> = {
+  fidelity: '落实',
+  structure: '结构',
   palette: '配色',
-  traits: '特质',
   motion: '动效',
   narrative: '成长',
-  match: '关键词',
-  structure: '结构',
-  fidelity: '落实',
+  match: '听读',
+  traits: '特质',
+  silhouette: '剪影',
+  face: '面部',
+  colorPop: '撞色',
+  motionRich: '动势',
 }
-/** `narrative` / `match` 权重已降,排前面会让人误以为它们最重要。
- *  ⚠️ 这是**按展示优先级**排的,和 `WEIGHTS` 的声明顺序不同(shared 里也有一份
- * `SCORE_KEYS`,那是声明顺序),别为了「消除重复」把两者合并 —— 会改变 UI 排序。 */
-const SCORE_KEYS = ['fidelity', 'structure', 'palette', 'traits', 'motion', 'narrative', 'match'] as const
+/** 按展示优先级排的:craft 轴在前、appeal 轴在后。
+ *  ⚠️ 这是**按展示顺序**排的,和 shared 里 `SCORE_KEYS` 的声明顺序不同(那边是权重序),
+ *  别为了「消除重复」把两者合并 —— 会改变 UI 排序。 */
+const SCORE_KEYS = [
+  'fidelity',
+  'structure',
+  'palette',
+  'motion',
+  'narrative',
+  'match',
+  'traits',
+  'silhouette',
+  'face',
+  'colorPop',
+  'motionRich',
+] as const
 type ScoreKey = (typeof SCORE_KEYS)[number]
+
+/** 一维的权重**只在它所属的轴内**有意义 —— 跨轴相加没有意义,那正是这一版要拆掉的东西 */
+const weightOf = (k: string): number =>
+  (AXIS_OF[k as never] === 'craft' ? CRAFT_WEIGHTS : APPEAL_WEIGHTS)[k as never] ?? 0
+const axisOf = (k: string): 'craft' | 'appeal' => (AXIS_OF[k as never] === 'craft' ? 'craft' : 'appeal')
+
+/** 排序键:两轴 + 逐维 + 总分 */
+type SortKey = 'total' | 'craft' | 'appeal' | ScoreKey
+const SORT_LABELS: Record<string, string> = {
+  total: '总分',
+  craft: '工艺轴',
+  appeal: '吸引力轴',
+  ...SCORE_LABELS,
+}
+/** 取排序用的数值。逐维一律走 `dims` —— 顶层只留两轴与总分,免得两处同名不同义 */
+const sortVal = (s: ScoreBreakdown, k: SortKey): number =>
+  k === 'total' ? s.total : k === 'craft' ? s.craft : k === 'appeal' ? s.appeal : s.dims[k]
 
 /** 默认一批的规模 */
 const BATCH_N = 30
@@ -114,7 +150,7 @@ export function ScoreLab() {
   const [seedText, setSeedText] = useState('20261004')
   const [items, setItems] = useState<Item[]>([])
   const [running, setRunning] = useState(false)
-  const [sortKey, setSortKey] = useState<ScoreKey | 'total'>('total')
+  const [sortKey, setSortKey] = useState<SortKey>('total')
   const [picked, setPicked] = useState<number | null>(null)
   const seq = useRef(0)
 
@@ -240,7 +276,7 @@ export function ScoreLab() {
 
   const ranked = useMemo(() => {
     const ok = items.filter((i) => i.score)
-    const val = (i: Item) => (sortKey === 'total' ? i.score!.total : i.score![sortKey])
+    const val = (i: Item) => sortVal(i.score!, sortKey)
     return [...ok].sort((a, b) => val(b) - val(a))
   }, [items, sortKey])
 
@@ -259,15 +295,10 @@ export function ScoreLab() {
       }
     })
     // rich 相对**同组** sparse 的分差 —— 这才是干净的自变量对照
-    const lifts: Record<ScoreKey, { sum: number; n: number }> = {
-      palette: { sum: 0, n: 0 },
-      traits: { sum: 0, n: 0 },
-      motion: { sum: 0, n: 0 },
-      narrative: { sum: 0, n: 0 },
-      match: { sum: 0, n: 0 },
-      structure: { sum: 0, n: 0 },
-      fidelity: { sum: 0, n: 0 },
-    }
+    const lifts = Object.fromEntries(SCORE_KEYS.map((k) => [k, { sum: 0, n: 0 }])) as Record<
+      ScoreKey,
+      { sum: number; n: number }
+    >
     let lift = 0
     let liftN = 0
     for (const it of items) {
@@ -277,7 +308,7 @@ export function ScoreLab() {
       lift += it.score.total - base.total
       liftN++
       for (const k of SCORE_KEYS) {
-        lifts[k].sum += it.score[k] - base[k]
+        lifts[k].sum += it.score.dims[k] - base.dims[k]
         lifts[k].n++
       }
     }
@@ -288,7 +319,8 @@ export function ScoreLab() {
       perDim: SCORE_KEYS.map((k) => ({
         key: k,
         label: SCORE_LABELS[k],
-        weight: WEIGHTS[k],
+        weight: weightOf(k),
+        axis: axisOf(k),
         lift: lifts[k].n ? (lifts[k].sum / lifts[k].n) * 100 : 0,
       })),
     }
@@ -374,7 +406,7 @@ export function ScoreLab() {
           <b>落实</b>与<b>结构</b>是这一版新增的两维:前者问「描述里点名的有没有真长在身上」,
           后者问「搭得认不认真」(部件数、角色分工、主体占比)。权重见{' '}
           <code>
-            {SCORE_KEYS.map((k) => `${SCORE_LABELS[k]} ${WEIGHTS[k]}`).join(' / ')}
+            {SCORE_KEYS.map((k) => `${SCORE_LABELS[k]} ${weightOf(k)}`).join(' / ')}
           </code>
           。
         </p>
@@ -661,10 +693,26 @@ export function ScoreLab() {
               >
                 总分
               </button>
+              {/* 两轴单列出来:它们是 0~100 的**真分数**(逐维是 0~1),量纲不同,
+                  混在一排按同一种刻度画会误导 */}
+              <button
+                type="button"
+                className={sortKey === 'craft' ? 'is-on' : ''}
+                onClick={() => setSortKey('craft')}
+              >
+                工艺轴<i>{Math.round(AXIS_MIX.craft * 100)}%</i>
+              </button>
+              <button
+                type="button"
+                className={sortKey === 'appeal' ? 'is-on' : ''}
+                onClick={() => setSortKey('appeal')}
+              >
+                吸引力轴<i>{Math.round(AXIS_MIX.appeal * 100)}%</i>
+              </button>
               {SCORE_KEYS.map((k) => (
                 <button key={k} type="button" className={sortKey === k ? 'is-on' : ''} onClick={() => setSortKey(k)}>
                   {SCORE_LABELS[k]}
-                  <i>{WEIGHTS[k]}</i>
+                  <i>{weightOf(k)}</i>
                 </button>
               ))}
             </div>
@@ -673,7 +721,7 @@ export function ScoreLab() {
               {items.map((i) => {
                 const it = ranked.find((r) => r.id === i.id)
                 const rank = rankOfId.get(i.id)
-                const vv = i.score ? (sortKey === 'total' ? i.score.total : i.score[sortKey]) : 0
+                const vv = i.score ? sortVal(i.score, sortKey) : 0
                 // 档位按实测分布重定。第一版 55/75 而分布是 48.9~67.4,75 从没到过;
                 // 加权调整后分布变成 61.7~81.8,故取 ~1/3 与 ~2/3 分位。
                 const verdict = i.score
@@ -753,10 +801,10 @@ export function ScoreLab() {
                             <span
                               key={k}
                               className="sc-dim"
-                              title={`${SCORE_LABELS[k]} ${i.score ? i.score[k].toFixed(2) : '—'}（权重 ${WEIGHTS[k]}）`}
+                              title={`${SCORE_LABELS[k]} ${i.score ? i.score.dims[k].toFixed(2) : '—'}（${axisOf(k) === 'craft' ? '工艺' : '吸引力'}轴内权重 ${weightOf(k)}）`}
                             >
                               <i>
-                                <b style={{ width: `${Math.round(((i.score?.[k] ?? 0) as number) * 100)}%` }} />
+                                <b style={{ width: `${Math.round((i.score?.dims[k] ?? 0) * 100)}%` }} />
                               </i>
                             </span>
                           ))}
@@ -779,7 +827,9 @@ export function ScoreLab() {
                             ))}
                           </span>
                         </div>
-                        {it && sortKey !== 'total' && <span className="sc-sortval">按{SCORE_LABELS[sortKey]}排第 {rank}</span>}
+                        {it && sortKey !== 'total' && (
+                          <span className="sc-sortval">按{SORT_LABELS[sortKey]}排第 {rank}</span>
+                        )}
                       </div>
 
                       {/*

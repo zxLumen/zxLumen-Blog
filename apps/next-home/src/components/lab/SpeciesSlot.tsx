@@ -203,12 +203,12 @@ export function SpeciesSlot({
           </div>
           <div
             className="sp-slot-dims"
-            title={SCORE_KEYS.map((k) => `${SCORE_LABELS[k]} ${Math.round(score![k] * 100)}`).join(' / ')}
+            title={SCORE_KEYS.map((k) => `${SCORE_LABELS[k]} ${Math.round(score!.dims[k] * 100)}`).join(' / ')}
           >
             {SCORE_KEYS.map((k) => (
               <span key={k} className="sp-slot-dim">
                 <i>
-                  <b style={{ width: `${Math.round((score?.[k] ?? 0) * 100)}%` }} />
+                  <b style={{ width: `${Math.round((score?.dims[k] ?? 0) * 100)}%` }} />
                 </i>
               </span>
             ))}

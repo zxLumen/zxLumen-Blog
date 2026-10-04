@@ -74,7 +74,12 @@ function hslHex(h: number, s: number, l: number): string {
 
 /* ---------------------------- 词表 ---------------------------- */
 
-const ARCHETYPE_WORDS: Record<Archetype, string[]> = {
+/**
+ * 原型词表。**导出**是因为 `score.ts` 的原型契合维要用它 —— 它原先是模块私有的,
+ * 于是评分侧要么复制一份(必然走偏)要么只能靠 `keywordMatch` 这条已经发现有
+ * 「奖励点亮更多轴」偏差的路径。
+ */
+export const ARCHETYPE_WORDS: Record<Archetype, string[]> = {
   butterfly: ['蝴蝶', '蝶', '凤蝶', '蛾', '彩蝶'],
   fish: ['鱼', '鲸', '鲨', '水母', '章鱼', '鳐', '游鱼'],
   dragon: ['龙', '蛟', '蛇', '蜥', '龙兽', '飞龙'],

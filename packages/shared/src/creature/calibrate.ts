@@ -27,20 +27,30 @@
  * 全部确定性、零成本:只需要已经算好的分数和人工评价,不额外调模型。
  */
 
-import { WEIGHTS, type ScoreBreakdown } from './score.js'
+import { AXIS_OF, CRAFT_WEIGHTS, APPEAL_WEIGHTS, type ScoreBreakdown, type ScoreKey } from './score.js'
 
 /** 少于这个数不给 ρ —— n=3~7 的相关系数波动大到没有参考价值 */
 export const MIN_N_FOR_RHO = 8
 
-/** 评分维度键,按权重从高到低(与页面展示顺序一致) */
+/**
+ * 评分维度键,按轴分组(页面展示顺序)。
+ *
+ * ⚠ 拆成 craft/appeal 两轴后,`WEIGHTS[key]` 不再是单一数字 —— 一维的权重只在
+ * **它所属的轴内**有意义。所以这里改成存 `{ axis, weight }`,页面要分开显示,
+ * 别把两轴的权重加到一起(那正是这一版要拆掉的东西)。
+ */
 export const DIM_KEYS = [
   'fidelity',
   'structure',
   'palette',
-  'traits',
   'motion',
   'narrative',
   'match',
+  'traits',
+  'silhouette',
+  'face',
+  'colorPop',
+  'motionRich',
 ] as const
 export type DimKey = (typeof DIM_KEYS)[number]
 
@@ -138,7 +148,9 @@ export function distOf(xs: readonly number[]): Dist | null {
 /** 一维的校准结果 */
 export interface DimCalib {
   key: DimKey
-  /** 该维在总分里的权重(仅供对照:权重 ≠ 可信度) */
+  /** 该维属于哪个轴 —— 权重只在轴内可比 */
+  axis: 'craft' | 'appeal'
+  /** 该维在**所属轴内**的权重(仅供对照:权重 ≠ 可信度) */
   weight: number
   /** 与人工评价的秩相关;null = 样本不足或无方差 */
   rho: number | null
@@ -159,6 +171,8 @@ export interface Calibration {
   perDim: DimCalib[]
   /** 总分与人工评价的相关。放在 perDim 之外:它是**加权合成**的结果,不是某一维 */
   total: { rho: number | null; dist: Dist | null }
+  /** 两轴各自与人工评价的相关。合成之前先看轴,才知道问题出在哪一侧 */
+  axes: { craft: { rho: number | null }; appeal: { rho: number | null } }
   /**
    * 「权重大但 ρ≈0」的维 —— **这些维正在稀释总分**。
    * 把它们降权或删掉,总分才会开始反映真实观感。这是逐维分析唯一真正可执行的动作。
@@ -170,6 +184,16 @@ export interface RatedRow {
   score: ScoreBreakdown
   /** 人工评价,越大越好(棒=2 / 还行=1 / 差=0),**有序** */
   rating: number
+}
+
+/** 取某一维的分数(兼容嵌套 `dims`) */
+function dimOf(row: ScoreBreakdown, key: ScoreKey): number {
+  return row.dims?.[key] ?? 0
+}
+
+/** 某一维的权重(在它所属的轴内) */
+function weightOf(key: ScoreKey): number {
+  return (AXIS_OF[key] === 'craft' ? CRAFT_WEIGHTS : APPEAL_WEIGHTS)[key as never] ?? 0
 }
 
 /**
@@ -192,10 +216,11 @@ export function calibrate(rows: readonly RatedRow[]): Calibration {
   const my = rows.map((r) => r.rating)
   const cut = deadThreshold(rows.length)
   const perDim: DimCalib[] = DIM_KEYS.map((key) => {
-    const xs = rows.map((r) => r.score[key])
+    const xs = rows.map((r) => dimOf(r.score, key))
     return {
       key,
-      weight: WEIGHTS[key],
+      axis: AXIS_OF[key],
+      weight: weightOf(key),
       rho: rhoOf(xs, my),
       dist: distOf(xs),
     }
@@ -213,6 +238,10 @@ export function calibrate(rows: readonly RatedRow[]): Calibration {
     cut,
     perDim,
     total,
+    axes: {
+      craft: { rho: rhoOf(rows.map((r) => r.score.craft), my) },
+      appeal: { rho: rhoOf(rows.map((r) => r.score.appeal), my) },
+    },
     deadWeight: perDim.filter((d) => d.rho !== null && Math.abs(d.rho) < cut),
   }
 }

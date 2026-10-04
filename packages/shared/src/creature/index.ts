@@ -46,22 +46,44 @@ export type {
 } from './blueprint.js'
 
 export {
+  CRAFT_WEIGHTS,
+  APPEAL_WEIGHTS,
   WEIGHTS,
   WEIGHT_TOTAL,
+  CRAFT_TOTAL,
+  APPEAL_TOTAL,
+  SCORE_AXES,
   SCORE_KEYS,
+  CRAFT_KEYS,
+  APPEAL_KEYS,
+  AXIS_OF,
+  AXIS_MIX,
   SCORE_DIM_FLOOR,
   weightedGeometricMean,
+  combineAxes,
   heuristicScore,
   craftScore,
   heatOf,
   rankScore,
   rankOf,
 } from './score.js'
-export type { ScoreBreakdown, ScoreKey, ScoreContext, RankedCreature } from './score.js'
+export type {
+  ScoreBreakdown,
+  ScoreKey,
+  ScoreAxis,
+  ScoreContext,
+  ScorePart,
+  ScoreMotionRule,
+  RankedCreature,
+} from './score.js'
 
 /** 批次级多样性 / 新颖度(不进 ScoreBreakdown.total,理由见 diversity.ts) */
 export { diversityOf } from './diversity.js'
 export type { DiversityReport, DiversityPerItem, DimSpread } from './diversity.js'
+
+/** 维度杠杆分析:各维权重占比 vs 实际方差份额,用来抓「白拿权重」的死重 */
+export { leverageOf, DEAD_WEIGHT_SHARE, DEAD_WEIGHT_RATIO } from './leverage.js'
+export type { LeverageReport, LeverageRow } from './leverage.js'
 
 /** 逐维校准:各维与人工评价的秩相关 + 分布 */
 export { rhoOf, distOf, calibrate, deadThreshold, DIM_KEYS, MIN_N_FOR_RHO } from './calibrate.js'

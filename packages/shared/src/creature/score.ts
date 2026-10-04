@@ -12,7 +12,7 @@
  */
 
 import { TRAIT_AXES, TRAIT_LABELS, type CreatureDna } from './spec.js'
-import { keywordMatch } from './fallback.js'
+import { ARCHETYPE_WORDS, TRAIT_WORDS } from './fallback.js'
 
 /**
  * 权重。
@@ -33,24 +33,79 @@ import { keywordMatch } from './fallback.js'
  *  - `palette/traits` 是纯确定性工艺检查(真色彩数学、熵与退化检测),
  *    换任何模型都不会失效,保留较高权重。
  */
-export const WEIGHTS = {
-  palette: 18,
-  traits: 12,
-  motion: 13,
-  narrative: 8,
-  match: 8,
-  structure: 15,
-  fidelity: 20,
+/**
+ * 权重 —— **两个轴,各 100 分**,不再是一张 94 分的平表。
+ *
+ * ## 为什么要拆
+ *
+ * 原来七维挤在一张表里,于是「工艺」和「好看」被迫用同一个数字表达。而实测证明
+ * 这两件事在真实数据里**高度同向**:它们都被「模型这次发挥好不好」这一个因素
+ * 拉动,于是在 log 空间的方差份额里长成这样(6000 条实测):
+ *
+ * ```
+ * traits(权 12) 57.5% · match(权 8) 20.4% · fidelity(权 20) 17.8%
+ * structure(15) 2.4% · palette(18) 1.2% · motion(13) 0.3% · narrative(8) 0.3%
+ * ```
+ *
+ * 43/94 的权重扛下 96% 的区分度,剩下 51/94 在陪跑 —— **38% 的权重完全不产生
+ * 区分度**。更致命的是那三个真正在动的维度都在看「有没有听话」,同涨同落,批内
+ * 相对差异被抹平,于是所有生物挤在 60~85。
+ *
+ * 拆成两轴之后:
+ *  - `craft` 只问「做得对不对」—— 有没有照做、搭得认不认真、会不会抽搐;
+ *  - `appeal` 只问「想不想看」—— 有没有性格、有没有脸、剪影有没有意思、动得够不够层次。
+ *
+ * 两轴各自做几何平均,再相乘。**仍然保留「短板会被等比拉低」这个性质**(任一轴差
+ * 都压总分),但 `appeal` 终于有了独立杠杆 —— 好看不再需要「其它都做对」才能拿分。
+ *
+ * ## 两轴内部各自 100,而不是沿用旧的 82
+ *
+ * 只改刻度不改比例:craft 沿用旧权重 ×1.22(20:15:18:13:8:8 → 24:18:22:16:10:10),
+ * 这样「同轴内谁更重要」的判断完全保留,只是不再跨轴比较绝对数。
+ * ⚠ 这是**又一次分数语义变更**,历史分数不可比。
+ */
+export const CRAFT_WEIGHTS = {
+  /** 描述点名的,有没有真长在身上 */
+  fidelity: 24,
+  /** 搭得认不认真(部件数、角色分工、主体占比) */
+  structure: 18,
+  /** 配色是不是「设计过」(和谐 + 可读) */
+  palette: 22,
+  /** 会不会抽搐、通道自不自洽 —— 只管**缺陷规避** */
+  motion: 16,
+  /** 三段成长有没有分阶段 */
+  narrative: 10,
+  /** 词面重合(辅助信号,有长度效应) */
+  match: 10,
 } as const
 
-export const WEIGHT_TOTAL =
-  WEIGHTS.palette +
-  WEIGHTS.traits +
-  WEIGHTS.motion +
-  WEIGHTS.narrative +
-  WEIGHTS.match +
-  WEIGHTS.structure +
-  WEIGHTS.fidelity
+export const APPEAL_WEIGHTS = {
+  /** 有没有性格。重写前的版本在奖励「八根轴全点亮」,见 scoreTraits */
+  traits: 24,
+  /** 剪影有没有意思(占据范围 + 体量层次) */
+  silhouette: 20,
+  /** 有没有「脸」—— 生物和色块的分界 */
+  face: 18,
+  /** 有没有一处在视觉上跳出来的强调色 */
+  colorPop: 18,
+  /** 是不是多个不同频率的通道在动,而不是整体一起晃 */
+  motionRich: 20,
+} as const
+
+/** 两个轴。顺序即展示顺序 */
+export const SCORE_AXES = ['craft', 'appeal'] as const
+export type ScoreAxis = (typeof SCORE_AXES)[number]
+
+export const CRAFT_TOTAL = Object.values(CRAFT_WEIGHTS).reduce((a, b) => a + b, 0)
+export const APPEAL_TOTAL = Object.values(APPEAL_WEIGHTS).reduce((a, b) => a + b, 0)
+
+/** 兼容旧调用点:七维时代的那张平表。两轴合并的权重(仅供旧代码 / 对照用) */
+export const WEIGHTS = {
+  ...CRAFT_WEIGHTS,
+  ...APPEAL_WEIGHTS,
+} as const
+
+export const WEIGHT_TOTAL = CRAFT_TOTAL + APPEAL_TOTAL
 
 /**
  * 单维地板。
@@ -60,33 +115,56 @@ export const WEIGHT_TOTAL =
  * 变成噪声。实测约 16% 的样本存在某维 < 0.05,不设地板会被这批样本整体压死。
  *
  * 0.08 的含义:一维可以明确地差(拿到 0.08),但不足以单独宣判整只生物的死刑。
- * 取值不能更高 —— 地板定 0.15 时实测 `match`(权重仅 8/94)有 **44%** 的样本被
+ * 取值不能更高 —— 地板定 0.15 时实测 `match`(权重仅 10)有 **44%** 的样本被
  * 抬到同一个值,等于把这一维重新变成常数、抵消几何平均的区分度。地板只该保护
- * 高权重维度不被一击归零:fidelity(权重 20)归零时总分降到 58%,而 match 归零
+ * 高权重维度不被一击归零:fidelity 归零时总分降到 58%,而 match 归零
  * 只降到 96%,和它的权重相称。
  */
 export const SCORE_DIM_FLOOR = 0.08
 
 /**
- * 加权几何平均,返回 0..1。
+ * 加权几何平均,返回 0..1。给定权重表(各轴内部用,总和 100)。
  *
  * 为什么不用加权算术平均:**算术平均会让「单项灾难」被其余六维平均掉**。
  * 一只配色糟糕、结构潦草、动效抽搐的生物,只要 traits/narrative 还在线,
  * 算术平均照样能拿 70+ —— 这正是实测「所有生物都挤在 70~90」的成因。
  *
  * 几何平均在 log 空间是线性的,等价于「任一维掉下去都会等比地拉低总分」,
- * 短板无法被掩盖。随机 DNA 空间 20000 次抽样:
- * 算术平均四分位距 8.4 / 变异系数 0.089,几何平均 11.3 / 0.270(3 倍区分度)。
+ * 短板无法被掩盖。
  *
  * 配 `SCORE_DIM_FLOOR` 一起用:地板保证不会归零,几何平均保证短板不被掩盖。
  */
-export function weightedGeometricMean(parts: Record<ScoreKey, number>): number {
+export function weightedGeometricMean(
+  parts: Record<string, number>,
+  weights: Record<string, number>,
+): number {
+  const keys = Object.keys(weights) as ScoreKey[]
+  const total = keys.reduce((a, k) => a + weights[k]!, 0)
+  if (total <= 0) return 0
   let sum = 0
-  for (const k of SCORE_KEYS) {
-    const w = WEIGHTS[k] / WEIGHT_TOTAL
-    sum += w * Math.log(Math.max(parts[k], SCORE_DIM_FLOOR))
+  for (const k of keys) {
+    const w = weights[k]! / total
+    sum += w * Math.log(Math.max(parts[k] ?? 0, SCORE_DIM_FLOOR))
   }
   return clamp01(Math.exp(sum))
+}
+
+/**
+ * 两轴相乘合成总分。
+ *
+ * 用**相乘**而不是加权平均:相乘保留了「任一轴差就等比压低总分」的性质
+ * —— 一只极其好看但完全没照描述做的生物,`appeal` 0.9 × `craft` 0.45 仍然上不去;
+ * 而加权平均会让好看把「没做对」平均掉,那正是「好看却低分」的另一种形式。
+ *
+ * 指数 0.6 / 0.4 表示 `craft` 略主导(它更客观、更可复现,`appeal` 里有几维还
+ * 缺人工验证),但**远不到**「必须两边都好才好看」的程度。
+ */
+export const AXIS_MIX = { craft: 0.6, appeal: 0.4 } as const
+
+export function combineAxes(craft: number, appeal: number): number {
+  const c = clamp01(craft)
+  const a = clamp01(appeal)
+  return clamp01(Math.pow(c, AXIS_MIX.craft) * Math.pow(a, AXIS_MIX.appeal))
 }
 
 /* ---------------------------- 颜色工具 ---------------------------- */
@@ -149,143 +227,246 @@ const norm = (n: number) => clamp01(n)
 /* ---------------------------- 五项检查 ---------------------------- */
 
 /**
- * 配色和谐 0..1
+ * 配色**工艺** 0..1 —— 属于 `craft` 轴:和谐 + 可读,不评冲击力。
  *
- * 看三件事:色相是不是「设计过」(类比/互补/三角)、饱和度有没有层次、
- * 主体与辉光/点缀是否分得开。**不与页面背景比** —— DNA 不知道当前主题,
- * 那是渲染器读 `var(--accent)` 的事。
+ * ⚠ 它**故意不评「好看」**。「好不好看」里很大一部分是张力 / 记忆点,那是
+ * `scoreColorPop`(appeal 轴)的活。这一维只问两件 objectively 可判的事:
+ * 配色是不是设计过的(和谐),以及看不看得清(分离度、主体亮度)。
+ *
+ * ## 收紧的三个地方(实测 72% 的样本 ≥0.80,p10 只有 0.66 —— 平台区太宽)
+ *
+ *  1. **和谐带宽 45° → 28°**。原来 45° 的容差太宽,随便两色都算「成谱」,于是
+ *     这一项几乎恒为满分,是 palette 拉不开差距的主因。
+ *  2. **饱和度不再用单峰**。原来打「离 0.7 有多远」,等于把「稍微淡一点」和
+ *     「死灰」判成同一种罪。改成**区间**:太低(死灰)扣、太高(塑料)扣、中间给满分。
+ *  3. **主体亮度改成双峰**。原来单峰在 L=0.6,于是一张刻意做暗的设计(L≈0.25,
+ *     在深色主题里非常出彩)会被判成「太暗」。真正难看清的是**中等亮度的灰调**
+ *     —— 暗和亮都看得见,灰蒙蒙的才看不见。所以暗、亮各给一个甜点。
  */
 function scorePalette(dna: CreatureDna): number {
   const { body, accent, glow } = dna.palette
   const [bh, bs, bl] = hsl(body)
-  const [, as_, al] = hsl(accent)
-  const [, gs, gl] = hsl(glow)
+  const [ah, as_, al] = hsl(accent)
+  const [gh, gs, gl] = hsl(glow)
 
-  // 色相和谐:三色中若存在一组落在类比(<45°)/三角(~120°)/互补(~180°)带内即算「成谱」
-  const hues = [bh, hsl(accent)[0], hsl(glow)[0]]
-  let harmony = 0.25
+  // 色相和谐:三色中若存在一组落在类比(<28°)/三角(~120°)/互补(~180°)带内即算「成谱」
+  const hues = [bh, ah, gh]
+  let harmony = 0.2
   for (let i = 0; i < 3; i++) {
     for (let j = i + 1; j < 3; j++) {
-      const d = hueDist(hues[i], hues[j])
-      const near =
-        Math.min(Math.abs(d - 180), Math.abs(d - 120), Math.min(d, 45)) // 互补/三角/类比
-      const fit = Math.max(0, 1 - near / 45)
+      const d = hueDist(hues[i]!, hues[j]!)
+      const near = Math.min(Math.abs(d - 180), Math.abs(d - 120), Math.min(d, 45))
+      const fit = Math.max(0, 1 - near / 28)
       harmony = Math.max(harmony, fit)
     }
   }
   // 三色同 hue 不同明度也算「单色系」,是合法的设计选择,给一个中位分
-  const allSame = hues.every((h) => hueDist(h, bh) < 12)
-  if (allSame) harmony = Math.max(harmony, 0.5)
+  const allSame = hues.every((h) => hueDist(h, bh) < 14)
+  if (allSame) harmony = Math.max(harmony, 0.55)
 
-  // 饱和度层次:全 0 是死灰,全 1 是塑料,中间最好
+  // 饱和度:区间而非单峰。全 0 是死灰,全 1 是塑料,0.45~0.85 之间都算好
   const sats = [bs, as_, gs]
   const satSpread = Math.max(...sats) - Math.min(...sats)
-  const satLevel = norm(1 - Math.abs(Math.max(...sats) - 0.7) / 0.6)
-  const satScore = 0.5 * norm(satSpread / 0.35) + 0.5 * satLevel
+  const notGrey = norm((Math.min(...sats) - 0.18) / 0.22)
+  const notPlastic = norm((0.98 - Math.max(...sats)) / 0.18)
+  const satScore = 0.45 * norm(satSpread / 0.3) + 0.55 * notGrey * notPlastic
 
-  // 主体与辉光/点缀要分得开(否则糊成一坨)
-  const sepGlow = norm((contrast(body, glow) - 1.05) / 0.9)
-  const sepAccent = norm((contrast(body, accent) - 1.02) / 0.7)
+  // 主体与辉光/点缀要分得开(否则糊成一坨)。这是可读性下限。
+  // ⚠ 除数必须够大:WCAG 对比度实际能到 3~10,除数给 1.15 会让**几乎所有配色都
+  //   顶到 1.0**,这一项就废了(实测 palette 方差份额只有 3.8%)。这里给 3.5 / 2.4,
+  //   对应「对比度 4.75 / 3.6 才算充分分离」。
+  const sepGlow = norm((contrast(body, glow) - 1.25) / 3.5)
+  const sepAccent = norm((contrast(body, accent) - 1.2) / 2.4)
   const sepScore = 0.5 * sepGlow + 0.5 * sepAccent
 
-  // 主体不能太暗或太淡,否则在两种主题下都看不清
-  const bodyLevel = norm(1 - Math.abs(bl - 0.6) / 0.5)
+  // 主体亮度:双峰(暗 ≈0.28 / 亮 ≈0.74)。中间灰调最扣分 —— 那才是真的看不清
+  const dark = 1 - clamp01(Math.abs(bl - 0.28) / 0.3)
+  const bright = 1 - clamp01(Math.abs(bl - 0.74) / 0.3)
+  const bodyLevel = Math.max(dark, bright)
 
-  return 0.34 * harmony + 0.24 * satScore + 0.28 * sepScore + 0.14 * bodyLevel
+  return clamp01(0.36 * harmony + 0.2 * satScore + 0.28 * sepScore + 0.16 * bodyLevel)
 }
 
 /**
  * 特质**性格鲜明度** 0..1
  *
- * 原实现是「熵 + 非零轴数 + 退化惩罚」,实测判反了两处:
+ * 这一维重写过两次,两次都是因为它**判反了「好看」**。
  *
- *  1. **均匀 = 满分。** `hNorm` 和 `nonzero/4` 都由「八轴铺开」拉满,所以
- *     八轴全 3(彻底没性格)和 cyber=5+luminous=4(明确的赛博朋克)分差极大,
- *     前者反而更高。这一维当时不但没区分度,还在反向惩罚有性格的设计。
- *  2. **只看比例,丢弃量级。** 熵算的是 `v/total`,所以 cyber=0.6+luminous=0.4
- *     这种「几乎没有气质」的生物和 cyber=3+luminous=2 同分。
- *  3. **退化判据用错了量。** 注释写「一根轴到 5 而别的近乎为 0」,代码判的却是
- *     `nonzero <= 2`(非零轴的**条数**)—— 于是 cyber=5+luminous=4 这种双主角
- *     被当成单轴塌缩,和 cyber=5 其余全 0 一起压到 0.15。
+ * ## 第一次错:均匀 = 满分
  *
- * 改成评「有没有性格」,三项都只看绝对量级:
- *  - **主导轴明确**(leadShare):最强轴占总量的比重。太平均=没主张,太集中=塌缩,
- *    中间那段(约 0.25~0.55)才是「有主次」;单轴独大由 peakShare 单独扣。
- *  - **有支撑**(support):次强轴的量级。这就是原注释想表达的「别全挤在一根轴」,
- *    但判的是量级而不是条数 —— cyber=5+lum=4 因此能拿高分。
- *  - **量级够**(intensity):整体总水平,恢复被熵丢掉的绝对强度信息。
+ * 原实现是「熵 + 非零轴数 + 退化惩罚」,`hNorm` 和 `nonzero/4` 都由「八轴铺开」
+ * 拉满,所以八轴全 3(彻底没性格)和 cyber=5+luminous=4(明确的赛博朋克)放在一起比,
+ * 前者反而更高。
+ *
+ * ## 第二次错:改成了「很多条中强度轴」= 满分
+ *
+ * 改成「主导轴明确 + 有支撑 + 量级够」之后,它不再奖励完全均匀,但**换了个方式
+ * 继续犯同一个错**。受控实验(描述固定、只改 traits,其余六维完全相同):
+ *
+ * ```
+ * traits 设定                  总和  主导占比  特质分   总分
+ * 克制·单一主张 cyber=3         3    1.00     0.09    49.9
+ * 克制·双轴 cyber=3+fierce=1    4    0.75     0.27    57.9
+ * 平庸·八轴各 1                 8    0.13     0.39    61.8
+ * 全开·八轴各 3                24    0.13     0.66    71.9
+ * 全开·八轴各 5                40    0.13     0.66    71.9
+ * ```
+ *
+ * **最克制、最有主张的设计比「八根轴全拉满」低 22 分**,而且 3→5 完全饱和。
+ * 根因是三个子项**同时**惩罚「少而明确」:
+ *  - `distinct` 甜点在主导占比 0.25~0.45 → 单一主张(占比 1.0)拿 **0**;
+ *  - `support = norm(second/2)` 要求次轴 ≥2 → 单独一根轴拿 **0**;
+ *  - `intensity = norm(total/12)` 要求八轴总和 12 → 模型典型只给 3~6,拿 **0.25**。
+ *
+ * 三个加起来等于在说「你得把八根轴都点亮到中等强度」。而那在视觉上恰恰是**最平庸**
+ * 的那一类 —— 就像一把调色板上八种颜色都放了,等于没配色。
+ *
+ * ## 现在:峰值 + 对比度
+ *
+ * 「有性格」的正确判据是**有没有一个明确的主张**,不是有多少个弱主张:
+ *  - **峰值高度** `peak`:最强轴到 3 就满分。这一维**完全不看总量** —— 一根轴
+ *    拉到位,和八根轴各拉一点,是同等量级的「有主张」,但前者显然更抓人。
+ *  - **对比度** `contrast`:最强轴与次强轴的差距。差距小 = 全都差不多 = 没重点;
+ *    差距大 = 有主次。**这是把「均匀」从奖励改成扣分的关键一项**。
+ *  - **双主角** `support`:次强轴也够量(≥2)时给加成 —— 「两个都强」比「一个强
+ *    另一个是零」更完整,但它不再是拿分的**必要**条件(上一版把它当必要项,直接
+ *    把单一主张判死)。
+ *  - **真塌缩** `lonelyPeak`:一根轴到顶、其余全 0。这才是「没搭起来」,保留重罚,
+ *    但阈值收紧成 `second === 0` 附近 —— 双轴设计(cyber=5 + luminous=4)必须是安全的。
  */
 function scoreTraits(dna: CreatureDna): number {
   const vals = TRAIT_AXES.map((a) => dna.traits[a])
   const total = vals.reduce((a, b) => a + b, 0)
-  if (total === 0) return 0
+  if (total <= 0) return 0
 
   const sorted = [...vals].sort((a, b) => b - a)
-  const lead = sorted[0]
+  const lead = sorted[0]!
   const second = sorted[1] ?? 0
 
-  // 主导轴占比落在「有主次」的甜点区给满分;铺得太开(→0)或太独揽(→1)都扣
-  const leadShare = lead / total
-  const distinct = norm((leadShare - 0.16) / 0.2) * norm((0.62 - leadShare) / 0.16)
+  // 1) 峰值高度。⚠ 分母是 `(lead-1)/3` 而不是 `lead/3`:轴值量程是 0~5,而
+  //    「轴=1」几乎等同于没表达任何性格(生成端随便点一下就有 1)。从 1 起算才能
+  //    把「有性格」和「有数值」分开,否则一堆 lead=2 的 DNA 全顶在 0.67 上。
+  const peak = norm((lead - 1) / 3)
 
-  // 次强轴的量级 = 有没有第二根轴在支撑(双主角不算塌缩)
+  // 2) 对比度:最强与次强的相对差距。全平均 → 0,一枝独秀 → 1
+  const gap = (lead - second) / lead
+  const contrast = norm(gap / 0.6)
+
+  // 3) 双主角加成(不是必要条件,只是加分)
   const support = norm(second / 2)
 
-  // 整体量级:避免 cyber=0.6/lum=0.4 这种「几乎没有气质」蹭到和中等强度同分
-  const intensity = norm(total / 12)
+  const base = 0.42 * peak + 0.36 * contrast + 0.22 * support
 
-  // 单轴独大且次轴几乎为零:真塌缩,重罚(这是唯一保留的硬惩罚)
+  // 4) 真塌缩:一根轴到顶、其余全 0。阈值收紧 —— cyber=5 + luminous=4 必须安全
   const lonelyPeak = lead >= 4 && second <= 0.5
-  const base = 0.34 * distinct + 0.32 * support + 0.34 * intensity
-  if (lonelyPeak) return clamp01(base * 0.35)
+  if (lonelyPeak) return clamp01(base * 0.45)
   return clamp01(base)
 }
 
 /**
- * 动效可读 0..1
+ * 动效**缺陷规避** 0..1 —— 属于 `craft` 轴:只问「有没有做错」。
  *
- * 参数落在「能看出在动、又不会乱」的区间中心最好。**过慢比过快扣得更狠**:
- * 慢到看不出动等于白做,快到 6Hz 以上既难看又有频闪风险。
- */
-/**
- * **动效**。
+ * 这一维原来把两件事混在一起:**别抽搐**(缺陷,craft)和**动得有意思**(吸引力,
+ * appeal)。混在一起的代价是实测出来的:6000 条样本里 **85% 都 ≥0.80**,p10~p90
+ * 跨度只有 0.11,log 方差份额 **0.3%** —— 一个占 13/94 权重的维度几乎完全不产生
+ * 区分度。根因是四个子项里三个是常数:`activity` 已被移到 appeal 侧的 `motionRich`;
+ * `frantic` 只在 `flapHz≥5.5 且 driftAmp≥30` 那个角落才罚;`coherence` 默认分支
+ * 就是 1;`familyFit` 没有 family 时白送 0.8。最后还无条件 `×1.06` 整体抬高。
  *
- * 原来这里是「离目标值近不近」:`flapHz` 离 3 近给满分、`bobPx` 离 5 近给满分……
- * 问题是那些目标值全是**拍脑袋定的** —— 模型给 `flapHz=2.4` 会被扣分,给 3.0 就满分,
- * 可「2.4Hz 是不是不好看」没有任何依据。实测这一维对描述丰富度的提升是 +0.4,
- * 基本等于噪声:它压根没在衡量任何和描述有关的东西。
- *
- * 改成评**自洽性**:一组动效参数之间该不该有关联。比如身体晃得越厉害,尾鳍摆幅
- * 通常越大;整体要「活」就得有变化,但变化又不能是抽搐(频率和振幅不能同时爆表)。
- * 这些关系不依赖任何具体的数值目标,所以换个模型也不会失效。
+ * 现在只保留真正的缺陷项,并把每项的触发区间放宽到**真实数据会经过的范围**。
+ * 「动得有没有层次」交给 `scoreMotionRich`。
  */
 function scoreMotion(dna: CreatureDna, ctx: ScoreContext = {}): number {
   const m = dna.motion
 
-  // 1) 活力:不能完全不动。三个通道取最高,鼓励至少有一处明显在动。
-  const activity = clamp01(Math.max(m.flapHz / 6, m.driftAmp / 40, m.bobPx / 12))
+  // 1) 不抽搐:高频 **且** 大幅同时发生才是视觉噪声 / 频闪风险。
+  //    单看频率会冤枉慢节奏的小摆动,单看振幅会冤枉快节奏的小抖动,所以要相乘。
+  const busy = m.flapHz >= 3 ? norm((m.flapHz - 3) / 3.5) : 0
+  const frantic = 1 - busy * norm(m.driftAmp / 28) * 0.8
 
-  // 2) 不要抽搐:频率与振幅同时到顶 = 高频大幅 = 视觉噪声
-  const frantic = m.flapHz >= 5.5 && m.driftAmp >= 30 ? 1 - clamp01((m.flapHz * m.driftAmp) / 220) : 1
+  // 2) 通道自洽:整体在大幅摆动却几乎不上下浮动(或反之)说明参数是分别乱填的。
+  //    幅度差得越多越可疑。
+  const swing = Math.max(m.flapHz / 6, m.driftAmp / 40)
+  const bob = m.bobPx / 12
+  const coherence = 1 - clamp01(Math.abs(swing - bob) / 0.7) * 0.5
 
-  // 3) 通道间要自洽:晃得越厉害,尾鳍/漂移摆幅不该是 0(反之,整体静止时摆尾反而怪)
-  const coherence = m.bobPx >= 4 && m.driftAmp < 4 ? 0.35 : m.driftAmp >= 10 && m.bobPx >= 6 ? 0.75 : 1
+  // 3) 拖尾要跟得上速度:动得快却没有拖尾 = 糊;动得慢却拖尾很长 = 脏
+  const trailFit =
+    m.trail <= 0
+      ? 0.5
+      : 1 - clamp01(Math.abs(m.trail - (0.15 + m.driftAmp / 90)) / 0.35) * 0.8
 
-  // 4) 拖尾要跟得上:动得快却没有拖尾 = 糊;动得慢却拖尾很长 = 脏
-  const trailFit = m.trail <= 0 ? 0.6 : 1 - clamp01(Math.abs(m.trail - (0.15 + m.driftAmp / 90)) / 0.5)
-
-  // 5) 有 blueprint 时看 family:和 DNA 的振幅量级是否匹配
-  //    (idle/breathe 配大幅摆动是矛盾的;flap/glide 配零飘移也是)
-  let familyFit = 0.8
+  // 4) motion family 与振幅矛盾(idle/breathe 配大幅摆动是自相矛盾)。
+  //    ⚠ 没有 family 时给**中性 0.6**,不再白送 0.8 —— 缺上下文不该被当成做对了。
+  let familyFit = 0.6
   const fam = ctx.motionFamily
   if (fam) {
     const still = fam === 'idle' || fam === 'breathe'
-    familyFit = still && (m.driftAmp >= 20 || m.flapHz >= 5) ? 0.4 : 1
+    familyFit = still && (m.driftAmp >= 20 || m.flapHz >= 5) ? 0.3 : 1
   }
 
-  return clamp01(
-    (0.3 * activity + 0.18 * frantic + 0.2 * coherence + 0.2 * trailFit + 0.12 * familyFit) * 1.06,
-  )
+  // 5) 不能完全静止 —— 三个通道里至少要有一处在明显动,这是缺陷不是风格
+  const alive = norm(Math.max(m.flapHz / 2.5, m.driftAmp / 18, m.bobPx / 4))
+
+  return clamp01(0.24 * frantic + 0.22 * coherence + 0.18 * trailFit + 0.16 * familyFit + 0.2 * alive)
+}
+
+/**
+ * 动效**层次** 0..1 —— 属于 `appeal` 轴:问「动得有没有意思」。
+ *
+ * 和 `scoreMotion` 的区别是这一维**完全不含惩罚项**,所以它不会因为「没做错」就
+ * 自动拿高分。一只完全不动的东西在这里拿 0,不管它在 craft 侧拿得多干净。
+ *
+ * 两个信号:
+ *  1. **复合运动**:有 ≥2 个不同 `periodScale` 的通道 = 多个不同频率在动
+ *     (主轴一个节奏、附肢另一个节奏),这是「活」和「整体一起晃」的分界线。
+ *     只有一个节奏的生物看起来像贴了一张循环图。
+ *  2. **幅度有层次**:不同通道的振幅拉开差距。全是同一个振幅 = 机械同步 = 呆板。
+ *
+ * 数据来自 `motionCfg.rules`(每个部件的 `periodScale` / `amp`);没有 blueprint
+ * 配置时退回 DNA 的三个整体参数,这时只能判断「动没动」,给一个偏保守的分数。
+ */
+function scoreMotionRich(dna: CreatureDna, ctx: ScoreContext = {}): number {
+  const rules = ctx.motionRules
+  const m = dna.motion
+
+  let channels = 0
+  let periods: number[] = []
+  let amps: number[] = []
+  if (rules?.length) {
+    for (const r of rules) {
+      const amp = Math.abs(r.amp ?? 0)
+      if (amp < 0.5) continue // 几乎不动的通道不算
+      channels++
+      periods.push(r.periodScale ?? 1)
+      amps.push(amp)
+    }
+  }
+
+  // 1) 复合运动:不同频率的通道数
+  let layered: number
+  if (periods.length >= 2) {
+    // 相邻周期差 ≥0.15 才算「不同节奏」;1.0 / 1.0 这种同步不算
+    const uniq = new Set(periods.map((p) => Math.round(p * 10) / 10)).size
+    const spread = Math.max(...periods) - Math.min(...periods)
+    layered = norm(channels / 6) * (0.5 * norm(uniq / 3) + 0.5 * norm(spread / 0.6))
+  } else if (periods.length === 1) {
+    layered = 0.35 // 只有单一节奏:能动,但没有层次
+  } else {
+    // 没有部件级配置:退回整体参数,只能看出「动没动」
+    layered = 0.5 * norm(Math.max(m.flapHz / 4, m.driftAmp / 26, m.bobPx / 7)) + 0.1
+  }
+
+  // 2) 振幅有层次:最大/次大振幅的差距(全同步 → 0)
+  const ampLayer = amps.length >= 2 ? norm((Math.max(...amps) - secondMax(amps)) / 18) : 0.3
+
+  return clamp01(0.68 * layered + 0.32 * ampLayer)
+}
+
+/** 次大值(用于「最大振幅比其余大多少」) */
+function secondMax(xs: readonly number[]): number {
+  const s = [...xs].sort((a, b) => b - a)
+  return s.length >= 2 ? s[1]! : 0
 }
 
 /** 归一化编辑距离(两字符串差异度 0..1) */
@@ -389,27 +570,74 @@ function scoreNarrativeFromParts(parts: readonly { role?: string; grow?: unknown
   const eMax = Math.max(...ends, sMax)
 
   // 1) 出场时点要拉开:全部同帧冒出来 = 0
+  //    ⚠ 分母 25 → 35。实测 70.5% 的样本这一维顶到 1.00,原来的甜点太容易够到。
   const span = sMax - sMin
-  const staged = norm(span / 25)
+  const staged = norm(span / 35)
 
-  // 2) 得真的有东西在长大
-  const growScore = norm(growing / Math.max(4, parts.length * 0.35))
+  // 2) 得真的有东西在长大,而且要**成比例**:一个 30 部件的生物只让 4 个带
+  //    `grow` 就该扣分 —— 那意味着 26 个零件从头到尾不动,19 天白过。
+  //    分母从 `max(4, n×0.35)` 提到 `max(6, n×0.55)`。
+  const growScore = norm(growing / Math.max(6, parts.length * 0.55))
 
   // 3) 成长要铺得开:最晚的那个窗口不能太早结束(20 天内一直在变)
-  const reachScore = norm(eMax / 40)
+  //    分母 40 → 60,理由同上
+  const reachScore = norm(eMax / 60)
 
   return 0.4 * staged + 0.32 * growScore + 0.28 * reachScore
 }
 
 /**
- * 原型契合 0..1 —— 描述与 DNA 的词面重合。
+ * 原型契合 0..1 —— 描述与 DNA 是否对得上。
  *
- * 用与 `fallbackDna` 同一套词表,所以「程序推导」天然高分,LLM 生成的高分说明它
- * 真的把描述里的词用上了。确定性指标做不到语义理解,但能抓住「原型选错」这种硬伤。
+ * ⚠ **不复用 `fallback.keywordMatch`**,那一版有个和 `scoreTraits` 同向的偏差,
+ * 两者叠加起来正是「好看却低分」的直接机制。
+ *
+ * `keywordMatch` 的特质项是 `traitHit.length / 4`:数的是「**命中了几根轴**」。
+ * 于是点亮越多轴的 DNA 越容易拿高分 —— 一个八轴全亮的平庸生物,只要描述里有
+ * 四个气质词,就能拿满这一项;而一个 `cyber=3` 的克制设计只点亮一根轴,最多拿
+ * 0.25。**旧版 `scoreTraits` 用 `intensity = total/12` 奖励同样的行为**,所以
+ * 「把所有轴都点亮」被算了两遍,而有明确主张的设计被扣了两遍。
+ *
+ * 改成**精确率**而不是召回率:「你**真正点亮**的那些轴里,有几个是描述点名的」。
+ *  - cyber=3 + 描述「赛博朋克」→ 1/1 = **1.0**(照做了)
+ *  - 八轴全亮 + 描述只说「赛博朋克」→ 1/8 = **0.125**(没在听)
+ *
+ * 这样这一维问的是「有没有听对话」,和「有没有把每根轴都拧上去」彻底解耦。
+ * 描述长度效应也一并消失:分母是 DNA 自己点亮的轴数,与描述长短无关。
+ *
+ * 代价:它不再评「描述里的原型词有没有被用上」—— 那部分交给 `scoreFidelity`
+ * 的配色/动作检查,以及这里的原型项(原型项的分母是**描述长度**,天生带长度效应,
+ * 所以权重压到 0.18 并且做了长度归一)。
  */
 function scoreMatch(dna: CreatureDna, descr: string): number {
-  return keywordMatch(descr, dna)
+  const text = descr.trim()
+  if (!text) return 0
+
+  // 1) 原型:描述里原型词的命中字符数,按描述长度归一(长描述天然词多)
+  const archHit = countHits(text, ARCHETYPE_WORDS[dna.archetype] ?? [])
+  const archScore = norm(archHit / Math.max(3, Math.min(8, text.length * 0.1)))
+
+  // 2) 特质:**精确率** —— 点亮的轴里,有几个是描述点名的那几根
+  const lit = TRAIT_AXES.filter((a) => (dna.traits[a] ?? 0) >= 2)
+  const matched = lit.filter((a) => countHits(text, TRAIT_WORDS[a] ?? []) > 0).length
+  const traitScore = lit.length ? matched / lit.length : 0
+
+  // 3) 描述点名了颜色 → 配色里是否真的带上了(与 fidelity 的配色项同源,但这里
+  //    只当弱信号:它不区分「带上了」和「带得准」)
+  const colorHit = COLOR_WORDS.some((w) => text.includes(w)) && paletteEchoesColor(dna, text)
+
+  return clamp01(0.18 * archScore + 0.62 * traitScore + 0.2 * (colorHit ? 1 : 0))
 }
+
+/** 词表命中字符数 */
+function countHits(text: string, words: readonly string[]): number {
+  let n = 0
+  for (const w of words) if (w && text.includes(w)) n += w.length
+  return n
+}
+
+/** 描述里出现过的颜色词(与 `fallback.ts` 的 COLOR_WORDS 同表,评分侧独立一份) */
+const COLOR_WORDS = ['蓝', '红', '绿', '金', '银', '紫', '青', '橙', '白', '黑', '粉', '霓虹'] as const
 
 /* ---------------------------- 新增:结构 ---------------------------- */
 
@@ -429,12 +657,14 @@ function scoreStructure(dna: CreatureDna, ctx: ScoreContext): number {
     const n = parts.length
     // 部件数:12~26 是「认真搭了」的区间,过少潦草、过多堆料。
     // 用平滑曲线而非硬阈值,免得 12 和 13 差出一个悬崖。
+    // ⚠ 分母 26 → 20:原来 n=10 和 n=30 只差 0.15,这一项几乎不区分,收紧后
+    //   n=10 → 0.60、n=18 → 1.00、n=30 → 0.40。
     const ideal = 18
-    const countScore = n >= 10 && n <= 30 ? norm(1 - Math.abs(n - ideal) / 26) : norm(n / 10) * 0.5
+    const countScore = n >= 10 && n <= 30 ? norm(1 - Math.abs(n - ideal) / 20) : norm(n / 10) * 0.5
 
     // 角色多样性:光靠 body 堆 20 个零件没有意义,得有眼/嘴/纹样等分工
     const roles = new Set(parts.map((p) => p.role ?? ''))
-    const roleScore = norm(Math.min(roles.size, 6) / 6)
+    const roleScore = norm(Math.min(roles.size, 7) / 7)
 
     // 可动部件占比:全静态的生物再好看也是一张图
     const movable = parts.filter((p) => p.role === 'accent' || p.role === 'accentLight' || p.role === 'line').length
@@ -457,6 +687,148 @@ function scoreStructure(dna: CreatureDna, ctx: ScoreContext): number {
   const limbScore = norm(s!.limbPairs / 4)
   const symScore = norm(1 - Math.abs(s!.symmetry - 0.9) / 0.9)
   return clamp01(0.4 + 0.25 * (0.4 * segScore + 0.35 * limbScore + 0.25 * symScore))
+}
+
+/* ------------------- appeal 轴:新增的三个维度 ------------------- */
+
+/**
+ * 剪影辨识度 0..1 —— 「这只的轮廓有没有意思」。
+ *
+ * ## 它和 `scoreStructure` 的区别
+ *
+ * `structure` 问的是**搭得认不认真**(数量、分工、骨架),全部是计数。这一个问的是
+ * **摆得好不好看**:同样的 18 个零件,摊满整个画布 vs 挤在中心一小团,视觉结果
+ * 完全不同,而计数完全看不出这个差别。
+ *
+ * ## 两个信号
+ *
+ *  1. **占据范围**。部件重心到整体重心的 RMS 距离,按 `span`(成熟期半宽)归一。
+ *     全挤在中心 = 糊成一坨的小点;散出画布 = 碎成一堆看不懂的碎片。
+ *  2. **体量层次**。用 SVG 路径 `d` 的长度当体积代理(不需要真的解析路径),
+ *     看**最大部件占了总体量多少**:一个巨无霸 + 几个小点 = 没有细节可读;
+ *     十几个大小有别的部件 = 剪影有层次。
+ *
+ * ⚠ **这一维是假设驱动的**(「剪影有层次更好看」是设计经验,没有人工标签验证过)。
+ * 它被放在 appeal 轴且刻意不做成惩罚项(缺数据时给中性 0.55),并且 `/lab/score`
+ * 会用 `leverageOf()` 把它的实测杠杆份额摆出来 —— 如果它其实没在干活,一眼就能
+ * 看到,而不是靠猜。
+ */
+function scoreSilhouette(parts: readonly ScorePart[] | undefined, span: number | undefined): number {
+  const pts = (parts ?? []).filter((p) => typeof p.x === 'number' && typeof p.y === 'number')
+  // 位置数据不够就无从评构图,给中性而不是编一个
+  if (pts.length < 5) return 0.55
+
+  const cx = pts.reduce((a, p) => a + p.x!, 0) / pts.length
+  const cy = pts.reduce((a, p) => a + p.y!, 0) / pts.length
+  // `span` 是成熟期半宽,没给就按 blueprint 的默认 90
+  const S = Math.max(12, span ?? 90)
+
+  const radii = pts.map((p) => Math.hypot(p.x! - cx, p.y! - cy) / S)
+  const rms = Math.sqrt(radii.reduce((a, r) => a + r * r, 0) / radii.length)
+  const far = Math.max(...radii)
+
+  // 1) 占据范围:太聚(rms→0)扣,散出画布(far>1)扣,中间给满分
+  const spread = norm(rms / 0.5) * norm(1 - clamp01((far - 0.95) / 0.55))
+
+  // 2) 体量层次。⚠ **不能只看最大部件占比**:部件越多,最大占比天然越小
+  //    (n=10 时约 0.1,n=30 时约 0.03),那一项几乎只反映「部件数」,不反映层次 ——
+  //    实测它的方差份额只有 1.2%。改用**体量分布的归一化熵** + 最大占比惩罚:
+  //    熵低 = 一两个巨无霸带一堆碎点;熵高 = 大小有别。两者一起才有层次。
+  const sizes = (parts ?? []).map((p) => Math.max(1, p.d?.length ?? 0))
+  const sizeTotal = sizes.reduce((a, b) => a + b, 0)
+  let layering = 0.5
+  if (sizeTotal > 0 && sizes.length >= 3) {
+    const ps = sizes.map((v) => v / sizeTotal)
+    const H = -ps.reduce((a, p) => a + (p > 0 ? p * Math.log(p) : 0), 0) / Math.log(sizes.length)
+    const largest = Math.max(...sizes) / sizeTotal
+    layering = 0.6 * norm(H / 0.82) + 0.4 * norm(1 - largest / 0.5)
+  }
+
+  return clamp01(0.55 * spread + 0.45 * layering)
+}
+
+/**
+ * 神韵 / 有没有「脸」 0..1。
+ *
+ * 为什么单列:「生物」和「色块」的分界几乎全在这只眼睛上。一坨配色漂亮、动效流畅
+ * 的东西,长了眼睛和没长眼睛是两种东西 —— 而**现有七维没有一维在看它**
+ * (`scoreFidelity` 只在描述点名「眼」时才检查,没点名就完全不参与评分)。
+ *
+ * 判据:
+ *  - **2 只** = 对称的一对,是绝大多数生物的正确解,满分;
+ *  - **1 只** = 独眼,可以是刻意设计,给中上;
+ *  - **0 只** = 色块,给很低(但不给 0:纯装饰性纹样确实可以没眼睛);
+ *  - **3~4 只** = 开始难辨,给中;**>4 只** = 挤成一团,扣。
+ *
+ * 另有一项:多只眼如果**坐标几乎重合**,那多半是同一个位置复制了几份,也算没长好。
+ */
+function scoreFace(parts: readonly ScorePart[] | undefined): number {
+  if (!parts?.length) return 0.55
+  const eyes = parts.filter((p) => p.role === 'eye' || /眼|eye|pupil/i.test(`${p.id ?? ''}`))
+  const n = eyes.length
+
+  let base: number
+  if (n === 0) base = 0.18
+  else if (n === 1) base = 0.62
+  else if (n === 2) base = 1
+  else if (n <= 4) base = 0.72
+  else base = 0.4
+
+  // 坐标重合的「多眼」= 同一个位置复制了几份,不算真的多眼
+  if (n >= 2) {
+    const pos = eyes.map((p) => `${Math.round(p.x ?? 0)}:${Math.round(p.y ?? 0)}`)
+    const uniq = new Set(pos).size
+    base *= norm((uniq - 1) / Math.max(1, n - 1)) * 0.4 + 0.6
+  }
+
+  return clamp01(base)
+}
+
+/**
+ * 色彩**记忆点** 0..1 —— 「有没有一处在视觉上跳出来的颜色」。
+ *
+ * ## 为什么必须和 `scorePalette` 分开
+ *
+ * `scorePalette`(craft)只奖**和谐**:色相落在类比/三角/互补带内、饱和度在中间段、
+ * 主体与点缀分得开。这套判据系统性地**贬低张力** —— 而真实视觉设计里,冲击力
+ * 常常正来自「不和谐」:霓虹粉配湖蓝、大红配青绿。旧结构里没有任何一维为它说话,
+ * 于是这类配色只能靠「勉强算和谐」拿分,好看的被压掉。
+ *
+ * 拆出这一维之后,`palette` 和 `colorPop` 是**正交**的:单色系 designs 可以在
+ * `palette` 拿满分而在 `colorPop` 拿低分,撞色 designs 反之。两者都要,才能覆盖
+ * 「协调耐看」和「跳眼有冲击」这两种都成立的好看。
+ *
+ * 判据:某色相对主体的**色相距离**够大(≥55° 算「另一族颜色」),且它的饱和度或
+ * 亮度与主体有明显落差 —— 两个条件都满足才算「跳出来」。纯黑主体配任何颜色都跳,
+ * 但那不算配色,所以要求**色相**也拉开。
+ *
+ * ⚠ 同 `scoreSilhouette`:这是设计经验,没有人工标签验证。刻意给了 0.2 的地板 ——
+ * 单色系是合法且常常很好看的设计,不该因为「没有记忆点」就被判成差。
+ */
+function scoreColorPop(dna: CreatureDna): number {
+  const { body, accent, glow } = dna.palette
+  const [bh, bs, bl] = hsl(body)
+
+  let best = 0
+  let both = 0
+  for (const hex of [accent, glow]) {
+    const [h, s, l] = hsl(hex)
+    // 两条**互替**的「跳出来」路线 —— ⚠ 不能相乘。相乘等于要求两条同时成立,
+    // 而最跳的三色配色恰恰是「三个都很饱和、色相各差 140°」:它的饱和度**差为零**,
+    // 一相乘就被判成 0(实测亮丽三色与全灰同分,这一维直接失效)。
+    // 色相跳开本身就够了;明度/饱和度落差是给「色相相邻」的情况准备的另一条路。
+    const hueJump = norm((hueDist(bh, h) - 25) / 35)
+    const sep = Math.max(
+      norm((Math.abs(s - bs) - 0.08) / 0.28),
+      norm((Math.abs(l - bl) - 0.1) / 0.28),
+    )
+    const q = Math.max(hueJump, sep)
+    if (q > best) best = q
+    if (q >= 0.5) both++
+  }
+
+  // 单色系也有 0.2 的地板:「没有记忆点」不等于「难看」
+  return clamp01(0.2 + 0.6 * best + 0.2 * (both >= 2 ? 1 : 0))
 }
 
 /* ---------------------------- 新增:落实度 ---------------------------- */
@@ -666,24 +1038,48 @@ function paletteEchoesColor(dna: CreatureDna, text: string): boolean {
 
 /* ---------------------------- 对外 ---------------------------- */
 
-/** 打分的七个维度键,顺序即 `WEIGHTS` 的声明顺序 */
+/** 打分的维度键。`craft` 轴在前,`appeal` 轴在后 */
 export type ScoreKey = keyof typeof WEIGHTS
 
-/** 各维的权重和为 1 */
-export const SCORE_KEYS = Object.keys(WEIGHTS) as readonly ScoreKey[]
+/** 各维按轴分组,顺序即 `CRAFT_WEIGHTS` / `APPEAL_WEIGHTS` 的声明顺序 */
+export const CRAFT_KEYS = Object.keys(CRAFT_WEIGHTS) as readonly (keyof typeof CRAFT_WEIGHTS)[]
+export const APPEAL_KEYS = Object.keys(APPEAL_WEIGHTS) as readonly (keyof typeof APPEAL_WEIGHTS)[]
+export const SCORE_KEYS = [...CRAFT_KEYS, ...APPEAL_KEYS] as readonly ScoreKey[]
+
+/** 某一维属于哪个轴 */
+export const AXIS_OF: Record<ScoreKey, ScoreAxis> = Object.fromEntries([
+  ...CRAFT_KEYS.map((k) => [k, 'craft' as const]),
+  ...APPEAL_KEYS.map((k) => [k, 'appeal' as const]),
+]) as Record<ScoreKey, ScoreAxis>
+
+/** 评分需要的最小部件信息。字段全可选,所以老调用点只传 `{ id, role }` 也合法 */
+export interface ScorePart {
+  role?: string
+  id?: string
+  /** 附着点(局部单位) */
+  x?: number
+  y?: number
+  /** SVG 路径串。用长度当体积代理,不解析 */
+  d?: string
+  grow?: unknown
+  appear?: unknown
+}
+
+/** 部件级运动规则(`motionCfg.rules` 的值) */
+export interface ScoreMotionRule {
+  amp?: number
+  periodScale?: number
+}
 
 export interface ScoreBreakdown {
-  palette: number
-  traits: number
-  motion: number
-  narrative: number
-  match: number
-  /** 结构复杂度:部件数量/角色多样性与骨架完整度 */
-  structure: number
-  /** 描述落实度:描述里的要求有多少真的变成了部件与动效 */
-  fidelity: number
-  /** 0..100 */
+  /** 工艺轴 0..100:做得对不对 */
+  craft: number
+  /** 吸引力轴 0..100:想不想看 */
+  appeal: number
+  /** 0..100,两轴相乘合成 */
   total: number
+  /** 逐维 0..1。键见 `SCORE_KEYS` */
+  dims: Record<ScoreKey, number>
   /**
    * 调试用:这维到底在比什么。空字符串 = 这只没点到任何可验证的特征,拿的是中性分。
    * 页面上把它打出来,免得出现「0.35 分」却不知道在扣什么。
@@ -695,50 +1091,63 @@ export interface ScoreBreakdown {
  * 打分的可选上下文。
  *
  * 为什么需要:只看 `dna` 的话,「部件到底有几个」「用的哪个 motion family」
- * 「有没有触须」这些信息全都不在 DNA 里 —— 而它们恰恰是判断「描述有没有被落实」
- * 的主要依据。所以允许把编译产物传进来;不传时相关维度退回**只看 DNA** 的弱版本,
- * 保持 `heuristicScore(dna)` 老调用点全部可用、结果不崩。
+ * 「有没有触须」「摆在哪」这些信息全都不在 DNA 里 —— 而它们恰恰是判断
+ * 「描述有没有被落实」「看起来好不好看」的主要依据。所以允许把编译产物传进来;
+ * 不传时相关维度退回**只看 DNA** 的弱版本,保持 `heuristicScore(dna)` 老调用点
+ * 全部可用、结果不崩。
  */
 export interface ScoreContext {
-  parts?: readonly { role?: string; id?: string; grow?: unknown; appear?: unknown }[]
+  parts?: readonly ScorePart[]
   motionFamily?: string
-  /** 描述里点名的特征词,用于 fidelity */
+  /** 部件级运动规则,给 `motionRich` 判断「有没有多个不同节奏」 */
+  motionRules?: readonly ScoreMotionRule[]
+  /** 成熟期半宽,给 `silhouette` 归一化用 */
+  span?: number
+  /** 描述里点名的特征词,用于 fidelity(目前由 fidelity 自己从描述解析,保留给扩展) */
   mentioned?: readonly string[]
 }
 
-/** 对一份合法 DNA 打分;分项均为 0..1 */
+/** 对一份合法 DNA 打分;逐维均为 0..1 */
 export function heuristicScore(
   dna: CreatureDna,
   descr = '',
   ctx: ScoreContext = {},
 ): ScoreBreakdown {
-  const palette = scorePalette(dna)
-  const traits = scoreTraits(dna)
-  const motion = scoreMotion(dna, ctx)
-  const narrative = scoreNarrative(dna, ctx)
-  const match = descr.trim() ? scoreMatch(dna, descr) : 0.5
-  const structure = scoreStructure(dna, ctx)
-  const fid = descr.trim() ? scoreFidelity(dna, descr, ctx) : { v: 0.5, notes: [] as string[] }
-  const fidelity = fid.v
-  const parts: Record<ScoreKey, number> = {
-    palette,
-    traits,
-    motion,
-    narrative,
-    match,
-    structure,
-    fidelity,
+  const hasDescr = !!descr.trim()
+
+  /* ---- craft 轴:做得对不对 ---- */
+  const fid = hasDescr ? scoreFidelity(dna, descr, ctx) : { v: 0.5, notes: [] as string[] }
+  const craftDims: Record<string, number> = {
+    fidelity: fid.v,
+    structure: scoreStructure(dna, ctx),
+    palette: scorePalette(dna),
+    motion: scoreMotion(dna, ctx),
+    narrative: scoreNarrative(dna, ctx),
+    match: hasDescr ? scoreMatch(dna, descr) : 0.5,
   }
-  const total = weightedGeometricMean(parts)
+  const craft = weightedGeometricMean(craftDims, CRAFT_WEIGHTS)
+
+  /* ---- appeal 轴:想不想看 ---- */
+  const appealDims: Record<string, number> = {
+    traits: scoreTraits(dna),
+    silhouette: scoreSilhouette(ctx.parts, ctx.span),
+    face: scoreFace(ctx.parts),
+    colorPop: scoreColorPop(dna),
+    motionRich: scoreMotionRich(dna, ctx),
+  }
+  const appeal = weightedGeometricMean(appealDims, APPEAL_WEIGHTS)
+
+  const total = combineAxes(craft, appeal)
+
+  const dims = {} as Record<ScoreKey, number>
+  for (const k of CRAFT_KEYS) dims[k as ScoreKey] = round3(craftDims[k]!)
+  for (const k of APPEAL_KEYS) dims[k as ScoreKey] = round3(appealDims[k]!)
+
   return {
-    palette: round3(palette),
-    traits: round3(traits),
-    motion: round3(motion),
-    narrative: round3(narrative),
-    match: round3(match),
-    structure: round3(structure),
-    fidelity: round3(fidelity),
+    craft: round3(craft * 100),
+    appeal: round3(appeal * 100),
     total: round3(total * 100),
+    dims,
     fidelityNotes: fid.notes,
   }
 }
