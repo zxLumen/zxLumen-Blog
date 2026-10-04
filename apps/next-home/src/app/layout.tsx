@@ -11,6 +11,7 @@ import { isAdmin } from "@/lib/auth";
 import { getClientContacts } from "@/lib/settings";
 import { getAppearance } from "@/lib/theme-config";
 import { getVisibleApps } from "@/lib/app-config";
+import { getLuminariEmbedUrl } from "@/lib/luminari-embed";
 import { MockUserSwitch } from "@/components/MockUserSwitch";
 import { AppShell } from "@/components/AppShell";
 import { MOCK_COOKIE } from "@/lib/clientid";
@@ -56,6 +57,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // 右侧应用栏(admin 可配):为空则不渲染、不占位(data-apps 不设)
   const apps = getVisibleApps();
 
+  // 四周生灵层:透明 iframe 嵌 luminari 的 embed.html,让 Top5 生灵出现在主站四周
+  const luminariEmbed = getLuminariEmbedUrl();
+
   const initScript = `${themeInitScript(appearance.themes, appearance.layouts, appearance.defaultTheme, appearance.defaultLayout, mockCid || undefined)};${NAV_INIT_SCRIPT}`;
 
   const adminTools = admin ? <MockUserSwitch current={mockCid} /> : null;
@@ -87,6 +91,23 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         >
           {children}
         </AppShell>
+        {luminariEmbed ? (
+          <iframe
+            src={luminariEmbed}
+            title="luminari-field"
+            aria-hidden="true"
+            tabIndex={-1}
+            style={{
+              position: "fixed",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              border: 0,
+              pointerEvents: "none",
+              zIndex: 30,
+            }}
+          />
+        ) : null}
       </body>
     </html>
   );
