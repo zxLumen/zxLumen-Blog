@@ -95,7 +95,7 @@ export async function POST(req: Request) {
   if (!exempt) {
     const ip = clientIp(req)
     if (!rateLimit(`creature-gen:${ip}`, 120, 60_000)) {
-      return Response.json({ error: '生成太频繁,稍等一下' }, { status: 429 })
+      return Response.json({ error: '生成太频繁,稍等一下', retryable: true }, { status: 429 })
     }
   }
   /**
@@ -108,7 +108,15 @@ export async function POST(req: Request) {
   const { cid, isNew } = existing ? { cid: existing, isNew: false } : await resolveCid()
   const today = cidsUsedToday(cid, exempt)
   if (today >= DAILY_PER_CID) {
-    return json({ error: `今天已经生成 ${today} 只了,明天再来(每人每天 ${DAILY_PER_CID} 只)` }, 429, isNew ? cid : '')
+    return json(
+      {
+        error: `今天已经生成 ${today} 只了,明天再来(每人每天 ${DAILY_PER_CID} 只)`,
+        // 不可重试:等到明天也不会变。客户端据此直接报错,而不是退避十几次
+        retryable: false,
+      },
+      429,
+      isNew ? cid : '',
+    )
   }
 
   const jobId = randomUUID()
@@ -119,9 +127,17 @@ export async function POST(req: Request) {
    * 没空位 → 返回 202 + jobId,前端轮询 `GET ?jobId=` 看位置与结果。
    */
   const slot = q.acquire(jobId, descr)
-  if (slot === 'QUEUE_FULL') {
-    return json({ error: `排队已经排到 ${MAX_WAITERS} 只了,前面还有一批在跑,过一会儿再试` }, 429, isNew ? cid : '')
-  }
+    if (slot === 'QUEUE_FULL') {
+      return json(
+        {
+          error: `排队已经排到 ${MAX_WAITERS} 只了,前面还有一批在跑,过一会儿再试`,
+          // 明确告诉客户端这个 429 是**等得起**的 —— 否则前端只能靠猜
+          retryable: true,
+        },
+        429,
+        isNew ? cid : '',
+      )
+    }
   if (!slot) {
     const out = await run(jobId, descr, body.retryHint, { baseUrl, model, apiKey, cid, exempt })
     return json(out.body, out.status, isNew ? cid : '')
@@ -180,7 +196,8 @@ async function run(
   // 预算闸:真正开跑前才检查(排队期间不占额度),并记一笔在途预估
   const gate = reserve({ cid: t.cid, isAdminUser: t.exempt, model: t.model })
   if (!gate.ok) {
-    const body = { error: gate.reason ?? '今天的生成额度用完了' }
+    // 预算见底同样是**今天不会恢复**的 429,标死免得前端空转重试
+    const body = { error: gate.reason ?? '今天的生成额度用完了', retryable: false }
     q.finish(jobId, 'error', undefined, { message: body.error, status: 429 })
     q.release()
     return { body, status: 429 }

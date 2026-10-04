@@ -17,8 +17,21 @@
 import { estimateGoCost, isGoModelKnown } from '@zx/shared'
 import { getDb } from '@/lib/db'
 
-/** 日预算上限(USD) */
-export const DAILY_BUDGET_USD = 2
+/**
+ * 日预算上限(USD)。
+ *
+ * 为什么从 2 提到 6:`/lab/score` 一批就是 30 只 ≈ $1.1,而调评分公式是要**反复跑批**
+ * 的(换权重要看分布、验一个假设要重跑)。$2 一天只够不到两批,等于「限流」而不是
+ * 「限额」—— 自己把自己的调试流程卡死,却对真正的失控脚本毫无作用(那种场景
+ * 30 秒就能烧掉 $2,靠的不是上限高低)。
+ *
+ * 可用 `ZX_CREATURE_DAILY_BUDGET` 覆盖,不用改代码。
+ *
+ * ⚠ 这仍是**真金白银的闸门**,故意保留:没有它,一个死循环脚本能在一天内把
+ * $10/月 的订阅烧光(实测单次 $0.0045~$0.0089,$6 ≈ 700~1300 次)。
+ * 「demo 不限流」指的是不限**请求频率**,不是不限**花费**。
+ */
+export const DAILY_BUDGET_USD = Number(process.env.ZX_CREATURE_DAILY_BUDGET ?? 6)
 
 /** 同一 cookie 每天最多生成几只 */
 export const DAILY_PER_CID = 5

@@ -611,6 +611,11 @@ type GenResp = {
   jobId?: string
   position?: number
   etaMs?: number
+  /**
+   * 服务端显式标注这个错误**值不值得重试**(见 `generate/route.ts`)。
+   * 两种 429 一个等得起一个等不起,没有这个字段就只能靠猜错误文案。
+   */
+  retryable?: boolean
 }
 
 /** 退避上限:总共最多等 ~2 分钟,超过就认失败 */
@@ -639,18 +644,29 @@ async function postWithRetry(descr: string, onWait: (msg: string) => void): Prom
     const j = (await res.json().catch(() => ({}))) as GenResp
     if (res.ok) return j
 
-    const retryable = res.status === 429 || res.status >= 500
+    /**
+     * 429 有两种,性质完全相反,必须分开:
+     *   - 「等一会儿就好」:每分钟太频繁、队列排满 → 退避重试有意义;
+     *   - 「今天不会恢复」:每人 5 只用完、日预算见底 → 重试到天荒地老也没用。
+     *
+     * 之前我把两者混为一谈,于是后者被重试十几次(每次 8s,两分钟起步),
+     * 页面只显示「限流,第 13 次」——**既慢又骗人**,真正的额度信息被盖住了。
+     *
+     * 优先读服务端显式给的 `retryable`;它缺失时才退回按文案猜(老响应 / 代理吞字段)。
+     * 猜文案只是兜底:改一次提示文案就会静默失效,所以那不是主路径。
+     */
+    const permanent = j.retryable === false
+    const retryable = (res.status === 429 && !permanent) || res.status >= 500
     if (!retryable || Date.now() - t0 > RETRY_DEADLINE_MS) {
       throw new Error(j.error || `HTTP ${res.status}`)
     }
     // 1s 起,指数退避到 ~8s 封顶,加抖动免得 8 路一起醒过来再撞一次
     const wait = Math.min(8000, 1000 * 2 ** (attempt - 1)) * (0.7 + Math.random() * 0.6)
     const secs = Math.round(wait / 100) / 10
-    onWait(
-      res.status === 429
-        ? `限流,${secs}s 后重试(第 ${attempt} 次)`
-        : `服务异常 ${res.status},${secs}s 后重试(第 ${attempt} 次)`,
-    )
+    // 把**服务端给的真实原因**带出来,别一律显示「限流」——两种 429 一个等得起
+    // 一个等不起,混成一句话就等于把诊断信息扔了
+    const why = res.status === 429 ? (j.error ?? '请求过于频繁') : `服务异常 ${res.status}`
+    onWait(`${why},${secs}s 后重试(第 ${attempt} 次)`)
     await new Promise((r) => setTimeout(r, wait))
   }
 }
