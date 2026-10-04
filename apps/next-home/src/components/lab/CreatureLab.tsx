@@ -81,7 +81,9 @@ export function CreatureLab() {
   return (
     <div className="cl-root">
       <header className="cl-head">
-        <h1>生物渲染实验室</h1>
+        <h1>
+          Lumen 生灵 · 六渲染技术版<span className="cl-en">Luminari</span>
+        </h1>
         <p>
           同一份 DNA、同一段时间轴,六套渲染技术并排跑。目的是挑一条**上生产**的路 ——
           形态全部由 DNA 推导,渲染器不做任何艺术判断。

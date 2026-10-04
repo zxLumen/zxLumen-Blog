@@ -3,7 +3,7 @@ import '../creature/lab.css'
 import './species.css'
 
 export const metadata = {
-  title: '物种实验室',
+  title: 'Lumen 生灵',
   robots: { index: false, follow: false },
 }
 

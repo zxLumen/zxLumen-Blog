@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 物种实验室 —— 「像不像 + 独特性」的试验台。
+ * Lumen 生灵(`/lab/species`)—— 整个玩法的首页,产品名在这里。
  *
  * 主路径是 **LLM 现场生成骨架**:输入描述 → 模型产出部件树 + DNA → 编译成 rig → 渲染。
  * 每只生物用**本地启发式**打分(配色/特质/运动/叙事/描述契合),零额外调用。
@@ -33,9 +33,12 @@ export function SpeciesLab() {
   return (
     <div className="cl-root sp-root">
       <header className="cl-head">
-        <h1>物种实验室</h1>
+        <h1>
+          Lumen 生灵<span className="cl-en">Luminari</span>
+        </h1>
         <p>
-          描述任意生物,由**大模型现场生成骨架与 DNA**(部件树 + 配色 + 运动),再渲染并用本地启发式打分。
+          <b>写一句话,它活过来。</b>描述任意生物,由**大模型现场生成骨架与 DNA**(部件树 +
+          配色 + 运动),再渲染并用本地启发式打分。
           **每格互不干扰** —— 六个预设 + 一个「自己写」可以同时在跑。对照{' '}
           <a href="/lab/creature">六渲染技术版</a>;想看<b>分数可不可信</b>去{' '}
           <a href="/lab/score">打分校验台</a>。

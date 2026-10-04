@@ -27,6 +27,19 @@
   letter-spacing: 0.02em;
 }
 
+/*
+ * h1 里的英文名(Luminari)。中文名是主名、英文名是拉丁词根的正式写法,
+ * 所以视觉上必须**退居次要**:小一号、字距拉开、去色 —— 一眼看到的是中文。
+ */
+.cl-head h1 .cl-en {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cl-dim);
+}
+
 .cl-head p {
   margin: 0 0 18px;
   max-width: 62ch;

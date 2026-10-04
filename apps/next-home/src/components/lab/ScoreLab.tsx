@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 打分校验台 —— 「这批分数到底可不可信」。
+ * Lumen 生灵 · 打分校验台 —— 「这批分数到底可不可信」。
  *
  * 上一页(`/lab/species`)能看出模型每次生成的东西不一样,但那只回答了**多样性**。
  * 这里回答的是另一个问题:**`heuristicScore` 给的分,是有意义的信号还是在吃噪声?**
@@ -318,7 +318,9 @@ export function ScoreLab() {
   return (
     <div className="cl-root sc-root">
       <header className="cl-head">
-        <h1>打分校验台</h1>
+        <h1>
+          Lumen 生灵 · 打分校验台<span className="cl-en">Luminari</span>
+        </h1>
         <p>
           随机出 <b>{BATCH_N}</b> 条描述生成一批生物,按<b>启发式评分</b>排名,并给出两个**能证伪**的参照 ——
           同原型三档的丰富度对照、以及机器排名与你的评价是否一致。
