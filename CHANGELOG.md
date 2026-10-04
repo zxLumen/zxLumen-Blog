@@ -6,6 +6,11 @@
 
 ### 新增
 
+- **主站四周出现「生灵」**:全站页面以透明 iframe 嵌入 luminari 的 `embed.html`,让
+  Top5 生灵沿窗口四周游走(与主站同屏、`pointer-events:none` 不挡操作)。地址生产走
+  `luminari.${DOMAIN}`,本地走 luminari dev 端口;`LUMINARI_EMBED=0` 可关、
+  `LUMINARI_EMBED_URL` 可覆盖。
+
 - **`npm run sync:apps`:把本地「应用栏」配置同步到线上**。应用条目存在库
   `meta.apps_config`,此前只能靠手改线上库或后台逐条加;现在本地 `/admin` 调好后一条
   命令推到线上(走线上 `/api/admin/apps`,按 id **只加不减**,`--dry-run` / `--update` /
