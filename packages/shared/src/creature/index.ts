@@ -48,13 +48,16 @@ export type {
 export {
   WEIGHTS,
   WEIGHT_TOTAL,
+  SCORE_KEYS,
+  SCORE_DIM_FLOOR,
+  weightedGeometricMean,
   heuristicScore,
   craftScore,
   heatOf,
   rankScore,
   rankOf,
 } from './score.js'
-export type { ScoreBreakdown, RankedCreature } from './score.js'
+export type { ScoreBreakdown, ScoreKey, ScoreContext, RankedCreature } from './score.js'
 
 /** 批次级多样性 / 新颖度(不进 ScoreBreakdown.total,理由见 diversity.ts) */
 export { diversityOf } from './diversity.js'

@@ -52,6 +52,43 @@ export const WEIGHT_TOTAL =
   WEIGHTS.structure +
   WEIGHTS.fidelity
 
+/**
+ * 单维地板。
+ *
+ * 几何平均里任何一维趋 0 都会把整个乘积拖到 0(`traits` 全 0、`match` 完全不命中
+ * 都会这样),于是「一项不及格」变成「整只归零」,比线性平均严苛得多、也更容易
+ * 变成噪声。实测约 16% 的样本存在某维 < 0.05,不设地板会被这批样本整体压死。
+ *
+ * 0.08 的含义:一维可以明确地差(拿到 0.08),但不足以单独宣判整只生物的死刑。
+ * 取值不能更高 —— 地板定 0.15 时实测 `match`(权重仅 8/94)有 **44%** 的样本被
+ * 抬到同一个值,等于把这一维重新变成常数、抵消几何平均的区分度。地板只该保护
+ * 高权重维度不被一击归零:fidelity(权重 20)归零时总分降到 58%,而 match 归零
+ * 只降到 96%,和它的权重相称。
+ */
+export const SCORE_DIM_FLOOR = 0.08
+
+/**
+ * 加权几何平均,返回 0..1。
+ *
+ * 为什么不用加权算术平均:**算术平均会让「单项灾难」被其余六维平均掉**。
+ * 一只配色糟糕、结构潦草、动效抽搐的生物,只要 traits/narrative 还在线,
+ * 算术平均照样能拿 70+ —— 这正是实测「所有生物都挤在 70~90」的成因。
+ *
+ * 几何平均在 log 空间是线性的,等价于「任一维掉下去都会等比地拉低总分」,
+ * 短板无法被掩盖。随机 DNA 空间 20000 次抽样:
+ * 算术平均四分位距 8.4 / 变异系数 0.089,几何平均 11.3 / 0.270(3 倍区分度)。
+ *
+ * 配 `SCORE_DIM_FLOOR` 一起用:地板保证不会归零,几何平均保证短板不被掩盖。
+ */
+export function weightedGeometricMean(parts: Record<ScoreKey, number>): number {
+  let sum = 0
+  for (const k of SCORE_KEYS) {
+    const w = WEIGHTS[k] / WEIGHT_TOTAL
+    sum += w * Math.log(Math.max(parts[k], SCORE_DIM_FLOOR))
+  }
+  return clamp01(Math.exp(sum))
+}
+
 /* ---------------------------- 颜色工具 ---------------------------- */
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -158,29 +195,50 @@ function scorePalette(dna: CreatureDna): number {
 }
 
 /**
- * 特质均衡 0..1
+ * 特质**性格鲜明度** 0..1
  *
- * 熵(别全挤在一根轴)+ 非零轴数 + 「一轴拉满其余为 0」的惩罚。
- * 一只只有 mechanical=5 的生物和一只六轴均衡的生物,后者明显更有看头。
+ * 原实现是「熵 + 非零轴数 + 退化惩罚」,实测判反了两处:
+ *
+ *  1. **均匀 = 满分。** `hNorm` 和 `nonzero/4` 都由「八轴铺开」拉满,所以
+ *     八轴全 3(彻底没性格)和 cyber=5+luminous=4(明确的赛博朋克)分差极大,
+ *     前者反而更高。这一维当时不但没区分度,还在反向惩罚有性格的设计。
+ *  2. **只看比例,丢弃量级。** 熵算的是 `v/total`,所以 cyber=0.6+luminous=0.4
+ *     这种「几乎没有气质」的生物和 cyber=3+luminous=2 同分。
+ *  3. **退化判据用错了量。** 注释写「一根轴到 5 而别的近乎为 0」,代码判的却是
+ *     `nonzero <= 2`(非零轴的**条数**)—— 于是 cyber=5+luminous=4 这种双主角
+ *     被当成单轴塌缩,和 cyber=5 其余全 0 一起压到 0.15。
+ *
+ * 改成评「有没有性格」,三项都只看绝对量级:
+ *  - **主导轴明确**(leadShare):最强轴占总量的比重。太平均=没主张,太集中=塌缩,
+ *    中间那段(约 0.25~0.55)才是「有主次」;单轴独大由 peakShare 单独扣。
+ *  - **有支撑**(support):次强轴的量级。这就是原注释想表达的「别全挤在一根轴」,
+ *    但判的是量级而不是条数 —— cyber=5+lum=4 因此能拿高分。
+ *  - **量级够**(intensity):整体总水平,恢复被熵丢掉的绝对强度信息。
  */
 function scoreTraits(dna: CreatureDna): number {
   const vals = TRAIT_AXES.map((a) => dna.traits[a])
   const total = vals.reduce((a, b) => a + b, 0)
   if (total === 0) return 0
-  const entropy = -vals.reduce((acc, v) => {
-    if (v === 0) return acc
-    const p = v / total
-    return acc + p * Math.log(p)
-  }, 0)
-  const hNorm = entropy / Math.log(TRAIT_AXES.length)
 
-  const nonzero = vals.filter((v) => v > 0).length
-  const max = Math.max(...vals)
+  const sorted = [...vals].sort((a, b) => b - a)
+  const lead = sorted[0]
+  const second = sorted[1] ?? 0
 
-  const spread = 0.45 * hNorm + 0.3 * norm(nonzero / 4)
-  // 一根轴到 5 而别的近乎为 0 → 退化,重罚
-  const degenerate = max >= 5 && nonzero <= 2 ? 0 : max >= 4 && nonzero <= 2 ? 0.4 : 1
-  return clamp01(spread * degenerate + (1 - degenerate) * 0.15)
+  // 主导轴占比落在「有主次」的甜点区给满分;铺得太开(→0)或太独揽(→1)都扣
+  const leadShare = lead / total
+  const distinct = norm((leadShare - 0.16) / 0.2) * norm((0.62 - leadShare) / 0.16)
+
+  // 次强轴的量级 = 有没有第二根轴在支撑(双主角不算塌缩)
+  const support = norm(second / 2)
+
+  // 整体量级:避免 cyber=0.6/lum=0.4 这种「几乎没有气质」蹭到和中等强度同分
+  const intensity = norm(total / 12)
+
+  // 单轴独大且次轴几乎为零:真塌缩,重罚(这是唯一保留的硬惩罚)
+  const lonelyPeak = lead >= 4 && second <= 0.5
+  const base = 0.34 * distinct + 0.32 * support + 0.34 * intensity
+  if (lonelyPeak) return clamp01(base * 0.35)
+  return clamp01(base)
 }
 
 /**
@@ -256,8 +314,15 @@ function editSim(a: string, b: string): number {
  *
  * 三段成长必须「看得出是三个阶段」。全同的 note / 雷同的 boost / 不递增的尺寸
  * 会让 19 天的成长变成「什么都没发生」,这是最该被抓出来的失败模式。
+ *
+ * **blueprint 路径的 plan 是空的**(`compileBlueprint` 只把成长放在每个 part 的
+ * `appear`/`grow` 上),所以走 parts 分支:直接看「出场窗口是否分阶段」。
+ * 否则这一维在所有 blueprint 上都恒为同一个值,等于 8 分权重全在测噪声。
  */
-function scoreNarrative(dna: CreatureDna): number {
+function scoreNarrative(dna: CreatureDna, ctx: ScoreContext = {}): number {
+  const parts = ctx.parts
+  if (parts?.length) return scoreNarrativeFromParts(parts)
+
   const notes = dna.plan.map((p) => p.note)
   const names = dna.plan.map((p) => p.name)
 
@@ -286,6 +351,54 @@ function scoreNarrative(dna: CreatureDna): number {
   const nameScore = new Set(names).size === names.length ? 1 : 0.4
 
   return 0.36 * noteScore + 0.24 * boostScore + 0.26 * sizeScore + 0.14 * nameScore
+}
+
+/**
+ * blueprint 的成长叙事:看 parts 的出场/生长窗口有没有真的分阶段。
+ *
+ * 原来 blueprint 路径下 plan 为空,这里恒等于 0.49(占 8/94 ≈ 8.5% 权重),
+ * 是「分数全挤在 70~90」的直接成因之一。现在评三件真实的事:
+ *  1. **出场有先后**:部件的出场时点要拉开,不是所有零件同一帧冒出来;
+ *  2. **有东西在长大**:至少一部分带 `grow` 窗口(不然 19 天里它根本不变大);
+ *  3. **节奏铺得开**:成长窗口不能全挤在头几天,要一直长到后面。
+ */
+function scoreNarrativeFromParts(parts: readonly { role?: string; grow?: unknown; appear?: unknown }[]): number {
+  const starts: number[] = []
+  const ends: number[] = []
+  let growing = 0
+
+  for (const p of parts) {
+    const ap = p.appear as { start?: number; end?: number } | undefined
+    if (ap && typeof ap.start === 'number') {
+      starts.push(ap.start)
+      if (typeof ap.end === 'number') ends.push(ap.end)
+    }
+    const g = p.grow as { from?: number; to?: number } | undefined
+    if (g && typeof g.from === 'number') {
+      starts.push(g.from)
+      if (typeof g.to === 'number') ends.push(g.to)
+    }
+    if (g) growing++
+  }
+
+  // 没有时间信息就无从评成长叙事,给中性分而不是编一个
+  if (starts.length < 2) return 0.5
+
+  const sMin = Math.min(...starts)
+  const sMax = Math.max(...starts)
+  const eMax = Math.max(...ends, sMax)
+
+  // 1) 出场时点要拉开:全部同帧冒出来 = 0
+  const span = sMax - sMin
+  const staged = norm(span / 25)
+
+  // 2) 得真的有东西在长大
+  const growScore = norm(growing / Math.max(4, parts.length * 0.35))
+
+  // 3) 成长要铺得开:最晚的那个窗口不能太早结束(20 天内一直在变)
+  const reachScore = norm(eMax / 40)
+
+  return 0.4 * staged + 0.32 * growScore + 0.28 * reachScore
 }
 
 /**
@@ -553,6 +666,12 @@ function paletteEchoesColor(dna: CreatureDna, text: string): boolean {
 
 /* ---------------------------- 对外 ---------------------------- */
 
+/** 打分的七个维度键,顺序即 `WEIGHTS` 的声明顺序 */
+export type ScoreKey = keyof typeof WEIGHTS
+
+/** 各维的权重和为 1 */
+export const SCORE_KEYS = Object.keys(WEIGHTS) as readonly ScoreKey[]
+
 export interface ScoreBreakdown {
   palette: number
   traits: number
@@ -581,7 +700,7 @@ export interface ScoreBreakdown {
  * 保持 `heuristicScore(dna)` 老调用点全部可用、结果不崩。
  */
 export interface ScoreContext {
-  parts?: readonly { role?: string; id?: string }[]
+  parts?: readonly { role?: string; id?: string; grow?: unknown; appear?: unknown }[]
   motionFamily?: string
   /** 描述里点名的特征词,用于 fidelity */
   mentioned?: readonly string[]
@@ -596,20 +715,21 @@ export function heuristicScore(
   const palette = scorePalette(dna)
   const traits = scoreTraits(dna)
   const motion = scoreMotion(dna, ctx)
-  const narrative = scoreNarrative(dna)
+  const narrative = scoreNarrative(dna, ctx)
   const match = descr.trim() ? scoreMatch(dna, descr) : 0.5
   const structure = scoreStructure(dna, ctx)
   const fid = descr.trim() ? scoreFidelity(dna, descr, ctx) : { v: 0.5, notes: [] as string[] }
   const fidelity = fid.v
-  const total =
-    (palette * WEIGHTS.palette +
-      traits * WEIGHTS.traits +
-      motion * WEIGHTS.motion +
-      narrative * WEIGHTS.narrative +
-      match * WEIGHTS.match +
-      structure * WEIGHTS.structure +
-      fidelity * WEIGHTS.fidelity) /
-    WEIGHT_TOTAL
+  const parts: Record<ScoreKey, number> = {
+    palette,
+    traits,
+    motion,
+    narrative,
+    match,
+    structure,
+    fidelity,
+  }
+  const total = weightedGeometricMean(parts)
   return {
     palette: round3(palette),
     traits: round3(traits),

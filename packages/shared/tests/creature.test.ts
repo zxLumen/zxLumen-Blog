@@ -7,6 +7,7 @@ import {
   formAt,
   resolveForm,
   type CreatureDna,
+  type TraitAxis,
 } from '../dist/creature/spec.js'
 import {
   growthAtDay,
@@ -22,7 +23,15 @@ import {
 } from '../dist/creature/growth.js'
 import { fallbackDna, DEFAULT_DNA, keywordMatch } from '../dist/creature/fallback.js'
 import { randomBatch } from '../dist/creature/random.js'
-import { heuristicScore, craftScore, rankOf, rankScore, WEIGHT_TOTAL } from '../dist/creature/score.js'
+import {
+  heuristicScore,
+  craftScore,
+  rankOf,
+  rankScore,
+  weightedGeometricMean,
+  WEIGHT_TOTAL,
+  SCORE_DIM_FLOOR,
+} from '../dist/creature/score.js'
 import { diversityOf } from '../dist/creature/diversity.js'
 import { rhoOf, distOf, calibrate, deadThreshold, MIN_N_FOR_RHO } from '../dist/creature/calibrate.js'
 
@@ -394,8 +403,135 @@ test('motion 评自洽而非魔法数:同一 DNA 换 family 会改分,但不因�
   )
 })
 
-test('craftScore:无 judge 采样时退化为纯启发分(模型不可用不能阻塞)', () => {
-  assert.equal(craftScore(50, []), 50)
+/* ------------------- 分数分布:三个导致「全挤在 70~90」的缺陷 ------------------- */
+
+const traitProfile = (vals: Partial<Record<TraitAxis, number>>) =>
+  heuristicScore(
+    normalizeDna({ ...fallbackDna('测试'), traits: vals }),
+    '测试',
+    {},
+  ).traits
+
+test('traits 不再把「八轴均匀」当满分 —— 均匀恰恰是没性格', () => {
+  const flat = TRAIT_AXES.reduce((a, k) => ({ ...a, [k]: 3 }), {} as Record<TraitAxis, number>)
+  const flatScore = traitProfile(flat)
+  const cyber = traitProfile({ cyber: 5, luminous: 4 })
+  assert.ok(
+    cyber > flatScore,
+    `明确的赛博朋克(cyber=5+luminous=4)应高于八轴全 3:${cyber} vs ${flatScore}`,
+  )
+  // 原实现里八轴全 3 拿 0.75 封顶、cyber=5+lum=4 只有 0.150,是完全反的
+  assert.ok(cyber > 0.6, `双主角不该被压到低分:${cyber}`)
+  assert.ok(flatScore < 0.7, `均匀铺开不该接近满分:${flatScore}`)
+})
+
+test('traits 区分「有性格」与「真塌缩」:判据是次高轴的量级,不是非零轴条数', () => {
+  const lonely = traitProfile({ cyber: 5 }) // 一根轴拉满,其余真的为 0
+  const duo = traitProfile({ cyber: 5, luminous: 4 }) // 双主角,不是塌缩
+  const twinFull = traitProfile({ mechanical: 5, organic: 5 }) // 两根轴都满
+  assert.ok(duo > lonely, `cyber=5+lum=4 不该与 cyber=5 同分:${duo} vs ${lonely}`)
+  assert.ok(lonely < 0.2, `真塌缩仍应被重罚:${lonely}`)
+  assert.ok(twinFull > lonely, `双轴满更不该当塌缩:${twinFull}`)
+  // 原实现三者都是 0.150(判据写的是 nonzero <= 2,数的是条数)
+})
+
+test('traits 计入量级:「几乎没有气质」不该和中等强度同分', () => {
+  const faint = traitProfile({ cyber: 0.6, luminous: 0.4 })
+  const solid = traitProfile({ cyber: 3, luminous: 2 })
+  const faded = traitProfile(Object.fromEntries(TRAIT_AXES.map((k) => [k, 1])) as Record<
+    TraitAxis,
+    number
+  >)
+  const strong = traitProfile(Object.fromEntries(TRAIT_AXES.map((k) => [k, 5])) as Record<
+    TraitAxis,
+    number
+  >)
+  // 原实现用熵,只看 v/total,于是 cyber=0.6+lum=0.4 与 cyber=3+lum=2 同分
+  assert.ok(faint < solid, `极淡应低于中等强度:${faint} vs ${solid}`)
+  assert.ok(faded < strong, `同样铺开八轴,量级大应更高:${faded} vs ${strong}`)
+})
+
+test('narrative 在 blueprint 路径不再是常量(plan 为空时改看 parts 的生长窗口)', () => {
+  const dna = fallbackDna('测试')
+  // 无任何时间信息 → 中性分
+  const flat = heuristicScore(dna, '测试', {
+    parts: Array.from({ length: 18 }, (_, i) => ({ id: `p${i}`, role: 'body' })),
+  }).narrative
+  // 分阶段出场 + 一直在长大
+  const staged = heuristicScore(dna, '测试', {
+    parts: Array.from({ length: 18 }, (_, i) => ({
+      id: `p${i}`,
+      role: i % 3 ? 'body' : 'accent',
+      appear: { start: i * 1.2, end: i * 1.2 + 6 },
+      grow: { from: i * 0.8, to: 45 + i * 2, a: 0.5, b: 1 },
+    })),
+  }).narrative
+  // 有 grow 但很早就不长了
+  const stunted = heuristicScore(dna, '测试', {
+    parts: Array.from({ length: 18 }, (_, i) => ({
+      id: `p${i}`,
+      role: i % 3 ? 'body' : 'accent',
+      appear: { start: i * 0.4, end: i * 0.4 + 4 },
+      grow: { from: i * 0.3, to: 10, a: 0.5, b: 1 },
+    })),
+  }).narrative
+  assert.ok(staged > flat, `分阶段成长应高于全同帧冒出来:${staged} vs ${flat}`)
+  assert.ok(staged > stunted, `长得久应更高:${staged} vs ${stunted}`)
+  // 原实现这条路径恒为 0.49(占 8/94 权重 = 纯常数,是分数收窄的直接成因)
+})
+
+test('总分用加权几何平均:单项灾难不再被其余六维平均掉', () => {
+  const all = 0.9
+  const uniform = weightedGeometricMean({
+    palette: all, traits: all, motion: all,
+    narrative: all, match: all, structure: all, fidelity: all,
+  })
+  // 只有 fidelity 崩了(权重最高 20)
+  const oneBad = weightedGeometricMean({
+    palette: all, traits: all, motion: all,
+    narrative: all, match: all, structure: all, fidelity: 0.1,
+  })
+  // 算术平均下 fidelity 崩到 0.1 时:0.9*74/94 + 0.1*20/94 = 0.73 → 只掉 17 分
+  // 几何平均要掉得更多,短板才藏不住
+  assert.ok(uniform > 0.89, `全优应接近 1:${uniform}`)
+  assert.ok(
+    uniform - oneBad > 0.1,
+    `单项灾难应显著拉低总分:${uniform} → ${oneBad}`,
+  )
+  assert.ok(
+    oneBad < uniform * (74 / 94 + (0.1 * 20) / 94),
+    `几何平均的结果必须低于同权重的算术平均:${oneBad}`,
+  )
+})
+
+test('几何平均的单维地板:一维归零不会把整只打成 0', () => {
+  const base = {
+    palette: 0.8, traits: 0.8, motion: 0.8,
+    narrative: 0.8, match: 0.8, structure: 0.8, fidelity: 0.8,
+  }
+  const zeroed = weightedGeometricMean({ ...base, match: 0 })
+  assert.ok(zeroed > 0, '不能归零')
+  // 地板 0.08:权重最小的 match 归零,其余六维的 0.8 把它拉到 ~0.66(不是 0)
+  assert.ok(zeroed > 0.5, `一维归零后其余维度仍应撑住大部分分:${zeroed}`)
+  // 高权重维度归零才应该明显掉 —— 权重越大,短板越痛
+  const fidZero = weightedGeometricMean({ ...base, fidelity: 0 })
+  assert.ok(fidZero < zeroed, `fidelity(权重 20)归零应比 match 更痛:${fidZero} vs ${zeroed}`)
+  assert.ok(fidZero > 0.3, `但也不该被打到接近 0:${fidZero}`)
+})
+
+test('地板取值不会把低权重维度压成常数(否则等于换了种方式制造死重)', () => {
+  // 0.15 时 match 有 44% 样本被兜到同一个值;这里确认地板足够低
+  const base = {
+    palette: 0.8, traits: 0.8, motion: 0.8,
+    narrative: 0.8, match: 0.8, structure: 0.8, fidelity: 0.8,
+  }
+  const a = weightedGeometricMean({ ...base, match: 0.2 })
+  const b = weightedGeometricMean({ ...base, match: 0.3 })
+  assert.ok(b > a, `地板以下仍应保留区分度:${a} → ${b}`)
+  assert.ok(SCORE_DIM_FLOOR <= 0.1, `地板 ${SCORE_DIM_FLOOR} 偏大会吃掉低权重维度的信号`)
+})
+
+test('craftScore:无 judge 采样时退化为纯启发分(模型不可用不能阻塞)', () => {  assert.equal(craftScore(50, []), 50)
   assert.equal(craftScore(0, []), 0)
   assert.equal(craftScore(100, []), 100)
 })

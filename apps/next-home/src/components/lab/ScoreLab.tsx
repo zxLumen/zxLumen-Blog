@@ -57,7 +57,9 @@ const SCORE_LABELS: Record<string, string> = {
   structure: '结构',
   fidelity: '落实',
 }
-/** `narrative` / `match` 权重已降,排前面会让人误以为它们最重要 */
+/** `narrative` / `match` 权重已降,排前面会让人误以为它们最重要。
+ *  ⚠️ 这是**按展示优先级**排的,和 `WEIGHTS` 的声明顺序不同(shared 里也有一份
+ * `SCORE_KEYS`,那是声明顺序),别为了「消除重复」把两者合并 —— 会改变 UI 排序。 */
 const SCORE_KEYS = ['fidelity', 'structure', 'palette', 'traits', 'motion', 'narrative', 'match'] as const
 type ScoreKey = (typeof SCORE_KEYS)[number]
 
@@ -194,7 +196,9 @@ export function ScoreLab() {
         if (!norm) throw new Error('骨架不可用')
         const cc = compileBlueprint(norm)
         const score = heuristicScore(cc.dna, it.descr, {
-          parts: cc.rig.parts,
+          // 成长叙事要看**出场/生长窗口**,得用 blueprint 的原始区间;
+          // cc.rig.parts 里这两者已经被编译成函数,取不到起止值了
+          parts: norm.parts,
           motionFamily: norm.motionCfg?.family,
         })
         setItems((prev) =>
