@@ -119,25 +119,56 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
     if (narrow || !items.length) return;
     let raf = 0;
 
+    const { x0, y0, x1, y1 } = pathRect();
+    const P = 2 * (x1 - x0) + 2 * (y1 - y0);
+
+    // 初始化(仅首次 / 新出现的):沿周长尽量打散,相邻间隔至少「两个气泡」
+    const missing = items.filter(
+      (it) => trackRef.current[it.id] === undefined || spdRef.current[it.id] === undefined,
+    );
+    if (missing.length) {
+      const n = items.length;
+      const seg = P / n;
+      const minSep = Math.min(400, seg * 0.9);
+      if (missing.length === n) {
+        // 整圈等分 + 随机抖动,既打散又保证不挨太近
+        const slots = shuffle(Array.from({ length: n }, (_, i) => i));
+        const jitter = Math.max(0, (seg - minSep) / 2);
+        items.forEach((it, i) => {
+          const center = (slots[i] + 0.5) * seg;
+          trackRef.current[it.id] = center + (Math.random() * 2 - 1) * jitter;
+          spdRef.current[it.id] = randSpeed();
+        });
+      } else {
+        // 增量新增:随机取点 + 拒绝采样,和已有生灵保持距离
+        for (const it of missing) {
+          let t = Math.random() * P;
+          for (let k = 0; k < 40; k++) {
+            const ok = items.every(
+              (o) =>
+                o.id === it.id ||
+                trackRef.current[o.id] === undefined ||
+                circDist(t, trackRef.current[o.id], P) >= minSep,
+            );
+            if (ok) break;
+            t = Math.random() * P;
+          }
+          trackRef.current[it.id] = t;
+          spdRef.current[it.id] = randSpeed();
+        }
+      }
+    }
+
     const place = (dt: number) => {
-      const { left, top, right, bottom } = safeRect();
-      const x0 = left;
-      const y0 = top;
-      const x1 = Math.max(x0, right - W_BOX);
-      const y1 = Math.max(y0, bottom - H_BOX);
+      const r = pathRect();
       for (const it of items) {
         const node = nodeRefs.current[it.id];
         if (!node) continue;
-        let t = trackRef.current[it.id];
-        if (t === undefined || spdRef.current[it.id] === undefined) {
-          t = hash01(it.id) * 4000;
-          trackRef.current[it.id] = t;
-          const dir = hash01(it.id + "d") < 0.5 ? -1 : 1;
-          spdRef.current[it.id] = dir * (14 + hash01(it.id + "s") * 16); // 14~30 px/s
-        }
-        t += spdRef.current[it.id] * dt;
+        if (trackRef.current[it.id] === undefined) trackRef.current[it.id] = Math.random() * 4000;
+        if (spdRef.current[it.id] === undefined) spdRef.current[it.id] = randSpeed();
+        const t = trackRef.current[it.id] + spdRef.current[it.id] * dt;
         trackRef.current[it.id] = t;
-        const p = pointOnPerimeter(t, x0, y0, x1, y1);
+        const p = pointOnPerimeter(t, r.x0, r.y0, r.x1, r.y1);
         node.style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`;
         node.dataset.nearTop = p.y < 96 ? "1" : "0";
       }
@@ -274,11 +305,34 @@ function pointOnPerimeter(
   return { x: x0, y: y1 - d };
 }
 
-/** 每只按 id 错开 */
-function hash01(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return (h % 1000) / 1000;
+/** 安全区域内、给生灵留下的行走矩形(左上角可落点范围) */
+function pathRect(): { x0: number; y0: number; x1: number; y1: number } {
+  const { left, top, right, bottom } = safeRect();
+  const x0 = left;
+  const y0 = top;
+  const x1 = Math.max(x0, right - W_BOX);
+  const y1 = Math.max(y0, bottom - H_BOX);
+  return { x0, y0, x1, y1 };
+}
+
+/** Fisher–Yates 洗牌(用于打散初始站位,避免与 id 顺序相关) */
+function shuffle<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** 随机速度(带方向),14~30 px/s */
+function randSpeed(): number {
+  return (Math.random() < 0.5 ? -1 : 1) * (14 + Math.random() * 16);
+}
+
+/** 环形周长上两点的最短距离 */
+function circDist(a: number, b: number, P: number): number {
+  const d = Math.abs((((a - b) % P) + P) % P);
+  return Math.min(d, P - d);
 }
 
 /** 现实时间驱动的年龄:出生到现在经过了多少天,封顶在 matureDay(不再长大) */
