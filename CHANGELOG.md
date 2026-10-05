@@ -7,10 +7,13 @@
 ### 新增
 
 - **主站四周出现「生灵」**:全站页面内联渲染 luminari 的 Top / 参选生灵(每只独立
-  SVG,沿窗口四周游走、循环长大、悬停冒话),整层 `pointer-events:none` 不影响页面。
-  数据经同源代理 `GET /api/luminari/field` 取自 luminari,避免跨域、无需给 luminari 开
-  CORS;代理地址可用 `LUMINARI_INTERNAL_URL`(服务端到 luminari)与 `LUMINARI_PUBLIC_URL`
-  (图片回退绝对地址)覆盖,默认 dev 用 `127.0.0.1:8790`、生产用容器名 `luminari:8790`。
+  SVG),整层 `pointer-events:none` 不影响页面。成长**按现实时间**(现实一天 = 长一天,
+  在各自 `matureDay` 约 30 天内循环),并在「安全区域」(避开顶栏 / 侧边导航 / 右侧
+  应用栏)内的四周**自主随机游走**,每次加载位置随机;悬停冒话。luminari 应用内不再
+  浮现这层,只在主站出现。数据经同源代理 `GET /api/luminari/field` 取自 luminari,
+  避免跨域、无需给 luminari 开 CORS;代理地址可用 `LUMINARI_INTERNAL_URL`(服务端到
+  luminari)与 `LUMINARI_PUBLIC_URL`(图片回退绝对地址)覆盖,默认 dev 用
+  `127.0.0.1:8790`、生产用容器名 `luminari:8790`。
 
 - **`npm run sync:apps`:把本地「应用栏」配置同步到线上**。应用条目存在库
   `meta.apps_config`,此前只能靠手改线上库或后台逐条加;现在本地 `/admin` 调好后一条
