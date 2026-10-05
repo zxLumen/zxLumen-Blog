@@ -6,22 +6,26 @@ import type { CreatureBlueprint } from "@zx/shared/creature";
 import { RigCreature } from "@/components/lab/renderers/RigCreature";
 
 /**
- * 四周生灵层(内联渲染,数据经同源代理 /api/luminari/field 取自 luminari)。
+ * 四周生灵层(内联渲染,数据经同源代理取自 luminari)。
  *
  * - 每只生灵是独立的 SVG DOM,悬浮在页面上;整层 pointer-events:none,
- *   只有单个生灵放行 hover/点击(悬停气泡),不影响主站内容与背景。
- * - 成长按**出生时间**算真实年龄:现实一天 = 长一天,从 0 长到 matureDay(约 30),
- *   之后维持成年形态;太小的会套一个尺寸下限(minScale),不至于小到看不见。
- * - 移动:**严格沿安全区域的矩形周长行走**(拐角转弯,不横穿中间),rAF 逐帧推进;
- *   安全区域避开了顶栏 / 侧边导航 / 右侧应用栏,不会被遮挡。
- * - 窄屏(≤820px)不渲染,避免遮挡内容。
+ *   只有单个生灵放行 hover/点击,不影响主站内容与背景。
+ * - 成长按**出生时间**算真实年龄:现实一天 = 长一天,到 matureDay 封顶;
+ *   各阶段大小经 fill / minScale 调整,幼体也保持合适大小。
+ * - 移动:**严格沿安全区域的矩形周长行走**(拐角转弯,不横穿),rAF 逐帧推进;
+ *   安全区域避开顶栏 / 侧边导航 / 右侧应用栏。
+ * - 对话:轮询 luminari 生成的「生灵互相对话」(每 ~2 分钟换一段),按顺序轮流冒泡;
+ *   拉取失败则退回各自的一句 say。窄屏(≤820px)不渲染。
  */
 
 const NARROW = "(max-width: 820px)";
-const BUBBLE_MS = 6000;
-const BOX = 120; // 生灵本体 96 + 名字行,贴边留白用
+const W_BOX = 96; // 水平占地(生灵本体宽)
+const H_BOX = 116; // 垂直占地(本体 + 名字行)
+const M = 6; // 贴边留白
 const DAY_MS = 24 * 60 * 60 * 1000; // 现实一天
-const MIN_SCALE = 0.85; // 尺寸下限(幼体不至于太小)
+const FILL = 0.76; // 生灵占画框比例(越大越填满)
+const MIN_SCALE = 0.82; // 幼体尺寸下限
+const TURN_MS = 7000; // 每句对话显示的时长
 
 interface FieldCreature {
   id: string;
@@ -34,11 +38,17 @@ interface FieldCreature {
   blueprint?: CreatureBlueprint;
 }
 
+interface Turn {
+  id: string;
+  text: string;
+}
+
 export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: number }) {
   const [items, setItems] = useState<FieldCreature[]>([]);
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [turnIdx, setTurnIdx] = useState(0);
   const [narrow, setNarrow] = useState(true);
   const [hover, setHover] = useState<string | null>(null);
-  const [bubbles, setBubbles] = useState<Record<string, boolean>>({});
 
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trackRef = useRef<Record<string, number>>({}); // 沿周长的距离
@@ -73,20 +83,48 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
     };
   }, [refreshMs]);
 
+  // 生灵互相之间的对话:每 ~90s 拉一段新的(服务端 2 分钟缓存 + 防重复)
+  useEffect(() => {
+    let alive = true;
+    const pull = async () => {
+      try {
+        const r = await fetch("/api/luminari/chatter", { cache: "no-store" });
+        if (!r.ok) return;
+        const data = await r.json();
+        if (alive && Array.isArray(data.turns) && data.turns.length) {
+          setTurns(data.turns);
+          setTurnIdx(0);
+        }
+      } catch {
+        /* 忽略 */
+      }
+    };
+    void pull();
+    const t = setInterval(pull, 90_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  // 按顺序轮流冒泡
+  useEffect(() => {
+    if (!turns.length) return;
+    const t = setInterval(() => setTurnIdx((i) => i + 1), TURN_MS);
+    return () => clearInterval(t);
+  }, [turns]);
+
   // 严格沿四周行走:rAF 逐帧推进每只的周长进度,直接写 DOM transform(不走 React 重渲染)
   useLayoutEffect(() => {
     if (narrow || !items.length) return;
     let raf = 0;
-    let last = performance.now();
 
-    const step = (now: number) => {
-      const dt = Math.min(0.1, (now - last) / 1000);
-      last = now;
+    const place = (dt: number) => {
       const { left, top, right, bottom } = safeRect();
       const x0 = left;
       const y0 = top;
-      const x1 = Math.max(x0, right - BOX);
-      const y1 = Math.max(y0, bottom - BOX);
+      const x1 = Math.max(x0, right - W_BOX);
+      const y1 = Math.max(y0, bottom - H_BOX);
       for (const it of items) {
         const node = nodeRefs.current[it.id];
         if (!node) continue;
@@ -101,47 +139,20 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
         trackRef.current[it.id] = t;
         const p = pointOnPerimeter(t, x0, y0, x1, y1);
         node.style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`;
+        node.dataset.nearTop = p.y < 96 ? "1" : "0";
       }
-      raf = requestAnimationFrame(step);
     };
 
-    // 立即落位一次,避免首帧停在 (0,0)
-    last = performance.now();
-    const { left, top, right, bottom } = safeRect();
-    for (const it of items) {
-      const node = nodeRefs.current[it.id];
-      if (!node) continue;
-      if (trackRef.current[it.id] === undefined) {
-        trackRef.current[it.id] = hash01(it.id) * 4000;
-        const dir = hash01(it.id + "d") < 0.5 ? -1 : 1;
-        spdRef.current[it.id] = dir * (14 + hash01(it.id + "s") * 16);
-      }
-      const x1 = Math.max(left, right - BOX);
-      const y1 = Math.max(top, bottom - BOX);
-      const p = pointOnPerimeter(trackRef.current[it.id], left, top, x1, y1);
-      node.style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`;
-    }
+    place(0); // 立即落位,避免首帧停在 (0,0)
+    let last = performance.now();
+    const step = (now: number) => {
+      place(Math.min(0.1, (now - last) / 1000));
+      last = now;
+      raf = requestAnimationFrame(step);
+    };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [items, narrow]);
-
-  // 轮换气泡:每只每隔一会儿冒一次
-  useEffect(() => {
-    const timers: number[] = [];
-    const timeouts: number[] = [];
-    items.forEach((it, i) => {
-      const t = window.setInterval(() => {
-        setBubbles((b) => ({ ...b, [it.id]: true }));
-        const to = window.setTimeout(() => setBubbles((b) => ({ ...b, [it.id]: false })), BUBBLE_MS);
-        timeouts.push(to);
-      }, 9000 + i * 2500);
-      timers.push(t);
-    });
-    return () => {
-      timers.forEach(clearInterval);
-      timeouts.forEach(clearTimeout);
-    };
-  }, [items]);
 
   const live = useMemo(() => {
     const m = new Map<string, { cc: ReturnType<typeof compileBlueprint>; matureDay: number }>();
@@ -160,11 +171,14 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
 
   if (narrow || !items.length) return null;
 
+  const active = turns.length ? turns[turnIdx % turns.length] : null;
+
   return (
     <div className="cf-layer" aria-hidden>
       {items.map((it) => {
         const lc = live.get(it.id);
-        const open = hover === it.id || bubbles[it.id];
+        const hovered = hover === it.id;
+        const bubble = hovered ? it.say : active && active.id === it.id ? active.text : "";
         return (
           <div
             key={it.id}
@@ -175,7 +189,7 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
             onMouseEnter={() => setHover(it.id)}
             onMouseLeave={() => setHover((h) => (h === it.id ? null : h))}
           >
-            {open && it.say ? <div className="cf-bubble">{it.say}</div> : null}
+            {bubble ? <div className="cf-bubble">{bubble}</div> : null}
             {lc ? (
               <div className="cf-live">
                 <RigCreature
@@ -184,6 +198,7 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
                   box={96}
                   matureDay={lc.matureDay}
                   minScale={MIN_SCALE}
+                  fill={FILL}
                   daySource={() => fieldDay(it.createdAt, lc.matureDay)}
                 />
               </div>
@@ -209,30 +224,30 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
 function safeRect(): { left: number; top: number; right: number; bottom: number } {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  let left = 8;
-  let top = 8;
-  let right = vw - 8;
-  let bottom = vh - 8;
+  let left = M;
+  let top = M;
+  let right = vw - M;
+  let bottom = vh - M;
 
   const bar = document.querySelector(".zx-topbar");
   if (bar) {
     const r = bar.getBoundingClientRect();
-    if (r.width >= vw * 0.85) top = Math.max(top, r.bottom + 8);
-    else if (r.height >= vh * 0.85) left = Math.max(left, r.right + 8);
+    if (r.width >= vw * 0.85) top = Math.max(top, r.bottom + M);
+    else if (r.height >= vh * 0.85) left = Math.max(left, r.right + M);
   }
 
   const dock = document.querySelector(".zx-appdock");
   if (dock) {
     const r = dock.getBoundingClientRect();
-    if (r.left > vw * 0.5) right = Math.min(right, r.left - 8);
-    else bottom = Math.min(bottom, r.top - 8);
+    if (r.left > vw * 0.5) right = Math.min(right, r.left - M);
+    else bottom = Math.min(bottom, r.top - M);
   }
 
-  if (right - left < BOX + 16 || bottom - top < BOX + 16) {
-    left = 8;
-    top = 8;
-    right = vw - 8;
-    bottom = vh - 8;
+  if (right - left < W_BOX + 16 || bottom - top < H_BOX + 16) {
+    left = M;
+    top = M;
+    right = vw - M;
+    bottom = vh - M;
   }
   return { left, top, right, bottom };
 }

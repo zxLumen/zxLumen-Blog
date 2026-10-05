@@ -8,13 +8,14 @@
 
 - **主站四周出现「生灵」**:全站页面内联渲染 luminari 的 Top / 参选生灵(每只独立
   SVG),整层 `pointer-events:none` 不影响页面。成长**按出生时间算真实年龄**(现实一天
-  = 长一天,到各自 `matureDay` 约 30 天封顶),幼体套尺寸下限不至于太小;移动**严格沿
-  「安全区域」的矩形周长行走**(避开顶栏 / 侧边导航 / 右侧应用栏,拐角转弯、不横穿);
-  悬停 / 定时冒气泡说句(luminari 生成,修了顶层数组 JSON 解析才出得来)。luminari 应用
-  内不再浮现这层,只在主站出现。数据经同源代理 `GET /api/luminari/field` 取自 luminari,
-  避免跨域、无需给 luminari 开 CORS;代理地址可用 `LUMINARI_INTERNAL_URL`(服务端到
-  luminari)与 `LUMINARI_PUBLIC_URL`(图片回退绝对地址)覆盖,默认 dev 用
-  `127.0.0.1:8790`、生产用容器名 `luminari:8790`。
+  = 长一天,到各自 `matureDay` 约 30 天封顶),并用 `fill` / 尺寸下限把各阶段大小调到
+  合适;移动**严格沿「安全区域」的矩形周长行走**(避开顶栏 / 侧边导航 / 右侧应用栏,
+  拐角转弯、不横穿),贴边紧凑。生灵会**互相接话**:轮询 luminari 生成的对话(约每 2
+  分钟换一段、带防重复),按序轮流冒泡;贴近顶边时气泡自动下挂。luminari 应用内不再
+  浮现这层,只在主站出现。数据经同源代理 `GET /api/luminari/field`(生灵)与
+  `GET /api/luminari/chatter`(对话)取自 luminari,避免跨域、无需给 luminari 开 CORS;
+  代理地址可用 `LUMINARI_INTERNAL_URL`(服务端到 luminari)与 `LUMINARI_PUBLIC_URL`
+  (图片回退绝对地址)覆盖,默认 dev 用 `127.0.0.1:8790`、生产用容器名 `luminari:8790`。
 
 - **`npm run sync:apps`:把本地「应用栏」配置同步到线上**。应用条目存在库
   `meta.apps_config`,此前只能靠手改线上库或后台逐条加;现在本地 `/admin` 调好后一条
