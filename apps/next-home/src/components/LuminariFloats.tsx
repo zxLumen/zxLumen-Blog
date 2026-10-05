@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { compileBlueprint, normalizeBlueprint } from "@zx/shared/creature";
-import { RigCreature } from "@zx/shared/renderers";
+import { RigCreature } from "@/components/lab/renderers/RigCreature";
 import { getLuminariApiBase } from "@/lib/luminari-embed";
 
 const NARROW = "(max-width: 820px)";
