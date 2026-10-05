@@ -44,7 +44,7 @@ interface Turn {
 }
 
 export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: number }) {
-  const [items, setItems] = useState<FieldCreature[]>([]);
+  const [items, setItems] = useState<FieldCreature[]>(() => readFieldCache());
   const [turns, setTurns] = useState<Turn[]>([]);
   const [turnIdx, setTurnIdx] = useState(0);
   const [narrow, setNarrow] = useState(true);
@@ -70,7 +70,11 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
         const r = await fetch("/api/luminari/field", { cache: "no-store" });
         if (!r.ok) throw new Error(String(r.status));
         const data = await r.json();
-        if (alive) setItems(Array.isArray(data.items) ? data.items : []);
+        const list: FieldCreature[] = Array.isArray(data.items) ? data.items : [];
+        if (alive && list.length) {
+          setItems(list);
+          writeFieldCache(list);
+        }
       } catch {
         /* 静默:生灵层不可用不影响页面 */
       }
@@ -340,4 +344,39 @@ function fieldDay(createdAt: string | number | undefined, matureDay: number): nu
   const t0 = createdAt ? new Date(createdAt).getTime() : Date.now();
   const age = (Date.now() - t0) / DAY_MS;
   return Math.max(0, Math.min(matureDay, age));
+}
+
+/* ------------- 上次成功的四周层缓存(避免慢/空响应把整层弄没) ------------- */
+
+const FIELD_CACHE_KEY = "zx.luminari.field";
+
+function readFieldCache(): FieldCreature[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const s = localStorage.getItem(FIELD_CACHE_KEY);
+    if (!s) return [];
+    const a = JSON.parse(s);
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
+}
+
+// 存精简版(不带 blueprint,回退时用静态 PNG),避免 localStorage 太大
+function writeFieldCache(list: FieldCreature[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const slim = list.map((it) => ({
+      id: it.id,
+      name: it.name,
+      total: it.total,
+      say: it.say,
+      img: it.img,
+      mine: it.mine,
+      createdAt: it.createdAt,
+    }));
+    localStorage.setItem(FIELD_CACHE_KEY, JSON.stringify(slim));
+  } catch {
+    /* ignore */
+  }
 }
