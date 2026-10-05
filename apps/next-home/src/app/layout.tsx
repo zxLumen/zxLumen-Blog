@@ -108,9 +108,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               backgroundColor: "transparent",
               background: "transparent",
             }}
-            allow="autoplay; fullscreen"
+            allowtransparency="true"
             allowTransparency
-            sandbox="allow-scripts allow-same-origin"
+            frameBorder="0"
           />
         ) : null}
       </body>
