@@ -104,7 +104,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               height: "100%",
               border: 0,
               pointerEvents: "none",
-              zIndex: 30,
+              zIndex: 10,
               backgroundColor: "transparent",
               background: "transparent",
             }}
