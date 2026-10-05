@@ -109,7 +109,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               background: "transparent",
             }}
             allowtransparency="true"
-            allowTransparency
             frameBorder="0"
           />
         ) : null}
