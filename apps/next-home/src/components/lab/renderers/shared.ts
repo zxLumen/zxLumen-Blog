@@ -259,7 +259,7 @@ export function useCreatureLoop(
   dna: CreatureDna,
   draw: (form: FormState, ts: number, day: number) => void,
   active = true,
-  dayOverride?: number,
+  dayOverride?: number | (() => number),
 ) {
   const drawRef = useRef(draw)
   const dayRef = useRef(dayOverride)
@@ -280,7 +280,8 @@ export function useCreatureLoop(
     // reduced motion:不做连续动画,只在「天数变了」时重绘一帧(跳到某天的静态姿态)
     let lastDay = NaN
     const loop = (now: number) => {
-      const day = dayRef.current ?? dayStore.get()
+      const ov = dayRef.current
+      const day = typeof ov === 'function' ? ov() : (ov ?? dayStore.get())
       if (!reduced || day !== lastDay) {
         drawRef.current(formOfDay(dna, day), (now - t0) / 1000, day)
         lastDay = day

@@ -1,0 +1,72 @@
+/* 四周生灵层(内联渲染,数据经 /api/luminari/field 代理自 luminari)。
+   搬自 luminari web/src/styles.css 的 .cf-* 段;整层 pointer-events:none,
+   只有单个生灵 .cf-item 放行 hover/点击(悬停气泡)。z-index 高于内容、低于弹窗。 */
+.cf-layer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+.cf-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 96px;
+  pointer-events: auto;
+  cursor: default;
+  transition: transform 1.6s ease;
+}
+.cf-img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .4));
+}
+.cf-item.is-mine .cf-img {
+  filter: drop-shadow(0 0 10px var(--accent));
+}
+.cf-live {
+  width: 96px;
+  height: 96px;
+}
+.cf-live svg {
+  width: 96px;
+  height: 96px;
+  display: block;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .4));
+}
+.cf-item.is-mine .cf-live svg {
+  filter: drop-shadow(0 0 10px var(--accent));
+}
+.cf-name {
+  margin-top: 2px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--fg);
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.cf-score {
+  color: var(--accent);
+  font-weight: 700;
+}
+.cf-bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%);
+  width: max-content;
+  max-width: 200px;
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px #0000004d;
+}

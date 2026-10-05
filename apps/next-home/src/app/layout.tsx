@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import "@zx/shared/styles.css";
+import "./luminari-floats.css";
 import {
   NAV,
   NAV_INIT_SCRIPT,
@@ -56,9 +57,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   // 右侧应用栏(admin 可配):为空则不渲染、不占位(data-apps 不设)
   const apps = getVisibleApps();
-
-  // 四周生灵层:内联渲染(客户端组件),不使用 iframe,避免遮盖页面
-  // const luminariEmbed = getLuminariEmbedUrl();
 
   const initScript = `${themeInitScript(appearance.themes, appearance.layouts, appearance.defaultTheme, appearance.defaultLayout, mockCid || undefined)};${NAV_INIT_SCRIPT}`;
 

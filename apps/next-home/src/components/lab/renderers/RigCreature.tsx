@@ -65,6 +65,8 @@ export interface RigCreatureProps {
   fixedDay?: number
   /** 成熟天数(决定整体缩放曲线的终点);缺省 34(手写物种的默认) */
   matureDay?: number
+  /** 外部天数来源(如四周层自跑的循环);优先于 fixedDay 与全局 dayStore */
+  daySource?: () => number
 }
 
 interface Item {
@@ -85,7 +87,7 @@ function localMatrix(p: Part, o: Override | undefined, day: number, form: FormSt
   return mul(translate(x, y), mul(rotateDeg(rot), scaleM(sx, sy)))
 }
 
-export function RigCreature({ dna, rig, box = 200, fixedDay, matureDay = 34 }: RigCreatureProps) {
+export function RigCreature({ dna, rig, box = 200, fixedDay, matureDay = 34, daySource }: RigCreatureProps) {
   const rawId = useId().replace(/:/g, '')
   const rootRef = useRef<SVGGElement | null>(null)
   const gRefs = useRef<Record<string, SVGGElement | null>>({})
@@ -166,7 +168,7 @@ export function RigCreature({ dna, rig, box = 200, fixedDay, matureDay = 34 }: R
   )
 
   // 固定天数时也保持动画(fixedDay 只锁「形态/大小」,动作照常播放)
-  useCreatureLoop(dna, draw, true, fixedDay)
+  useCreatureLoop(dna, draw, true, daySource ?? fixedDay)
 
   const glowId = `rigglow${rawId}`
   const shadowId = `rigsh${rawId}`
