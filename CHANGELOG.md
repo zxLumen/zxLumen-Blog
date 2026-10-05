@@ -11,7 +11,8 @@
   = 长一天,到各自 `matureDay` 约 30 天封顶),并用 `fill` / 尺寸下限把各阶段大小调到
   合适;移动**严格沿「安全区域」的矩形周长行走**(避开顶栏 / 侧边导航 / 右侧应用栏,
   拐角转弯、不横穿),贴边紧凑。生灵会**互相接话**:轮询 luminari 生成的对话(约每 2
-  分钟换一段、带防重复),按序轮流冒泡;贴近顶边时气泡自动下挂。luminari 应用内不再
+  分钟换一段、带防重复),按序轮流冒泡;气泡置于**最上层**(可覆盖导航栏 / 应用栏,
+  `pointer-events:none` 不挡点击),贴近顶边时自动下挂。luminari 应用内不再
   浮现这层,只在主站出现。数据经同源代理 `GET /api/luminari/field`(生灵)与
   `GET /api/luminari/chatter`(对话)取自 luminari,避免跨域、无需给 luminari 开 CORS;
   代理地址可用 `LUMINARI_INTERNAL_URL`(服务端到 luminari)与 `LUMINARI_PUBLIC_URL`

@@ -8,7 +8,7 @@
   bottom: 0;
   left: 0;
   pointer-events: none;
-  z-index: 40;
+  z-index: 420; /* 高于顶栏(200)/应用栏(380)/统计浮层(401);低于弹窗/聊天 */
 }
 .cf-item {
   position: absolute;
@@ -43,7 +43,7 @@
   filter: drop-shadow(0 0 10px var(--accent));
 }
 .cf-name {
-  margin-top: 0;
+  margin-top: -6px;
   font-size: 11px;
   text-align: center;
   color: var(--fg);
@@ -70,6 +70,7 @@
   font-size: 12px;
   line-height: 1.4;
   box-shadow: 0 4px 12px #0000004d;
+  pointer-events: none; /* 气泡盖在最上层也不挡住导航/应用栏的点击 */
 }
 /* 贴近顶边时气泡改挂到下方,避免被裁掉 */
 .cf-item[data-near-top='1'] .cf-bubble {
