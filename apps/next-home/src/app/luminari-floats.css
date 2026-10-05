@@ -17,7 +17,8 @@
   width: 96px;
   pointer-events: auto;
   cursor: default;
-  transition: transform 6s ease-in-out;
+  transition: none;
+  will-change: transform;
 }
 .cf-img {
   width: 96px;
