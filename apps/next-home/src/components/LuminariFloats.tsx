@@ -19,8 +19,8 @@ import { RigCreature } from "@/components/lab/renderers/RigCreature";
  */
 
 const NARROW = "(max-width: 820px)";
-const W_BOX = 96; // 水平占地(生灵本体宽)
-const H_BOX = 116; // 垂直占地(本体 + 名字行)
+const W_BOX = 144; // 水平占地(生灵本体宽)
+const H_BOX = 168; // 垂直占地(本体 + 名字行)
 const M = 6; // 贴边留白
 const DAY_MS = 24 * 60 * 60 * 1000; // 现实一天
 const FILL = 0.76; // 生灵占画框比例(越大越填满)
@@ -230,7 +230,7 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
                 <RigCreature
                   dna={lc.cc.dna}
                   rig={lc.cc.rig}
-                  box={96}
+                  box={144}
                   matureDay={lc.matureDay}
                   minScale={MIN_SCALE}
                   fill={FILL}

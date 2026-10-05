@@ -14,15 +14,15 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 96px;
+  width: 144px;
   pointer-events: auto;
   cursor: default;
   transition: none;
   will-change: transform;
 }
 .cf-img {
-  width: 96px;
-  height: 96px;
+  width: 144px;
+  height: 144px;
   object-fit: contain;
   filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .4));
 }
@@ -30,12 +30,12 @@
   filter: drop-shadow(0 0 10px var(--accent));
 }
 .cf-live {
-  width: 96px;
-  height: 96px;
+  width: 144px;
+  height: 144px;
 }
 .cf-live svg {
-  width: 96px;
-  height: 96px;
+  width: 144px;
+  height: 144px;
   display: block;
   filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .4));
 }
@@ -43,8 +43,8 @@
   filter: drop-shadow(0 0 10px var(--accent));
 }
 .cf-name {
-  margin-top: -20px;
-  font-size: 11px;
+  margin-top: -8px;
+  font-size: 13px;
   text-align: center;
   color: var(--fg);
   display: flex;
