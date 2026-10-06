@@ -505,8 +505,9 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
           var host=location.host;
           var sameHost=host==='minimax.cn'||host.endsWith('.minimax.cn')||host.endsWith('.minimax.io')||host.endsWith('.minimaxi.com');
           if(!sameHost){banner('请在 minimax.cn 控制台页面执行此书签(当前:'+host+')\\n先访问 https://platform.minimax.cn/console/usage 后再点');return}
-          var end=new Date(), start=new Date(end.getTime()-30*86400000);
-          var s=start.toISOString().slice(0,10), e=end.toISOString().slice(0,10);
+          var end=new Date(), start=new Date(end.getTime()-29*86400000);
+          var bj=function(d){return new Date(d.getTime()+8*3600000).toISOString().slice(0,10)};
+          var s=bj(start), e=bj(end);
           banner('正在拉取 '+s+' ~ '+e+' 的 MiniMax 用量…');
           var url='https://www.minimax.cn/backend/account/token_plan/usage_hourly_detail?start_time='+s+'&end_time='+e;
           var r=await fetch(url,{credentials:'include',headers:{Accept:'application/json'}});

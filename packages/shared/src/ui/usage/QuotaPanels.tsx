@@ -99,18 +99,16 @@ export function ZhipuQuotaPanel({ quota }: { quota: ZhipuQuota }) {
   )
 }
 
-/** MiniMax M Plan 额度:按模型显示 5 小时 / 周 已用 % */
+/** MiniMax M Plan 额度:按模型显示 5 小时 / 周 已用 %(不在套餐的窗口不显示) */
 export function MinimaxQuotaPanel({ quota }: { quota: MinimaxQuota }) {
-  // 只显示「进行中」的窗口(状态 1);未开始(0/2)/不在套餐(3)不显示。无状态字段时退回「有用量才显示」
-  const active = (status: number | undefined, usedPct: number) => (status === undefined ? usedPct > 0 : status === 1)
   const cells = quota.models.flatMap((m) => {
     const out: { key: string; label: string; pct: number; reset?: number }[] = []
-    if (active(m.intervalStatus, m.intervalUsedPct)) {
-      out.push({ key: `${m.name}-5h`, label: `${m.name} · 5 小时`, pct: m.intervalUsedPct, reset: m.intervalResetMs })
+    const push = (key: string, label: string, status: number | undefined, usedPct: number, reset?: number) => {
+      if (status === 3) return // 不在套餐
+      out.push({ key, label, pct: usedPct, reset })
     }
-    if (active(m.weeklyStatus, m.weeklyUsedPct)) {
-      out.push({ key: `${m.name}-wk`, label: `${m.name} · 本周`, pct: m.weeklyUsedPct, reset: m.weeklyResetMs })
-    }
+    push(`${m.name}-5h`, `${m.name} · 5 小时`, m.intervalStatus, m.intervalUsedPct, m.intervalResetMs)
+    push(`${m.name}-wk`, `${m.name} · 本周`, m.weeklyStatus, m.weeklyUsedPct, m.weeklyResetMs)
     return out
   })
   return (
@@ -122,7 +120,7 @@ export function MinimaxQuotaPanel({ quota }: { quota: MinimaxQuota }) {
           <div className="zx-quota-item" key={c.key}>
             <div className="zx-quota-head">
               <span className="zx-quota-label">MiniMax · {c.label}</span>
-              <span className="zx-quota-pct">{pct}%</span>
+              <span className="zx-quota-pct">{pct}%{pct >= 100 ? ' · 已用尽' : ''}</span>
             </div>
             <div className="zx-quota-bar">
               <span style={{ width: `${pct}%` }} />
