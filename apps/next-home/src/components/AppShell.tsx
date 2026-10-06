@@ -19,6 +19,7 @@ export function AppShell({
   defaultLayout,
   mockId,
   admin,
+  floatsDismissable,
   extra,
   children,
 }: {
@@ -36,6 +37,8 @@ export function AppShell({
   mockId?: string
   /** 当前访问者是站长:AI 状态灯额外显示状态文字与逐源明细 */
   admin?: boolean
+  /** 站长是否放行访客关闭主页四周生灵层(转发给应用浮层宿主) */
+  floatsDismissable?: boolean
   extra?: React.ReactNode
   children: React.ReactNode
 }) {
@@ -54,6 +57,7 @@ export function AppShell({
       defaultLayout={defaultLayout}
       mockId={mockId}
       admin={admin}
+      floatsDismissable={floatsDismissable}
       extra={extra}
     >
       {children}

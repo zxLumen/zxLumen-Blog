@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { compileBlueprint, normalizeBlueprint } from "@zx/shared/creature";
+import { readFloatsHidden, subscribeFloatsHidden } from "@zx/shared/ui";
 import type { CreatureBlueprint } from "@zx/shared/creature";
 import { RigCreature } from "@/components/lab/renderers/RigCreature";
 
@@ -55,7 +56,7 @@ export function LuminariFloats({
   const [turnIdx, setTurnIdx] = useState(0);
   const [narrow, setNarrow] = useState(true);
   const [hover, setHover] = useState<string | null>(null);
-  const [hidden, setHidden] = useState<boolean>(() => readHidden());
+  const [hidden, setHidden] = useState<boolean>(() => readFloatsHidden());
 
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trackRef = useRef<Record<string, number>>({}); // 沿周长的距离
@@ -69,6 +70,9 @@ export function LuminariFloats({
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
+
+  // 显隐偏好由嵌入的「生灵」应用经 postMessage 远程设置(见 floats-pref / AppPanel),订阅其变化
+  useEffect(() => subscribeFloatsHidden(setHidden), []);
 
   useEffect(() => {
     let alive = true;
@@ -211,30 +215,13 @@ export function LuminariFloats({
     return m;
   }, [items]);
 
-  if (narrow || !items.length) return null;
+  if (narrow || !items.length || (dismissable && hidden)) return null;
 
   const active = turns.length ? turns[turnIdx % turns.length] : null;
-  const isHidden = dismissable && hidden;
 
   return (
-    <>
-      {dismissable ? (
-        <button
-          type="button"
-          className="cf-toggle"
-          aria-pressed={isHidden}
-          title={isHidden ? "显示四周生灵" : "收起四周生灵"}
-          onClick={() => {
-            const v = !isHidden;
-            setHidden(v);
-            writeHidden(v);
-          }}
-        >
-          {isHidden ? "✦ 生灵" : "✕ 收起"}
-        </button>
-      ) : null}
-      <div className="cf-layer" aria-hidden>
-        {isHidden ? null : items.map((it) => {
+    <div className="cf-layer" aria-hidden>
+      {items.map((it) => {
         const lc = live.get(it.id);
         const hovered = hover === it.id;
         const bubble = hovered ? it.say : active && active.id === it.id ? active.text : "";
@@ -271,9 +258,8 @@ export function LuminariFloats({
             </div>
           </div>
         );
-        })}
-      </div>
-    </>
+      })}
+    </div>
   );
 }
 
@@ -401,28 +387,6 @@ function writeFieldCache(list: FieldCreature[]) {
       createdAt: it.createdAt,
     }));
     localStorage.setItem(FIELD_CACHE_KEY, JSON.stringify(slim));
-  } catch {
-    /* ignore */
-  }
-}
-
-/* ------------- 访客「收起生灵层」的本地偏好(每台设备一个) ------------- */
-
-const HIDE_KEY = "zx.luminari.floats.hidden";
-
-function readHidden(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return localStorage.getItem(HIDE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeHidden(v: boolean) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(HIDE_KEY, v ? "1" : "0");
   } catch {
     /* ignore */
   }

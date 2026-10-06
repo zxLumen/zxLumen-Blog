@@ -7,9 +7,10 @@
 ### 新增
 
 - **主页四周生灵可关闭(站长可控)**。外观配置新增开关「允许访客关闭主页四周的生灵展示」
-  (`appearance_config.floatsDismissable`,默认开)。开启时,宽屏访客在页面底部居中可见一个
-  低干扰的「✕ 收起 / ✦ 生灵」切换件:收起后生灵层隐藏并**记在本机**(`localStorage`),
-  可随时点回;关闭开关则不给收起入口,生灵层始终显示。见 `/admin` → 「外观」Tab。
+  (`appearance_config.floatsDismissable`,默认开)。开启时,访客在「生灵」应用(应用栏进入)
+  顶部可见一个明显的显隐开关:收起后主页不再显示生灵层,偏好同步存于本机、可随时点回;
+  关闭该开关则应用内不出显隐件,生灵层始终显示。跨子域 iframe 经 `postMessage`(`zx:floats-*`)
+  与主页通信,偏好存博客侧 `localStorage`。见 `/admin` → 「外观」Tab。
 
 - **统一「AI 密钥」管理页 + 大模型代理网关**。admin 新增 Tab「AI 密钥」,集中管理
   **密钥池**(多条 OpenAI 兼容端点:baseUrl / key / 模型 / 默认对话·向量)与
@@ -18,6 +19,8 @@
   `/embeddings` · `GET /models`,子应用持令牌调用,**真实 provider key 只存主站**。
   聊天机器人的 Chat/Embed Key 也改从网关取(env 优先,旧键自动迁移进密钥池)。
   接入步骤见 `docs/AI-GATEWAY.md`。「Token用量」的监控凭据不受影响。
+  密钥池与令牌支持「拉取模型」下拉选择(优先级:令牌固定模型 > 密钥默认模型 > 应用请求
+  model);网关自动补 OpenCode Go 需要的 `x-opencode-session` 头。
 
 - **主站四周出现「生灵」**:全站页面内联渲染 luminari 的 Top / 参选生灵(每只独立
   SVG),整层 `pointer-events:none` 不影响页面。成长**按出生时间算真实年龄**(现实一天

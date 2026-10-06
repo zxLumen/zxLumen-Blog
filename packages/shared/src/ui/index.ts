@@ -50,6 +50,12 @@ AI_VOICE_MIN_GAP_MS,
 } from './ai-voice.js'
 export type { AiVoiceEvent } from './ai-voice.js'
 export { AppPanelProvider, useAppPanel } from './AppPanel.js'
+export {
+  FLOATS_CHANGE_EVENT,
+  readFloatsHidden,
+  setFloatsHidden,
+  subscribeFloatsHidden,
+} from './floats-pref.js'
 export { WeChatIcon, GitHubIcon, MailIcon, PhoneIcon, MessageIcon } from './icons.js'
 export type { NavItem, LinkProps, LinkComponent } from './types.js'
 export type { Contacts, Profile } from '../content.js'

@@ -82,3 +82,20 @@ export function useSessionState<T>(key: string, initial: T | (() => T)) {
 3. 不要持久化「瞬时」状态（弹层开关、正在拖拽、正在流式输出的中间帧等）。
 4. **无需**改博客：`openIn:'panel'` 的保活与预热自动生效；AI 状态照 `AI-STATUS.md` 上报。
 5. 若应用有服务端持久化（如记录），会话状态只补「未落库的界面态」，别重复存服务端已有数据。
+
+## 四、子应用远程控制主页显示（`zx:floats-*`）
+
+部分 `panel` 应用可**远程控制宿主页面的显示**。已实现的一例：luminari「生灵」应用控制
+**主页四周的生灵层**显隐（站长可在 `/admin` → 「外观」开关是否放行）。
+
+协议（嵌入时向 `window.parent` 发，`app` 用应用条目 id；宿主/来源校验同 `AI-STATUS.md`）：
+
+| 方向 | 消息 | 说明 |
+| --- | --- | --- |
+| 子 → 宿主 | `{ type:'zx:floats-hello', app }` | 挂载时握手，请求当前状态 |
+| 子 → 宿主 | `{ type:'zx:floats-set', app, hidden:boolean }` | 用户切换时上报新值 |
+| 宿主 → 子 | `{ type:'zx:floats-state', hidden:boolean, allowed:boolean }` | 回传当前值 + 是否放行（`allowed=false` 时子应用不显示开关） |
+
+宿主（`AppPanel.tsx`）校验 `e.origin` 与 `d.app` 后，把 `hidden` 写进博客侧 `localStorage`
+（`packages/shared/src/ui/floats-pref.ts`），并通知主页的 `LuminariFloats` 实时更新。
+参考实现：luminari `web/src/embed.ts` + `FloatsPref.tsx`。

@@ -32,6 +32,8 @@ interface ShellProps {
   mockId?: string
   /** 当前访问者是站长:AI 状态灯额外显示状态文字与逐源明细 */
   admin?: boolean
+  /** 站长是否放行访客关闭主页四周生灵层(转发给应用浮层宿主) */
+  floatsDismissable?: boolean
   extra?: React.ReactNode
   children: React.ReactNode
 }
@@ -51,6 +53,7 @@ export function Shell({
   defaultLayout,
   mockId,
   admin,
+  floatsDismissable,
   extra,
   children,
 }: ShellProps) {
@@ -76,7 +79,7 @@ export function Shell({
         <Footer contacts={contacts} name={profile?.name} handle={profile?.handle} />
         <ChatWidget />
         {/* 应用「页内浮层」宿主:挂在应用栏同层,AppDock 通过 context 打开 */}
-        <AppPanelProvider apps={apps}>
+        <AppPanelProvider apps={apps} floatsDismissable={floatsDismissable}>
           <AppDock apps={apps} link={link} mockId={mockId} />
         </AppPanelProvider>
       </div>

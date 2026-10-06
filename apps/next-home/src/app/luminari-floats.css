@@ -79,30 +79,3 @@
   margin-bottom: 0;
   margin-top: 6px;
 }
-
-/* 访客收起/显示生灵层的开关:底部居中、低干扰,悬停/聚焦才显眼 */
-.cf-toggle {
-  position: fixed;
-  left: 50%;
-  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
-  z-index: 421; /* 略高于生灵层(420) */
-  pointer-events: auto;
-  padding: 3px 10px;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--dim);
-  background: color-mix(in srgb, var(--card) 82%, transparent);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.15s, color 0.15s;
-  backdrop-filter: blur(6px);
-}
-.cf-toggle:hover,
-.cf-toggle:focus-visible {
-  opacity: 1;
-  color: var(--fg);
-}

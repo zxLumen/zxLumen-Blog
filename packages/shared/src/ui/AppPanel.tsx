@@ -18,6 +18,7 @@ import type { AppItem } from '../schema.js'
 import { normalizeUrl } from '../content.js'
 import { bottomGutter, isNarrow, rightGutter } from './floating.js'
 import { isAiState, reportAiState, setAiSourceAvailable } from './ai-status.js'
+import { readFloatsHidden, setFloatsHidden } from './floats-pref.js'
 
 interface Rect {
   x: number
@@ -102,7 +103,16 @@ function scheduleIdle(run: () => void): () => void {
  * 跨「整页刷新」的状态保持由**子应用自己**负责(会话约定见 docs/APP-EMBED.md),
  * 宿主会在重开的 iframe 里拿到它自恢复后的界面。
  */
-export function AppPanelProvider({ apps, children }: { apps?: AppItem[]; children: ReactNode }) {
+export function AppPanelProvider({
+  apps,
+  floatsDismissable = true,
+  children,
+}: {
+  apps?: AppItem[]
+  /** 站长是否放行访客关闭主页四周生灵层(转发给子应用,决定其开关是否可用) */
+  floatsDismissable?: boolean
+  children: ReactNode
+}) {
   const panelApps = useMemo(() => (apps ?? []).filter((a) => (a.openIn ?? 'newtab') === 'panel'), [apps])
   const [opened, setOpened] = useState<AppItem[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -142,13 +152,29 @@ export function AppPanelProvider({ apps, children }: { apps?: AppItem[]; childre
     <AppPanelContext.Provider value={api}>
       {children}
       {rendered.map((a) => (
-        <AppPanel key={a.id} app={a} active={a.id === activeId} onClose={api.close} />
+        <AppPanel
+          key={a.id}
+          app={a}
+          active={a.id === activeId}
+          floatsDismissable={floatsDismissable}
+          onClose={api.close}
+        />
       ))}
     </AppPanelContext.Provider>
   )
 }
 
-function AppPanel({ app, active, onClose }: { app: AppItem; active: boolean; onClose: () => void }) {
+function AppPanel({
+  app,
+  active,
+  floatsDismissable,
+  onClose,
+}: {
+  app: AppItem
+  active: boolean
+  floatsDismissable: boolean
+  onClose: () => void
+}) {
   const href = normalizeUrl(app.url)
   const [rect, setRect] = useState<Rect | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -203,16 +229,26 @@ function AppPanel({ app, active, onClose }: { app: AppItem; active: boolean; onC
     }
     const onMsg = (e: MessageEvent) => {
       if (e.origin !== origin) return
-      const d = e.data as { type?: string; app?: string; state?: unknown; detail?: string } | null
+      const d = e.data as { type?: string; app?: string; state?: unknown; detail?: string; hidden?: unknown } | null
       if (!d || typeof d !== 'object') return
-      if (d.type !== 'zx:ai-status' || d.app !== app.id) return
+      if (d.app !== app.id) return
+      // 子应用(luminari 生灵)远程控制主页四周生灵层的显隐:写入博客侧偏好,并回传当前状态
+      if (d.type === 'zx:floats-hello' || d.type === 'zx:floats-set') {
+        if (d.type === 'zx:floats-set') setFloatsHidden(d.hidden === true)
+        ;(e.source as Window | null)?.postMessage(
+          { type: 'zx:floats-state', hidden: readFloatsHidden(), allowed: floatsDismissable },
+          origin,
+        )
+        return
+      }
+      if (d.type !== 'zx:ai-status') return
       if (!isAiState(d.state)) return
       // detail 来自跨子域来源,截断防超长文本撑爆浮窗
       reportAiState(app.id, d.state, typeof d.detail === 'string' ? d.detail.slice(0, 120) : undefined)
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
-  }, [app.id, href])
+  }, [app.id, href, floatsDismissable])
 
   // 可用性跟随「是否当前展开」：收起即熄灭状态灯(应用仍在后台挂载，状态不丢)
   useEffect(() => {
