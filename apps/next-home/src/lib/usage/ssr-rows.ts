@@ -8,6 +8,7 @@ import {
   type PlatformUsageOpenCode,
 } from '../opencode'
 import { fetchUsageZhipu } from '../zhipu'
+import { getMinimaxUsage } from '../minimax'
 
 export interface SsrUsage {
   rows: UsageRow[]
@@ -40,6 +41,12 @@ export async function fetchSsrUsage(src: DataSource, range: UsageRange = '30d'):
     }
     if (src === 'zhipu') {
       const d = await fetchUsageZhipu(range)
+      return { rows: d.rows, start: d.start, end: d.end }
+    }
+    if (src === 'minimax') {
+      // 书签推送快照,本地读,零延迟
+      const d = getMinimaxUsage(range)
+      if (d.rows.length === 0) return null
       return { rows: d.rows, start: d.start, end: d.end }
     }
     const d = await fetchUsage(range)

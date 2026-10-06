@@ -13,6 +13,8 @@ export const FEATURE_IDS = [
   'usage-opencode',
   // Token用量智谱数据源(读 monitor API:按模型 token 总量 + 配额)
   'usage-zhipu',
+  // Token用量 MiniMax 数据源(控制台消费明细 · 书签推送)
+  'usage-minimax',
   // 首页统计区块(访客 PV/UV/趋势、留言、项目点击/简历下载)
   'visitor-stats',
 ] as const

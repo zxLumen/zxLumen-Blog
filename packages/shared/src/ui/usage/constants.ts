@@ -42,6 +42,7 @@ export const pickAvail = (a: SourceAvailability): Record<DataSource, boolean> =>
   deepseek: !!a.deepseek,
   opencode: !!a.opencode,
   zhipu: !!a.zhipu,
+  minimax: !!a.minimax,
 })
 
 // 今天/昨天:有小时数据则分时(hour),否则按天;其余区间按天(day)
@@ -49,6 +50,7 @@ export const SOURCES: { key: DataSource; label: string; hint: string; feature?: 
   { key: 'deepseek', label: 'DeepSeek', hint: '官方数据源 · 今天/昨天分时' },
   { key: 'opencode', label: 'OpenCode', hint: '官方数据源 · 今天/昨天自建分时', feature: 'usage-opencode' },
   { key: 'zhipu', label: '智谱', hint: '按模型 token · 区间汇总', feature: 'usage-zhipu' },
+  { key: 'minimax', label: 'MiniMax', hint: '官方 API 用量 · 按天×模型 + 真实费用', feature: 'usage-minimax' },
 ]
 
 export const localIso = (d: Date) =>

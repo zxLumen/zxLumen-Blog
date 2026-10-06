@@ -6,6 +6,14 @@
 
 ### 新增
 
+- **统一「AI 密钥」管理页 + 大模型代理网关**。admin 新增 Tab「AI 密钥」,集中管理
+  **密钥池**(多条 OpenAI 兼容端点:baseUrl / key / 模型 / 默认对话·向量)与
+  **应用接入令牌**(每个应用一个可禁用/轮换的令牌,可绑定密钥、固定模型、设每日/总量
+  token 额度)。主站暴露 OpenAI 兼容网关 `POST /api/ai/v1/chat/completions` ·
+  `/embeddings` · `GET /models`,子应用持令牌调用,**真实 provider key 只存主站**。
+  聊天机器人的 Chat/Embed Key 也改从网关取(env 优先,旧键自动迁移进密钥池)。
+  接入步骤见 `docs/AI-GATEWAY.md`。「Token用量」的监控凭据不受影响。
+
 - **主站四周出现「生灵」**:全站页面内联渲染 luminari 的 Top / 参选生灵(每只独立
   SVG),整层 `pointer-events:none` 不影响页面。成长**按出生时间算真实年龄**(现实一天
   = 长一天,到各自 `matureDay` 约 30 天封顶),并用 `fill` / 尺寸下限把各阶段大小调到
@@ -290,6 +298,7 @@
 
 - **token用量「数据源顺序」可调**:admin「Token用量」新增「数据源顺序」面板,可 ↑/↓ 调整 **DeepSeek / OpenCode / 智谱** 的展示顺序并保存;首页 Token用量 的供应商 tab 按该顺序渲染(未设置时保持出厂默认序 DeepSeek→OpenCode→智谱)。顺序存 `meta.usage_source_order`,保存即生效、无需重建。
 - **token用量「默认数据源」可设**:同面板每行新增「设为默认」——指定新访客(无 `zx_usage` 存档)默认打开哪个源,存独立 `meta.usage_default_source`(与展示顺序解耦,缺省 DeepSeek)。SSR 首帧按该源预取 30 天用量(此前写死只预取 DeepSeek),默认源为 OpenCode/智谱时首屏同样直接有数据、不再空白;访客自己的选择(cookie)仍优先。当前源被隐藏时回落到默认源(再退回展示顺序首项)。保存即生效、无需重建。
+- **token用量新增 MiniMax 数据源**:MiniMax 开放平台无公开用量 API(`api.minimaxi.com` 仅暴露推理;`/v1/usage` 等均 404),从控制台前端 bundle 挖到真实接口 `www.minimax.cn/v1/api/openplatform/charge/charge_record/query`(每条含 `consume_time`/`model`/`api_token_name`/`consume_input_token`/`consume_output_token`/`consume_cash_after_voucher` 等)。鉴权用**网页登录 Cookie**(大概率 HttpOnly),JS 无法直读 —— 因此采用「**书签在 minimax.cn 域内同源拉数据 → POST 到本站**」模式:**Cookie 始终留在浏览器,服务器零凭证**。服务端按 (天×模型×API Key) 聚合 → 入库 → 任意区间本地过滤(零延迟)。首次同步点 admin「MiniMax 用量」面板里的「⇢ 拖到书签栏」即可,旧书签会失效;支持 `token_plan/usage` 配额原始响应一并入库(待首跑确认结构后美化展示)。SSR 首帧、可用性探测、按 API Key/模型筛选、默认数据源/顺序、近期「无数据则隐藏」逻辑全部自动适配。
 - **响应式全面优化(320px 手机 ~ 3440px 大屏)**:大屏原先是「冻结」状态——容器宽度固定 1120px,视口超过约 1136px 后内容完全不动(2560px 屏每侧空 740px、3440px 空 1160px),字号也不再增长。现按布局性质分档(新增 ≥1440 / ≥1920 / ≥2560 三档):阅读型约 1280→1360px,窄栏型 `centered`/`magazine` 900→1040px,密度型 `compact` 1440→1760px,展示型 `showcase`/`bento`/`fullbleed` 1680→2240px,并让 `bento` 栅格在宽屏真正展开为多列;同时修掉三处肉眼可见的宽度错位(窄栏型布局的 hero/顶栏/页脚仍是 1120px,导航与正文错位 130~150px;页脚比正文宽 40px 且左移 20px)。
   - **刘海屏适配**:`viewportFit: "cover"` + 9 处 `env(safe-area-inset-*)`,顶栏不再整排埋进刘海/灵动岛,底部 fixed 悬浮件不再压住 home 指示条。
   - **手机端**:顶栏原本在 375px 下高达 246px(占屏 37%)并压住右上角两个悬浮件——根因是换行规则写在了 `.zx-topbar` 上而真正的 flex 容器是它的唯一子元素 `.zx-topbar-in`,换行从未生效;修正后降到 138px,右上角两个悬浮件随之顺次下移到顶栏之下,隐藏了只对键盘有意义的快捷键提示。`window` 布局顶栏此前完全不吸顶(`overflow: hidden` 让它变成滚动容器、破坏 sticky),改 `clip` 后恢复。`100vh` → `100dvh`,避免移动端地址栏收缩时底部内容被遮。

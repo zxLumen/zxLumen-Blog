@@ -25,6 +25,7 @@ import {
   getLastRows as zhipuLastRows,
   getLastError as zhipuLastError,
 } from '@/lib/zhipu'
+import { getMinimaxUsage } from '@/lib/minimax'
 import {
   isConsoleConfigured,
   syncConsoleLogs,
@@ -353,6 +354,28 @@ async function zhipuUsage(range: UsageRange, start?: string, end?: string) {
   }
 }
 
+/**
+ * MiniMax 数据源:数据来自书签同步快照,纯本地,无网络/无失败回退;
+ * 未同步 → 返回空 rows(source='minimax' 让面板区分「未同步」与「已同步但空」)。
+ */
+function minimaxUsage(range: UsageRange, start?: string, end?: string) {
+  const d = getMinimaxUsage(range, start || end ? { start, end } : undefined)
+  return Response.json(
+    {
+      source: 'minimax',
+      rows: d.rows,
+      models: d.models,
+      apiKeys: d.apiKeys,
+      currency: d.currency,
+      granularity: d.granularity,
+      start: d.start,
+      end: d.end,
+      at: Date.now(),
+    },
+    { headers: noStore },
+  )
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const raw = url.searchParams.get('range') || '30d'
@@ -366,6 +389,9 @@ export async function GET(req: Request) {
   }
   if (sourceParam === 'zhipu') {
     return zhipuUsage(range, start, end)
+  }
+  if (sourceParam === 'minimax') {
+    return minimaxUsage(range, start, end)
   }
 
   const filter =

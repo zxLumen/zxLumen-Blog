@@ -15,6 +15,7 @@ import {
   getLastRows as zhipuLastRows,
   getLastFailure as zhipuLastFailure,
 } from './zhipu'
+import { hasMinimaxData } from './minimax'
 import { getDb } from './db'
 import { makeTtlCache } from './usage/cache'
 import type { SourceAvailability } from '@zx/shared'
@@ -122,13 +123,14 @@ export async function getSourceAvailability(): Promise<SourceAvailability> {
   ensureLogsScheduler()
   const hit = availCache.get(AVAIL_KEY)
   if (hit) return hit
-  const [deepseek, opencode, zhipu, errors] = await Promise.all([
+  const [deepseek, opencode, zhipu, minimax, errors] = await Promise.all([
     hasDeepseekData(),
     hasOpenCodeData(),
     hasZhipuData(),
+    hasMinimaxData(),
     collectErrors(),
   ])
-  const result: SourceAvailability = { deepseek, opencode, zhipu, errors }
+  const result: SourceAvailability = { deepseek, opencode, zhipu, minimax, errors }
   availCache.set(AVAIL_KEY, result)
   return result
 }

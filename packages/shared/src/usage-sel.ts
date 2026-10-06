@@ -4,7 +4,7 @@ export const USAGE_SEL_COOKIE = 'zx_usage'
 
 export type Range = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastmonth' | 'custom'
 export const RANGES = ['today', 'yesterday', '7d', '30d', 'month', 'lastmonth', 'custom'] as const
-export const DATA_SOURCES = ['deepseek', 'opencode', 'zhipu'] as const
+export const DATA_SOURCES = ['deepseek', 'opencode', 'zhipu', 'minimax'] as const
 export type DataSource = (typeof DATA_SOURCES)[number]
 
 /**
@@ -16,6 +16,7 @@ export interface SourceAvailability {
   deepseek?: boolean
   opencode?: boolean
   zhipu?: boolean
+  minimax?: boolean
   errors?: Partial<Record<DataSource, string>>
   order?: DataSource[]
   /** admin 配置的「默认数据源」(新访客/无存档时默认打开;缺省 = 出厂首项) */

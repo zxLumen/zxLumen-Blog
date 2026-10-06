@@ -12,11 +12,13 @@ import { AdminVlogPanel } from './admin/AdminVlogPanel.js'
 import { AdminAppsPanel } from './admin/AdminAppsPanel.js'
 import { AdminThemePanel } from './admin/AdminThemePanel.js'
 import { AdminChatbotPanel } from './admin/AdminChatbotPanel.js'
+import { AdminAiPanel } from './admin/AdminAiPanel.js'
 import { VisitorDetailRow } from './admin/VisitorDetailRow.js'
 import { adminFetch } from './admin/admin-fetch.js'
 import {
   validTab,
   type DsStatus,
+  type MmStatus,
   type OcStatus,
   type OcWsItem,
   type TabKey,
@@ -90,6 +92,8 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
   const [zpUrl, setZpUrl] = useState('')
   const [zpKey, setZpKey] = useState('')
   const [zpBusy, setZpBusy] = useState(false)
+  const [mm, setMm] = useState<MmStatus | null>(null)
+  const [mmBusy, setMmBusy] = useState(false)
   // 前端 Token用量「数据源展示顺序」(admin 可调 ↑/↓)
   const [srcOrder, setSrcOrder] = useState<DataSource[] | null>(null)
   const [srcOrderBusy, setSrcOrderBusy] = useState(false)
@@ -300,7 +304,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
         return null
       }
     }
-    const [s, q, d, o, z, so] = await Promise.all([
+    const [s, q, d, o, z, mm, so] = await Promise.all([
       getJson<{
         nick?: string
         contacts?: { email?: string; wechat?: string; phone?: string }
@@ -309,6 +313,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       getJson<DsStatus>('/api/admin/deepseek'),
       getJson<OcStatus>('/api/admin/opencode'),
       getJson<ZhipuStatus>('/api/admin/zhipu'),
+      getJson<MmStatus>('/api/admin/minimax'),
       getJson<{ order?: DataSource[]; defaultSource?: DataSource }>('/api/admin/usage-source-order'),
     ])
     if (s) {
@@ -324,6 +329,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       setZp(z)
       if (z.baseUrl && z.baseUrl !== 'https://open.bigmodel.cn') setZpUrl(z.baseUrl)
     }
+    if (mm) setMm(mm)
     if (so?.order) setSrcOrder(so.order)
     if (so?.defaultSource) setSrcDefault(so.defaultSource)
   }, [applyOc])
@@ -478,6 +484,103 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
     }
   }
 
+  async function loadMinimax() {
+    const res = await adminFetch('/api/admin/minimax', { cache: 'no-store' })
+    if (res.ok) setMm((await res.json()) as MmStatus)
+  }
+
+  async function mmAction(action: 'clear') {
+    setMmBusy(true)
+    setMsg(null)
+    try {
+      const res = await adminFetch('/api/admin/minimax', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(d.error || '操作失败')
+      await loadMinimax()
+      setMsg({ kind: 'ok', text: '已清除 MiniMax 同步快照' })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
+    } finally {
+      setMmBusy(false)
+    }
+  }
+
+  /**
+   * MiniMax 书签脚本。
+   *
+   * 关键设计:**在 minimax.cn 控制台页面点书签**,同源 fetch 拉取
+   * `/v1/api/openplatform/charge/charge_record/query`(带 Cookie,HttpOnly 也无碍)
+   * 与 `/v1/api/openplatform/charge/token_plan/usage`(配额),聚合后 POST 到本站。
+   * Cookie 永远不出浏览器,服务器零凭证。
+   */
+  function mmScript() {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const key = mm?.syncKey ?? ''
+    // 拼接为一个无依赖的 IIFE 字符串。注释保留以便于排查。
+    const head = `(()=>{var O=${JSON.stringify(origin)},K=${JSON.stringify(key)};`
+    const body = `
+      var banner=function(m){try{alert(m)}catch(e){};var el=document.createElement('div');el.style.cssText='position:fixed;top:12px;right:12px;z-index:99999;padding:12px 16px;background:#0b0f14;color:#e6edf3;border:1px solid #30363d;border-radius:8px;font:12px/1.5 monospace;max-width:480px;box-shadow:0 8px 24px rgba(0,0,0,.4);white-space:pre-wrap';el.textContent=m;document.body.appendChild(el);setTimeout(function(){el.remove()},9000)};
+      (async function(){
+        try{
+          var host=location.host;
+          var sameOrigin=host==='minimax.cn'||host.endsWith('.minimax.cn');
+          if(!sameOrigin){banner('请在 minimax.cn 域内执行此书签(当前:'+host+')\\n先访问 https://www.minimax.cn/ 后再点');return}
+          var base='https://www.minimax.cn';
+          var end=new Date();
+          var start=new Date(end.getTime()-30*86400000);
+          var sStr=start.toISOString().slice(0,10), eStr=end.toISOString().slice(0,10);
+          banner('开始拉取 '+sStr+' ~ '+eStr+' 的 MiniMax 用量…\\n请稍候(分页 + 聚合)');
+          var records=[], quota=null, page=1, limit=100, maxPage=20;
+          while(page<=maxPage){
+            var q='start_date='+encodeURIComponent(sStr)+'&end_date='+encodeURIComponent(eStr)+'&page='+page+'&limit='+limit;
+            var r=await fetch(base+'/v1/api/openplatform/charge/charge_record/query?'+q,{credentials:'include',headers:{Accept:'application/json'}});
+            if(!r.ok){
+              if(r.status===401||r.status===403){
+                banner('未登录或会话失效(请重新登录 '+host+' 后再点)\\nstatus '+r.status);
+                return;
+              }
+              banner('拉取失败 HTTP '+r.status+' · '+r.statusText);
+              return;
+            }
+            var j=await r.json().catch(function(){return null});
+            if(!j||!j.base_resp||j.base_resp.status_code!==0){
+              var msg=(j&&j.base_resp&&j.base_resp.status_msg)||'接口返回非 0';
+              banner('❌ '+msg+'\\n记录未推送');
+              return;
+            }
+            var recs=Array.isArray(j.records)?j.records:[];
+            records=records.concat(recs);
+            var total=typeof j.total==='number'?j.total:(typeof j.total_cnt==='number'?j.total_cnt:0);
+            if(!recs.length||records.length>=total||total===0)break;
+            page++;
+            if(page>maxPage){banner('已达分页上限 '+maxPage+' 页,只取了前 '+(maxPage*limit)+' 条');break}
+          }
+          try{
+            var r2=await fetch(base+'/v1/api/openplatform/charge/token_plan/usage',{credentials:'include',headers:{Accept:'application/json'}});
+            if(r2.ok){var j2=await r2.json().catch(function(){return null});if(j2&&j2.base_resp&&j2.base_resp.status_code===0)quota=j2.data||j2}
+          }catch(_){}
+          var body=JSON.stringify({start:sStr,end:eStr,records:records,quota:quota});
+          if(body.length>2*1024*1024){banner('❌ 载荷过大 '+(body.length/1024/1024).toFixed(2)+'MB > 2MB,缩短区间后重试');return}
+          var res=await fetch(O+'/api/admin/minimax/sync',{method:'POST',headers:{'Content-Type':'application/json','X-Sync-Key':K},body:body});
+          var det=await res.json().catch(function(){return null});
+          if(res.ok){
+            banner('✅ MiniMax 已同步 · '+records.length+' 条记录 → '+(det&&det.rows||'?')+' 个聚合行\\n回首页 Token用量 即可看到');
+          }else{
+            banner('❌ 同步失败 '+(res.status||'')+' · '+((det&&det.error)||'未知错误'));
+          }
+        }catch(e){
+          banner('同步失败:'+(e&&e.message?e.message:e));
+        }
+      })();
+    `
+    const tail = '})()'
+    return (head + body + tail).replace(/\n\s*/g, ' ')
+  }
+
   async function dsAction(action: 'save' | 'refresh' | 'rotate' | 'clear', token?: string) {
     if (action === 'refresh' && !ds?.configured) {
       setMsg({ kind: 'err', text: '未配置令牌:请先通过书签/控制台命令同步 userToken 或粘贴保存' })
@@ -539,6 +642,12 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
   useEffect(() => {
     if (dsBookmarkRef.current) dsBookmarkRef.current.href = bookmarkHref
   }, [bookmarkHref])
+
+  const mmBookmarkRef = useRef<HTMLAnchorElement>(null)
+  const mmBookmarkHref = `javascript:${mmScript()}`
+  useEffect(() => {
+    if (mmBookmarkRef.current) mmBookmarkRef.current.href = mmBookmarkHref
+  }, [mmBookmarkHref])
 
   async function uploadQr(file: File) {
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
@@ -781,7 +890,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
         <div className="zx-tabs is-inline">
-          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'vlog', 'apps', 'themes', 'chatbot'] as const).map((t) => (
+          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'vlog', 'apps', 'themes', 'chatbot', 'ai'] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -806,7 +915,9 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
                               ? '外观'
                               : t === 'chatbot'
                                 ? '机器人'
-                                : 'Token用量'}
+                                : t === 'ai'
+                                  ? 'AI 密钥'
+                                  : 'Token用量'}
             </button>
           ))}
         </div>
@@ -841,6 +952,10 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
 
       {tab === 'chatbot' && (
         <AdminChatbotPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
+      )}
+
+      {tab === 'ai' && (
+        <AdminAiPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
       )}
 
       {tab === 'profile' && (
@@ -1337,6 +1452,58 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
           <span className="zx-accent">ZHIPU_BASE_URL</span>(优先级更高)。Key 仅存服务器,不下发前端。
         </p>
         {zp?.lastError && <div className="zx-msg err">{zp.lastError}</div>}
+      </div>
+      )}
+
+      {tab === 'token' && (
+      <div className="zx-panel" style={{ marginBottom: '1rem' }}>
+        <h3>
+          MiniMax 用量 <span>控制台消费明细 · 书签推送 · 按天×模型+真实费用</span>
+        </h3>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
+          状态:{mm?.configured ? '已同步' : '未同步(首次需点书签推送数据)'}
+          {mm?.lastData?.at
+            ? ` · 上次同步 ${mm.lastData.count ?? 0} 行 @ ${new Date(mm.lastData.at).toLocaleString()}`
+            : ''}
+          {mm?.lastData?.start && mm?.lastData?.end ? ` · 区间 ${mm.lastData.start} ~ ${mm.lastData.end}` : ''}
+        </p>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <a
+            ref={mmBookmarkRef}
+            className="zx-btn zx-btn-sm zx-btn-primary"
+            draggable
+            title="拖到浏览器书签栏;在已登录的 minimax.cn 页面点击"
+            onClick={(e) => e.preventDefault()}
+            onDragStart={(e) => {
+              e.currentTarget.href = mmBookmarkHref
+            }}
+          >
+            ⇢ 拖到书签栏
+          </a>
+          <button
+            className="zx-btn zx-btn-sm"
+            onClick={() => void copyText(mmScript(), '书签脚本已复制(在 minimax.cn 已登录页面 F12 → Console 粘贴回车)')}
+          >
+            复制书签脚本
+          </button>
+          <button
+            className="zx-btn zx-btn-sm zx-btn-ghost"
+            disabled={mmBusy || !mm?.configured}
+            onClick={() => {
+              if (confirm('清除 MiniMax 同步快照?')) void mmAction('clear')
+            }}
+          >
+            清除快照
+          </button>
+        </div>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
+          用法:① 登录 <span className="zx-accent">minimax.cn</span> 后,把「⇢ 拖到书签栏」
+          拖到浏览器书签栏,再在该已登录页面点书签 → 书签同源拉取最近 30 天消费明细
+          (<span className="zx-accent">天×模型×API Key</span>,含券后金额)并推送到本站;② 或点「复制书签脚本」,
+          在 minimax.cn 已登录页面 <span className="zx-accent">F12 → Console</span> 粘贴回车。Cookie 始终留在浏览器、
+          <span className="zx-accent">不上服务器</span>;服务器零凭证、刷新数据只需再点书签。
+        </p>
+        {mm?.lastError && <div className="zx-msg err">{mm.lastError}</div>}
       </div>
       )}
 

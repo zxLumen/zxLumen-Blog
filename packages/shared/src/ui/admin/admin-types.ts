@@ -16,6 +16,7 @@ export type TabKey =
   | 'apps'
   | 'themes'
   | 'chatbot'
+  | 'ai'
 
 export const VALID_TABS: readonly TabKey[] = [
   'comments',
@@ -28,6 +29,7 @@ export const VALID_TABS: readonly TabKey[] = [
   'apps',
   'themes',
   'chatbot',
+  'ai',
 ]
 
 export const validTab = (t: unknown): t is TabKey => VALID_TABS.includes(t as TabKey)
@@ -70,4 +72,15 @@ export interface ZhipuStatus {
   baseUrl?: string
   lastError?: string | null
   lastData?: { at?: number; count?: number } | null
+}
+
+export interface MmStatus {
+  /** 是否有书签推送的快照(用于面板显示「已同步 / 未同步」) */
+  configured?: boolean
+  /** 同步密钥(书签 POST 用) */
+  syncKey?: string
+  /** 快照状态 */
+  lastData?: { at?: number; count?: number; start?: string; end?: string } | null
+  /** 最近一次同步/校验失败原因 */
+  lastError?: string | null
 }

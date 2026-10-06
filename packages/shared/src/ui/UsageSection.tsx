@@ -104,11 +104,11 @@ export function UsageSection({
   const [hourlySource, setHourlySource] = useState<'logs' | 'sampled' | undefined>()
   const [zhipuQuota, setZhipuQuota] = useState<ZhipuQuota | null>(null)
   const [win, setWin] = useState<{ start?: string; end?: string }>(ssrWin ?? {})
-  const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [] })
+  const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [], minimax: [] })
   // 区间/自定义日期按数据源各自保存:切源自动切到该源的一套
   const [per, setPer] = useState<Record<DataSource, RangeSel>>(initialSel?.per ?? DEFAULT_SEL.per)
   const [pickedKeys, setPickedKeys] = useState<Record<DataSource, string[]>>(initialSel?.pickedKeys ?? DEFAULT_SEL.pickedKeys)
-  const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [] })
+  const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [], minimax: [] })
   const [picked, setPicked] = useState<Record<DataSource, string[]>>(initialSel?.picked ?? DEFAULT_SEL.picked)
   // OpenCode workspace 列表(来自接口)+ 选择(单选,空=全部/总用量)
   const [wsList, setWsList] = useState<{ id: string; name: string }[]>([])
@@ -213,7 +213,7 @@ export function UsageSection({
   const allData = useMemo(() => {
     if (fetchedLive) return live ?? []
     if (serverRows) return serverRows // SSR 首帧已带该源数据
-    if (dataSrc === 'opencode' || dataSrc === 'zhipu') return [] // 实时拉取前留空,避免混入其它源
+    if (dataSrc === 'opencode' || dataSrc === 'zhipu' || dataSrc === 'minimax') return [] // 实时拉取前留空,避免混入其它源
     return genMockUsage(30)
   }, [fetchedLive, live, serverRows, dataSrc])
   const usingMock = dataSrc === 'deepseek' && !fetchedLive && !serverRows
@@ -430,7 +430,7 @@ export function UsageSection({
   const fmtAt = (t?: number) => (t ? new Date(t).toLocaleString() : '—')
   const rangeWin = win.start && win.end ? `${win.start} ~ ${win.end}` : ''
   const note = (() => {
-    const srcName = dataSrc === 'opencode' ? 'OpenCode 官方 Console' : dataSrc === 'zhipu' ? '智谱 monitor API' : 'DeepSeek 平台'
+    const srcName = dataSrc === 'opencode' ? 'OpenCode 官方 Console' : dataSrc === 'zhipu' ? '智谱 monitor API' : dataSrc === 'minimax' ? 'MiniMax 官方 API 用量' : 'DeepSeek 平台'
     if (dataSrc === 'opencode' && !fetchedLive) {
       if (source === 'unconfigured')
         return `// OpenCode:未配置 workspace(在 admin「Token用量」里添加 workspace + oc_sk_ Key)${lastError ? ` · ${lastError}` : ''}`
@@ -444,6 +444,11 @@ export function UsageSection({
       if (source === 'invalid' || source === 'error')
         return `// 智谱:${lastError ? `拉取失败:${lastError}` : '拉取失败'}`
       return `// 智谱:读取 monitor API · ${lastError ? `错误:${lastError}` : '加载中…'}`
+    }
+    if (dataSrc === 'minimax' && !fetchedLive) {
+      if (at)
+        return `// MiniMax:数据来自书签同步快照 · 同步于 ${fmtAt(at)}${lastError ? ` · ${lastError}` : ''}`
+      return `// MiniMax:未同步 — 登录 minimax.cn 后在 admin「Token用量」拖「MiniMax 书签」到书签栏,点击即推送数据`
     }
     if (!fetchedLive) {
       if (usingMock) return '// 当前为 demo 数据;配置 DeepSeek 令牌(admin)或接入上报后显示真实用量'
