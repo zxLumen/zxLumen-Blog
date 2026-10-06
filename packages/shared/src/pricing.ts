@@ -38,6 +38,9 @@ export const PRICING: ModelPrice[] = [
   // MiniMax(开放平台 CN 按量价目,元/百万 tokens;M Plan 用量按此折算「等效价」)
   // 来源:https://platform.minimaxi.com/docs/guides/pricing-paygo
   { model: 'MiniMax-M3', label: 'MiniMax M3', official: 'MiniMax-M3', inputCacheHit: 0.42, input: 2.1, output: 8.4, color: '#ff6b6b' },
+  { model: 'MiniMax-M3-512k', label: 'MiniMax M3 (≤512k)', official: 'MiniMax-M3-512k', inputCacheHit: 0.42, input: 2.1, output: 8.4, color: '#ff8787' },
+  // M3.1-Flash-Preview 仅 M Plan / MiniMax Code 提供,无按量价 → 暂按 M3 价近似
+  { model: 'MiniMax-M3.1-Flash-Preview', label: 'MiniMax M3.1 Flash (预览)', official: 'MiniMax-M3.1-Flash-Preview', inputCacheHit: 0.42, input: 2.1, output: 8.4, color: '#fa5252' },
   { model: 'MiniMax-M2.7', label: 'MiniMax M2.7', official: 'MiniMax-M2.7', inputCacheHit: 0.42, input: 2.1, output: 8.4, color: '#f06595' },
   { model: 'MiniMax-M2.7-highspeed', label: 'MiniMax M2.7 HS', official: 'MiniMax-M2.7-highspeed', inputCacheHit: 0.42, input: 4.2, output: 16.8, color: '#e599f7' },
   { model: 'MiniMax-M2.5', label: 'MiniMax M2.5', official: 'MiniMax-M2.5', inputCacheHit: 0.21, input: 2.1, output: 8.4, color: '#845ef7' },

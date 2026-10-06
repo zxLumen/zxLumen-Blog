@@ -2,31 +2,21 @@ import { isAdmin } from '@/lib/auth'
 import { readJson } from '@/lib/db'
 import {
   clearMinimaxData,
-  fetchMinimaxUsageFromServer,
-  getAuthAt,
-  getAuthError,
   getLastError,
-  getMinimaxCookie,
   getSnapshotStatus,
-  setAuthError,
-  setMinimaxCredential,
+  getSyncKey,
+  rotateSyncKey,
+  setMinimaxSyncData,
+  type MinimaxEntry,
 } from '@/lib/minimax'
 
 export const dynamic = 'force-dynamic'
 
 async function status() {
-  const [snap, err, cookie, authAt, authError] = await Promise.all([
-    getSnapshotStatus(),
-    getLastError(),
-    getMinimaxCookie(),
-    getAuthAt(),
-    getAuthError(),
-  ])
+  const [key, snap, err] = await Promise.all([getSyncKey(), getSnapshotStatus(), getLastError()])
   return {
-    configured: !!cookie,
-    autoSync: !!cookie && !authError,
-    authAt: authAt || null,
-    authError: authError || null,
+    syncKey: key,
+    configured: !!snap,
     lastData: snap || null,
     lastError: err || null,
   }
@@ -39,39 +29,33 @@ export async function GET() {
 
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const body = await readJson<{ action?: string; cookie?: string; groupId?: string }>(req).catch(() => null)
+  const body = await readJson<{
+    action?: string
+    start?: string
+    end?: string
+    entries?: MinimaxEntry[]
+  }>(req).catch(() => null)
   const action = body?.action
-
-  if (action === 'save') {
-    const cookie = (body?.cookie ?? '').trim()
-    if (!cookie) return Response.json({ error: '请粘贴 Cookie' }, { status: 400 })
-    if (!cookie.includes('_token')) {
-      return Response.json(
-        { error: 'Cookie 里没有 _token,请从 DevTools 复制 www.minimax.cn 请求的完整 Cookie' },
-        { status: 400 },
-      )
-    }
-    // group_id 优先取手动填写,否则从 cookie 里的 minimax_group_id_v2 提取
-    let groupId = (body?.groupId ?? '').trim()
-    if (!groupId) {
-      const m = cookie.match(/(?:^|;\s*)minimax_group_id_v2=([^;]+)/)
-      if (m) groupId = decodeURIComponent(m[1])
-    }
-    await setMinimaxCredential(cookie, groupId)
-    // 立即拉一次:成功才算授权有效
-    try {
-      const stored = await fetchMinimaxUsageFromServer('30d')
-      return Response.json({ ok: true, rows: stored.rows.length, records: stored.records, ...(await status()) })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '拉取失败'
-      await setAuthError(msg)
-      return Response.json({ error: msg, ...(await status()) }, { status: 400 })
-    }
-  }
 
   if (action === 'clear') {
     clearMinimaxData()
     return Response.json({ ok: true, ...(await status()) })
+  }
+
+  if (action === 'rotate') {
+    await rotateSyncKey()
+    return Response.json({ ok: true, ...(await status()) })
+  }
+
+  // 浏览器直连同步(admin 面板「立即同步」):浏览器已拿到 entries,这里只负责入库
+  if (action === 'ingest') {
+    try {
+      const stored = setMinimaxSyncData({ start: body?.start, end: body?.end, entries: body?.entries })
+      return Response.json({ ok: true, rows: stored.rows.length, records: stored.records, ...(await status()) })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '入库失败'
+      return Response.json({ error: msg }, { status: 400 })
+    }
   }
 
   return Response.json({ error: 'unknown action' }, { status: 400 })

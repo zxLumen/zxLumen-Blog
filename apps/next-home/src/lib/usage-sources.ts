@@ -15,7 +15,7 @@ import {
   getLastRows as zhipuLastRows,
   getLastFailure as zhipuLastFailure,
 } from './zhipu'
-import { hasMinimaxData, ensureMinimaxScheduler } from './minimax'
+import { hasMinimaxData } from './minimax'
 import { getDb } from './db'
 import { makeTtlCache } from './usage/cache'
 import type { SourceAvailability } from '@zx/shared'
@@ -121,8 +121,6 @@ export async function getSourceAvailability(): Promise<SourceAvailability> {
   ensureHourlyScheduler()
   // 顺带确保控制台推理日志的后台自动同步在跑(未配置 Cookie 时为空操作)
   ensureLogsScheduler()
-  // 顺带确保 MiniMax 后台自动同步在跑(未授权时为空操作)
-  ensureMinimaxScheduler()
   const hit = availCache.get(AVAIL_KEY)
   if (hit) return hit
   const [deepseek, opencode, zhipu, minimax, errors] = await Promise.all([
