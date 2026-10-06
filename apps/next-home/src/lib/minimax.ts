@@ -1,4 +1,3 @@
-import crypto from 'node:crypto'
 import type { UsageRow } from '@zx/shared'
 import { getDb } from './db'
 import { windowOf, type UsageFilter, type UsageRange } from './usage/range'
@@ -10,20 +9,17 @@ import type { PlatformUsageBase } from './usage/types'
  * MiniMax 开放平台用量数据源。
  *
  * 关键约束:MiniMax **没有公开的用量 REST API**(open API 仅暴露推理),
- * 真实接口在控制台内部(`www.minimax.cn`),鉴权靠**网页登录凭证**。
+ * 真实接口在控制台内部(`www.minimax.cn`),鉴权靠**网页登录 Cookie**
+ * (`_token`,**HttpOnly**,JS 读不到)。
  *
- * 与 DeepSeek/OpenCode Console 同款「**书签授权一次 → 服务器定时自动拉**」:
- *  - 书签在 `*.minimax.cn` 控制台页面上点,读出 JS 可读的凭证
- *    (`_token` cookie 等 + `access_token`)POST 到本站 `/api/admin/minimax/token`;
- *  - 服务器保存凭证后 `ensureMinimaxScheduler()` 每 10 分钟自动拉
- *    `GET /account/amount`(分页) → 按 (天×模型×API Key) 聚合 → 入库;
+ * 因此采用与 OpenCode Console 同款「**手动粘贴 Cookie → 服务器定时自动拉**」:
+ *  - 管理员在 admin「MiniMax 用量」面板粘贴从 DevTools 复制的整段 `Cookie`;
+ *  - 服务器保存后 `ensureMinimaxScheduler()` 每 10 分钟自动拉
+ *    `GET /backend/account/token_plan/usage_overview?period=30d`(M Plan)
+ *    → 按 (天×模型) 聚合 → 入库;
  *  - 前端读库内快照,任意区间本地过滤,零延迟。
- *
- * 备用路径:书签也可直接把原始 records 推到 `/api/admin/minimax/sync`
- * (`setMinimaxSyncData`),当凭证读不到/服务端拉不动时可兜底。
  */
 
-const K_SYNC = 'minimax_sync_key'
 const K_SYNC_AT = 'minimax_sync_at'
 const K_DATA = 'minimax_sync_data'
 const K_ERR = 'minimax_last_error'
@@ -40,34 +36,6 @@ const SUMMARY_PATH = '/backend/account/token_plan/usage_summary'
 
 /* ---------- meta 存取 ---------- */
 
-export async function getSyncKey(): Promise<string> {
-  const db = getDb()
-  let k = db.getMeta(K_SYNC)
-  if (!k) {
-    k = crypto.randomBytes(16).toString('hex')
-    db.setMeta(K_SYNC, k)
-  }
-  return k
-}
-
-export async function rotateSyncKey(): Promise<string> {
-  const k = crypto.randomBytes(16).toString('hex')
-  getDb().setMeta(K_SYNC, k)
-  return k
-}
-
-/**
- * 校验跨站同步密钥(来自 minimax.cn 控制台)。
- *
- * 书签 POST 是**跨站**请求,浏览器不会携带 SameSite=Lax 的 `zx_admin`
- * cookie,服务端无法靠 cookie 判断身份,用「密钥匹配库中已存同步密钥」
- * 校验。轮换后旧密钥立即失效。
- */
-export function verifySyncKey(key: string): boolean {
-  if (!key) return false
-  return getDb().getMeta(K_SYNC) === key
-}
-
 export const getLastError = async () => getDb().getMeta(K_ERR) ?? ''
 export const setLastError = async (e: string) => getDb().setMeta(K_ERR, e)
 
@@ -79,7 +47,7 @@ export const getAuthAt = async () => getDb().getMeta(K_AUTH_AT) ?? ''
 export const getAuthError = async () => getDb().getMeta(K_AUTH_ERR) ?? ''
 export const setAuthError = async (e: string) => getDb().setMeta(K_AUTH_ERR, e)
 
-/** 保存书签同步来的登录凭证(不影响已存快照) */
+/** 保存粘贴来的登录 Cookie(不影响已存快照) */
 export async function setMinimaxCredential(cookie: string, groupId: string): Promise<void> {
   const db = getDb()
   db.setMeta(K_COOKIE, cookie.trim())
@@ -110,16 +78,6 @@ export interface MinimaxStoredRecord {
   consume_cash?: number
   consume_cash_after_voucher?: number
   [k: string]: unknown
-}
-
-export interface MinimaxSyncPayload {
-  /** 书签同步的区间(YYYY-MM-DD,北京日) */
-  start?: string
-  end?: string
-  /** 控制台原始 records(已由书签分页拉完) */
-  records?: MinimaxStoredRecord[]
-  /** usage_summary 配额原始响应(结构未知,先原样存,按需渲染) */
-  quota?: unknown
 }
 
 export interface MinimaxStored {
@@ -208,21 +166,6 @@ function commitSnapshot(start: string, end: string, records: MinimaxStoredRecord
   db.setMeta(K_ERR, '')
   db.setMeta(K_AUTH_ERR, '')
   invalidateAvailability()
-  return stored
-}
-
-/** 写入书签直推的同步数据;记录为空时抛错(直推路径不允许空) */
-export function setMinimaxSyncData(payload: MinimaxSyncPayload): MinimaxStored {
-  const start = String(payload.start ?? '').slice(0, 10)
-  const end = String(payload.end ?? '').slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-    throw new Error('start/end 需为 YYYY-MM-DD')
-  }
-  if (start > end) throw new Error('start 需 ≤ end')
-  const recs = Array.isArray(payload.records) ? payload.records : []
-  if (recs.length === 0) throw new Error('records 为空')
-  const stored = commitSnapshot(start, end, recs, payload.quota)
-  if (stored.rows.length === 0) throw new Error('聚合后无可用记录(全部为空)')
   return stored
 }
 

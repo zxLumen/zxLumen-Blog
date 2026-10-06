@@ -93,6 +93,8 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
   const [zpBusy, setZpBusy] = useState(false)
   const [mm, setMm] = useState<MmStatus | null>(null)
   const [mmBusy, setMmBusy] = useState(false)
+  const [mmCookie, setMmCookie] = useState('')
+  const [mmGroupId, setMmGroupId] = useState('')
   // 前端 Token用量「数据源展示顺序」(admin 可调 ↑/↓)
   const [srcOrder, setSrcOrder] = useState<DataSource[] | null>(null)
   const [srcOrderBusy, setSrcOrderBusy] = useState(false)
@@ -488,172 +490,47 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
     if (res.ok) setMm((await res.json()) as MmStatus)
   }
 
-  async function mmAction(action: 'clear' | 'rotate') {
+  async function mmSave() {
+    if (!mmCookie.trim()) return setMsg({ kind: 'err', text: '请先粘贴 Cookie' })
     setMmBusy(true)
     setMsg(null)
     try {
       const res = await adminFetch('/api/admin/minimax', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action: 'save', cookie: mmCookie.trim(), groupId: mmGroupId.trim() }),
+      })
+      const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
+      await loadMinimax()
+      if (!res.ok) throw new Error(d.error || '验证失败')
+      setMmCookie('')
+      setMsg({ kind: 'ok', text: `已保存并验证 · 拉取 ${d.rows ?? 0} 行;之后每 10 分钟自动同步` })
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '验证失败' })
+    } finally {
+      setMmBusy(false)
+    }
+  }
+
+  async function mmClear() {
+    setMmBusy(true)
+    setMsg(null)
+    try {
+      const res = await adminFetch('/api/admin/minimax', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear' }),
       })
       const d = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) throw new Error(d.error || '操作失败')
       await loadMinimax()
-      setMsg({
-        kind: 'ok',
-        text: action === 'rotate' ? '已轮换同步密钥,旧书签需重新拖一次' : '已清除 MiniMax 授权与快照',
-      })
+      setMsg({ kind: 'ok', text: '已清除 MiniMax 授权与快照' })
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : '操作失败' })
     } finally {
       setMmBusy(false)
     }
   }
-
-  /**
-   * MiniMax 书签脚本(DeepSeek/OpenCode Console 同款:**授权一次 → 自动同步**)。
-   *
-   * 在 `*.minimax.cn` 控制台页面点书签:
-   *  1. 读出 JS 可读的登录凭证(整段 `document.cookie`,含 `_token`)POST 到
-   *     `/api/admin/minimax/token`;服务器保存后**立即拉一次**,之后每 10 分钟自动同步。
-   *  2. 若凭证读不到或服务器拉不动,自动回退到「同源拉数据直推」`/api/admin/minimax/sync` 兜底。
-   */
-  function mmScript() {
-    const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const key = mm?.syncKey ?? ''
-    // 拼接为一个无依赖的 IIFE 字符串。注释保留以便于排查。
-    const head = `(()=>{var O=${JSON.stringify(origin)},K=${JSON.stringify(key)};`
-    const body = `
-      var banner=function(m){try{alert(m)}catch(e){};var el=document.createElement('div');el.style.cssText='position:fixed;top:12px;right:12px;z-index:99999;padding:12px 16px;background:#0b0f14;color:#e6edf3;border:1px solid #30363d;border-radius:8px;font:12px/1.5 monospace;max-width:480px;box-shadow:0 8px 24px rgba(0,0,0,.4);white-space:pre-wrap';el.textContent=m;document.body.appendChild(el);setTimeout(function(){el.remove()},9000)};
-      (async function(){
-        try{
-          var host=location.host;
-          var sameHost=host==='minimax.cn'||host.endsWith('.minimax.cn')||host.endsWith('.minimax.io')||host.endsWith('.minimaxi.com');
-          if(!sameHost){banner('请在 minimax.cn 控制台页面执行此书签(当前:'+host+')\\n先访问 https://platform.minimax.cn/console/usage 后再点');return}
-          var post=async function(path,payload){var r=await fetch(O+path,{method:'POST',headers:{'Content-Type':'application/json','X-Sync-Key':K},body:JSON.stringify(payload)});var d=await r.json().catch(function(){return null});return{ok:r.ok,status:r.status,d:d}};
-          var cookie='';try{cookie=document.cookie||''}catch(e){}
-          var groupId='';try{groupId=localStorage.getItem('minimax_current_group_id')||''}catch(e){}
-          if(!groupId){var mg=cookie.match(/(?:^|;\\s*)minimax_group_id_v2=([^;]+)/);if(mg)groupId=decodeURIComponent(mg[1])}
-          if(!groupId){try{groupId=new URLSearchParams(location.search).get('group_id')||''}catch(e){}}
-          if(cookie.indexOf('_token')>=0){
-            banner('正在授权自动同步…');
-            var a=await post('/api/admin/minimax/token',{cookie:cookie,groupId:groupId});
-            if(a.ok&&a.d&&a.d.autoSync){banner('✅ 已授权自动同步 · 首次拉取 '+((a.d&&a.d.rows)||0)+' 行\\n之后服务器每 10 分钟自动更新,无需再点书签');return}
-            banner('授权后自动同步未成功'+(a.d&&a.d.error?': '+a.d.error:'')+'\\n改用「直接推送数据」兜底…');
-          }else{
-            banner('未读到 _token 凭证,改用「直接推送数据」兜底…');
-          }
-          var base='https://www.minimax.cn';
-          var end=new Date();
-          var start=new Date(end.getTime()-30*86400000);
-          var sStr=start.toISOString().slice(0,10), eStr=end.toISOString().slice(0,10);
-          var records=[], quota=null;
-          try{
-            banner('正在拉取 M Plan 用量总览(usage_overview)…');
-            var ro=await fetch(base+'/backend/account/token_plan/usage_overview?period=30d',{credentials:'include',headers:{Accept:'application/json'}});
-            var jo=await ro.json().catch(function(){return null});
-            var osc=jo&&jo.base_resp&&jo.base_resp.status_code;
-            if(ro.status===401||ro.status===403||osc===1004||osc===1005){banner('未登录或会话失效(请重新登录 '+host+' 后再点)\\nstatus '+ro.status);return}
-            if(ro.ok&&jo&&(osc===0||osc===undefined)){
-              var body=(jo.data&&typeof jo.data==='object')?jo.data:jo;
-              var days=(body&&body.date_model_usage)||[];
-              for(var i=0;i<days.length;i++){
-                var d=days[i]||{}, date=String(d.date||'').slice(0,10);
-                if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))continue;
-                var ms=d.models||[];
-                for(var k=0;k<ms.length;k++){
-                  var mo=ms[k]||{}, model=String(mo.model||'').trim();
-                  if(!model)continue;
-                  records.push({consume_time:date,model:model,consume_input_token:mo.input_token||0,consume_output_token:mo.output_token||0});
-                }
-              }
-            }
-          }catch(_){}
-          if(records.length===0){
-            try{
-              banner('改用按量付费明细(/account/amount)…');
-              var page=1, limit=100, maxPage=20;
-              while(page<=maxPage){
-                var q='start_date='+encodeURIComponent(sStr)+'&end_date='+encodeURIComponent(eStr)+'&aggregate=true&page='+page+'&limit='+limit;
-                var r=await fetch(base+'/account/amount?'+q,{credentials:'include',headers:{Accept:'application/json'}});
-                if(!r.ok)break;
-                var j=await r.json().catch(function(){return null});
-                if(!j||!j.base_resp||j.base_resp.status_code!==0)break;
-                var recs=Array.isArray(j.charge_records)?j.charge_records:[];
-                records=records.concat(recs);
-                var total=typeof j.total_cnt==='number'?j.total_cnt:0;
-                if(!recs.length||records.length>=total||total===0)break;
-                page++;
-              }
-            }catch(_){}
-          }
-          try{
-            var r2=await fetch(base+'/backend/account/token_plan/usage_summary',{credentials:'include',headers:{Accept:'application/json'}});
-            if(r2.ok){var j2=await r2.json().catch(function(){return null});if(j2&&j2.base_resp&&j2.base_resp.status_code===0)quota=j2.data||j2}
-          }catch(_){}
-          if(records.length===0){banner('❌ 未取到任何用量记录(账号可能无用量,或接口变动)\\n请点「复制诊断脚本」查看接口实际返回');return}
-          var payload={start:sStr,end:eStr,records:records,quota:quota};
-          if(JSON.stringify(payload).length>2*1024*1024){banner('❌ 载荷过大 > 2MB,缩短区间后重试');return}
-          var sres=await post('/api/admin/minimax/sync',payload);
-          if(sres.ok){
-            banner('✅ MiniMax 已同步(直推) · '+records.length+' 条记录 → '+((sres.d&&sres.d.rows)||'?')+' 个聚合行\\n回首页 Token用量 即可看到\\n⚠️ 未启用自动同步,下次需再点书签');
-          }else{
-            banner('❌ 同步失败 '+(sres.status||'')+' · '+((sres.d&&sres.d.error)||'未知错误'));
-          }
-        }catch(e){
-          banner('同步失败:'+(e&&e.message?e.message:e));
-        }
-      })();
-    `
-    const tail = '})()'
-    return (head + body + tail).replace(/\n\s*/g, ' ')
-  }
-
-  /**
-   * MiniMax 诊断脚本:在控制台页面执行,报告可读凭证(cookie 名 / localStorage 键)
-   * 与各候选接口的 HTTP 状态、base_resp、顶层字段,用于定位正确的数据源与授权方式。
-   */
-  function mmDiagScript() {
-    const body = `
-      (function(){
-        var L=[]; var log=function(s){L.push(s); try{console.log('[MM诊断] '+s)}catch(e){}};
-        var keys=function(o){try{return Object.keys(o||{}).join(',')}catch(e){return '?'}};
-        (async function(){
-          try{
-            log('host: '+location.host);
-            var ck=''; try{ck=document.cookie||''}catch(e){}
-            var names=ck.split(';').map(function(x){return x.split('=')[0].trim()}).filter(Boolean);
-            log('可见 cookie('+names.length+'): '+names.join(', '));
-            var ls=[]; try{for(var i=0;i<localStorage.length;i++)ls.push(localStorage.key(i))}catch(e){}
-            log('localStorage keys: '+ls.join(', '));
-            log('has access_token='+(ls.indexOf('access_token')>=0)+' user_detail='+(ls.indexOf('user_detail')>=0)+' minimax_current_group_id='+(ls.indexOf('minimax_current_group_id')>=0));
-            var probe=async function(path){
-              try{
-                var r=await fetch(path,{credentials:'include',headers:{Accept:'application/json'}});
-                var t=await r.text(); var j=null; try{j=JSON.parse(t)}catch(e){}
-                log('GET '+path+' -> HTTP '+r.status+' base_resp='+(j&&j.base_resp?JSON.stringify(j.base_resp):'?')+' topKeys='+keys(j));
-                if(j)log('   body: '+t.slice(0,500));
-              }catch(e){log('GET '+path+' -> 异常 '+(e&&e.message||e))}
-            };
-            var d7=new Date(Date.now()-7*864e5).toISOString().slice(0,10), d0=new Date().toISOString().slice(0,10);
-            await probe('/backend/account/token_plan/usage_overview?period=30d');
-            await probe('/backend/account/token_plan/usage_summary');
-            await probe('/backend/user/biz_info');
-            await probe('/account/amount?page=1&limit=10&aggregate=true&start_date='+d7+'&end_date='+d0);
-          }catch(e){log('诊断异常: '+(e&&e.message||e))}
-          var txt='MiniMax 诊断报告\\n'+L.join('\\n');
-          try{navigator.clipboard.writeText(txt)}catch(e){}
-          var el=document.createElement('pre');
-          el.style.cssText='position:fixed;top:8px;left:8px;right:8px;max-height:80vh;overflow:auto;z-index:99999;background:#0b0f14;color:#e6edf3;border:1px solid #30363d;border-radius:8px;font:11px/1.5 monospace;padding:12px;white-space:pre-wrap';
-          el.textContent=txt+'\\n\\n(已尝试复制到剪贴板,直接粘贴发给站长即可)';
-          document.body.appendChild(el); setTimeout(function(){el.remove()},60000);
-        })();
-      })()
-    `
-    return body.replace(/\n\s*/g, ' ')
-  }
-
   async function dsAction(action: 'save' | 'refresh' | 'rotate' | 'clear', token?: string) {
     if (action === 'refresh' && !ds?.configured) {
       setMsg({ kind: 'err', text: '未配置令牌:请先通过书签/控制台命令同步 userToken 或粘贴保存' })
@@ -715,12 +592,6 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
   useEffect(() => {
     if (dsBookmarkRef.current) dsBookmarkRef.current.href = bookmarkHref
   }, [bookmarkHref])
-
-  const mmBookmarkRef = useRef<HTMLAnchorElement>(null)
-  const mmBookmarkHref = `javascript:${mmScript()}`
-  useEffect(() => {
-    if (mmBookmarkRef.current) mmBookmarkRef.current.href = mmBookmarkHref
-  }, [mmBookmarkHref])
 
   async function uploadQr(file: File) {
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
@@ -1533,67 +1404,53 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
         </h3>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
           状态:
-          {mm?.autoSync ? '✅ 自动同步中' : mm?.configured ? '⚠️ 已授权但凭证失效(需重新授权)' : '未授权(首次需点书签)'}
+          {mm?.autoSync ? '✅ 自动同步中' : mm?.configured ? '⚠️ 已授权但凭证失效(需重新粘贴)' : '未授权(首次需粘贴 Cookie)'}
           {mm?.authAt ? ` · 授权于 ${new Date(mm.authAt).toLocaleString()}` : ''}
           {mm?.lastData?.at
             ? ` · 上次同步 ${mm.lastData.count ?? 0} 行 @ ${new Date(mm.lastData.at).toLocaleString()}`
             : ''}
           {mm?.lastData?.start && mm?.lastData?.end ? ` · 区间 ${mm.lastData.start} ~ ${mm.lastData.end}` : ''}
         </p>
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <a
-            ref={mmBookmarkRef}
-            className="zx-btn zx-btn-sm zx-btn-primary"
-            draggable
-            title="拖到浏览器书签栏;在已登录的 platform.minimax.cn 控制台页面点击"
-            onClick={(e) => e.preventDefault()}
-            onDragStart={(e) => {
-              e.currentTarget.href = mmBookmarkHref
-            }}
-          >
-            ⇢ 拖到书签栏
-          </a>
-          <button
-            className="zx-btn zx-btn-sm"
-            onClick={() => void copyText(mmScript(), '书签脚本已复制(在 platform.minimax.cn 控制台 F12 → Console 粘贴回车)')}
-          >
-            复制书签脚本
-          </button>
-          <button
-            className="zx-btn zx-btn-sm"
-            onClick={() => void copyText(mmDiagScript(), '诊断脚本已复制(在控制台 F12 → Console 粘贴回车,结果会复制到剪贴板)')}
-          >
-            复制诊断脚本
-          </button>
-          <button
-            className="zx-btn zx-btn-sm zx-btn-ghost"
-            disabled={mmBusy}
-            onClick={() => {
-              if (confirm('轮换同步密钥?旧书签将失效,需重新拖一次')) void mmAction('rotate')
-            }}
-          >
-            轮换密钥
-          </button>
-          <button
-            className="zx-btn zx-btn-sm zx-btn-ghost"
-            disabled={mmBusy || !mm?.configured}
-            onClick={() => {
-              if (confirm('清除 MiniMax 授权与同步快照?(将停止自动同步)')) void mmAction('clear')
-            }}
-          >
-            清除授权
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <textarea
+            className="zx-input"
+            style={{ width: '100%', minHeight: 64, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+            placeholder="粘贴 Cookie(从 DevTools 复制的 www.minimax.cn 请求的整段 Cookie,含 _token)"
+            value={mmCookie}
+            onChange={(e) => setMmCookie(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              className="zx-input"
+              style={{ maxWidth: 260, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+              placeholder="Group ID(可留空,自动从 Cookie 提取)"
+              value={mmGroupId}
+              onChange={(e) => setMmGroupId(e.target.value)}
+            />
+            <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={mmBusy || !mmCookie.trim()} onClick={() => void mmSave()}>
+              {mmBusy ? '验证中…' : '保存并验证'}
+            </button>
+            <button
+              className="zx-btn zx-btn-sm zx-btn-ghost"
+              disabled={mmBusy || !mm?.configured}
+              onClick={() => {
+                if (confirm('清除 MiniMax 授权与同步快照?(将停止自动同步)')) void mmClear()
+              }}
+            >
+              清除授权
+            </button>
+          </div>
         </div>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
-          用法:① 登录 <span className="zx-accent">platform.minimax.cn</span>(控制台)后,把「⇢ 拖到书签栏」拖到书签栏,
-          再在该页面点书签 → 书签尝试把登录凭证交给本站,<span className="zx-accent">服务器随后每 10 分钟自动同步</span>;
-          若凭证读不到(登录 Cookie 多为 HttpOnly),会自动回退到「本次直推 M Plan 用量数据」兜底。
-          ② 或点「复制书签脚本」在控制台 <span className="zx-accent">F12 → Console</span> 粘贴。
-          ③ 数据源为 M Plan <span className="zx-accent">usage_overview</span>(按天×模型 token);成本按 MiniMax 官方单价折算。
-          若一直取不到数据,点「复制诊断脚本」运行后把结果发给站长。
+          用法:① 登录 <span className="zx-accent">platform.minimax.cn</span>(控制台,先打开「套餐用量」页);
+          ② <span className="zx-accent">F12 → Network</span> → 任一 <span className="zx-accent">www.minimax.cn</span> 请求 →
+          Request Headers 里复制整段 <span className="zx-accent">Cookie</span>(含 HttpOnly 的 <span className="zx-accent">_token</span>);
+          ③ 粘贴到上面 → 「保存并验证」→ <span className="zx-accent">服务器每 10 分钟自动同步</span>,之后无需再操作。
+          数据源为 M Plan <span className="zx-accent">usage_overview</span>(按天×模型 token);成本按 MiniMax 官方单价折算。
+          Cookie 仅存服务器、不下发前端;失效时重新粘贴一次即可。
         </p>
         {mm?.authError && (
-          <div className="zx-msg err">凭证失效:{mm.authError} —— 请重新点书签授权</div>
+          <div className="zx-msg err">凭证失效:{mm.authError} —— 请重新粘贴 Cookie 授权</div>
         )}
         {mm?.lastError && <div className="zx-msg err">{mm.lastError}</div>}
       </div>
