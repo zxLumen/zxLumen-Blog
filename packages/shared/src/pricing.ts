@@ -1,4 +1,4 @@
-// DeepSeek 计价表(单位:¥ / 百万 tokens)、官方价目为准,可随时修改同步
+// 各源模型计价表(单位:¥ / 百万 tokens),官方价目为准,可随时修改同步
 import type { UsageRow } from './schema.js'
 export type { UsageRow }
 
@@ -35,7 +35,25 @@ export const PRICING: ModelPrice[] = [
     output: 16,
     color: '#ff2b7a',
   },
+  // MiniMax(开放平台 CN 按量价目,元/百万 tokens;M Plan 用量按此折算「等效价」)
+  // 来源:https://platform.minimaxi.com/docs/guides/pricing-paygo
+  { model: 'MiniMax-M3', label: 'MiniMax M3', official: 'MiniMax-M3', inputCacheHit: 0.42, input: 2.1, output: 8.4, color: '#ff6b6b' },
+  { model: 'MiniMax-M2.7', label: 'MiniMax M2.7', official: 'MiniMax-M2.7', inputCacheHit: 0.42, input: 2.1, output: 8.4, color: '#f06595' },
+  { model: 'MiniMax-M2.7-highspeed', label: 'MiniMax M2.7 HS', official: 'MiniMax-M2.7-highspeed', inputCacheHit: 0.42, input: 4.2, output: 16.8, color: '#e599f7' },
+  { model: 'MiniMax-M2.5', label: 'MiniMax M2.5', official: 'MiniMax-M2.5', inputCacheHit: 0.21, input: 2.1, output: 8.4, color: '#845ef7' },
+  { model: 'MiniMax-M2.5-highspeed', label: 'MiniMax M2.5 HS', official: 'MiniMax-M2.5-highspeed', inputCacheHit: 0.21, input: 4.2, output: 16.8, color: '#5c7cfa' },
+  { model: 'MiniMax-M2.1', label: 'MiniMax M2.1', official: 'MiniMax-M2.1', inputCacheHit: 0.21, input: 2.1, output: 8.4, color: '#4dabf7' },
+  { model: 'MiniMax-M2.1-highspeed', label: 'MiniMax M2.1 HS', official: 'MiniMax-M2.1-highspeed', inputCacheHit: 0.21, input: 4.2, output: 16.8, color: '#22b8cf' },
+  { model: 'MiniMax-M2', label: 'MiniMax M2', official: 'MiniMax-M2', inputCacheHit: 0.21, input: 2.1, output: 8.4, color: '#20c997' },
 ]
+
+/** 精确匹配 → 大小写不敏感匹配(MiniMax 模型名大小写/前缀可能变动) */
+export function priceOf(model: string): ModelPrice | undefined {
+  const exact = PRICING.find((x) => x.model === model)
+  if (exact) return exact
+  const key = model.trim().toLowerCase()
+  return PRICING.find((x) => x.model.toLowerCase() === key)
+}
 
 export interface CostParts {
   cacheHit: number
@@ -47,7 +65,7 @@ export interface CostParts {
 export const roundCny = (n: number) => Math.round(n * 10000) / 10000
 
 export function estimateCost(row: UsageRow): CostParts {
-  const p = PRICING.find((x) => x.model === row.model) ?? PRICING[0]
+  const p = priceOf(row.model) ?? PRICING[0]
   const cacheHit = (row.cacheHitTokens / 1_000_000) * p.inputCacheHit
   const input = (row.inputTokens / 1_000_000) * p.input
   const output = (row.outputTokens / 1_000_000) * p.output

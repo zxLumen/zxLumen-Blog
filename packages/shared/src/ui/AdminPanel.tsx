@@ -548,36 +548,51 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
           var end=new Date();
           var start=new Date(end.getTime()-30*86400000);
           var sStr=start.toISOString().slice(0,10), eStr=end.toISOString().slice(0,10);
-          banner('正在拉取 '+sStr+' ~ '+eStr+' 的 MiniMax 用量…\\n请稍候(分页 + 聚合)');
-          var records=[], quota=null, page=1, limit=100, maxPage=20;
-          while(page<=maxPage){
-            var q='start_date='+encodeURIComponent(sStr)+'&end_date='+encodeURIComponent(eStr)+'&aggregate=true&page='+page+'&limit='+limit;
-            var r=await fetch(base+'/account/amount?'+q,{credentials:'include',headers:{Accept:'application/json'}});
-            if(!r.ok){
-              if(r.status===401||r.status===403){
-                banner('未登录或会话失效(请重新登录 '+host+' 后再点)\\nstatus '+r.status);
-                return;
+          var records=[], quota=null;
+          try{
+            banner('正在拉取 M Plan 用量总览(usage_overview)…');
+            var ro=await fetch(base+'/backend/account/token_plan/usage_overview?period=30d',{credentials:'include',headers:{Accept:'application/json'}});
+            var jo=await ro.json().catch(function(){return null});
+            var osc=jo&&jo.base_resp&&jo.base_resp.status_code;
+            if(ro.status===401||ro.status===403||osc===1004||osc===1005){banner('未登录或会话失效(请重新登录 '+host+' 后再点)\\nstatus '+ro.status);return}
+            if(ro.ok&&jo&&(osc===0||osc===undefined)){
+              var body=(jo.data&&typeof jo.data==='object')?jo.data:jo;
+              var days=(body&&body.date_model_usage)||[];
+              for(var i=0;i<days.length;i++){
+                var d=days[i]||{}, date=String(d.date||'').slice(0,10);
+                if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))continue;
+                var ms=d.models||[];
+                for(var k=0;k<ms.length;k++){
+                  var mo=ms[k]||{}, model=String(mo.model||'').trim();
+                  if(!model)continue;
+                  records.push({consume_time:date,model:model,consume_input_token:mo.input_token||0,consume_output_token:mo.output_token||0});
+                }
               }
-              banner('拉取失败 HTTP '+r.status+' · '+r.statusText);
-              return;
             }
-            var j=await r.json().catch(function(){return null});
-            if(!j||!j.base_resp||j.base_resp.status_code!==0){
-              var msg=(j&&j.base_resp&&j.base_resp.status_msg)||'接口返回非 0';
-              banner('❌ '+msg+'\\n记录未推送');
-              return;
-            }
-            var recs=Array.isArray(j.charge_records)?j.charge_records:[];
-            records=records.concat(recs);
-            var total=typeof j.total_cnt==='number'?j.total_cnt:0;
-            if(!recs.length||records.length>=total||total===0)break;
-            page++;
-            if(page>maxPage){banner('已达分页上限 '+maxPage+' 页,只取了前 '+(maxPage*limit)+' 条');break}
+          }catch(_){}
+          if(records.length===0){
+            try{
+              banner('改用按量付费明细(/account/amount)…');
+              var page=1, limit=100, maxPage=20;
+              while(page<=maxPage){
+                var q='start_date='+encodeURIComponent(sStr)+'&end_date='+encodeURIComponent(eStr)+'&aggregate=true&page='+page+'&limit='+limit;
+                var r=await fetch(base+'/account/amount?'+q,{credentials:'include',headers:{Accept:'application/json'}});
+                if(!r.ok)break;
+                var j=await r.json().catch(function(){return null});
+                if(!j||!j.base_resp||j.base_resp.status_code!==0)break;
+                var recs=Array.isArray(j.charge_records)?j.charge_records:[];
+                records=records.concat(recs);
+                var total=typeof j.total_cnt==='number'?j.total_cnt:0;
+                if(!recs.length||records.length>=total||total===0)break;
+                page++;
+              }
+            }catch(_){}
           }
           try{
             var r2=await fetch(base+'/backend/account/token_plan/usage_summary',{credentials:'include',headers:{Accept:'application/json'}});
             if(r2.ok){var j2=await r2.json().catch(function(){return null});if(j2&&j2.base_resp&&j2.base_resp.status_code===0)quota=j2.data||j2}
           }catch(_){}
+          if(records.length===0){banner('❌ 未取到任何用量记录(账号可能无用量,或接口变动)\\n请点「复制诊断脚本」查看接口实际返回');return}
           var payload={start:sStr,end:eStr,records:records,quota:quota};
           if(JSON.stringify(payload).length>2*1024*1024){banner('❌ 载荷过大 > 2MB,缩短区间后重试');return}
           var sres=await post('/api/admin/minimax/sync',payload);
@@ -593,6 +608,50 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
     `
     const tail = '})()'
     return (head + body + tail).replace(/\n\s*/g, ' ')
+  }
+
+  /**
+   * MiniMax 诊断脚本:在控制台页面执行,报告可读凭证(cookie 名 / localStorage 键)
+   * 与各候选接口的 HTTP 状态、base_resp、顶层字段,用于定位正确的数据源与授权方式。
+   */
+  function mmDiagScript() {
+    const body = `
+      (function(){
+        var L=[]; var log=function(s){L.push(s); try{console.log('[MM诊断] '+s)}catch(e){}};
+        var keys=function(o){try{return Object.keys(o||{}).join(',')}catch(e){return '?'}};
+        (async function(){
+          try{
+            log('host: '+location.host);
+            var ck=''; try{ck=document.cookie||''}catch(e){}
+            var names=ck.split(';').map(function(x){return x.split('=')[0].trim()}).filter(Boolean);
+            log('可见 cookie('+names.length+'): '+names.join(', '));
+            var ls=[]; try{for(var i=0;i<localStorage.length;i++)ls.push(localStorage.key(i))}catch(e){}
+            log('localStorage keys: '+ls.join(', '));
+            log('has access_token='+(ls.indexOf('access_token')>=0)+' user_detail='+(ls.indexOf('user_detail')>=0)+' minimax_current_group_id='+(ls.indexOf('minimax_current_group_id')>=0));
+            var probe=async function(path){
+              try{
+                var r=await fetch(path,{credentials:'include',headers:{Accept:'application/json'}});
+                var t=await r.text(); var j=null; try{j=JSON.parse(t)}catch(e){}
+                log('GET '+path+' -> HTTP '+r.status+' base_resp='+(j&&j.base_resp?JSON.stringify(j.base_resp):'?')+' topKeys='+keys(j));
+                if(j)log('   body: '+t.slice(0,500));
+              }catch(e){log('GET '+path+' -> 异常 '+(e&&e.message||e))}
+            };
+            var d7=new Date(Date.now()-7*864e5).toISOString().slice(0,10), d0=new Date().toISOString().slice(0,10);
+            await probe('/backend/account/token_plan/usage_overview?period=30d');
+            await probe('/backend/account/token_plan/usage_summary');
+            await probe('/backend/user/biz_info');
+            await probe('/account/amount?page=1&limit=10&aggregate=true&start_date='+d7+'&end_date='+d0);
+          }catch(e){log('诊断异常: '+(e&&e.message||e))}
+          var txt='MiniMax 诊断报告\\n'+L.join('\\n');
+          try{navigator.clipboard.writeText(txt)}catch(e){}
+          var el=document.createElement('pre');
+          el.style.cssText='position:fixed;top:8px;left:8px;right:8px;max-height:80vh;overflow:auto;z-index:99999;background:#0b0f14;color:#e6edf3;border:1px solid #30363d;border-radius:8px;font:11px/1.5 monospace;padding:12px;white-space:pre-wrap';
+          el.textContent=txt+'\\n\\n(已尝试复制到剪贴板,直接粘贴发给站长即可)';
+          document.body.appendChild(el); setTimeout(function(){el.remove()},60000);
+        })();
+      })()
+    `
+    return body.replace(/\n\s*/g, ' ')
   }
 
   async function dsAction(action: 'save' | 'refresh' | 'rotate' | 'clear', token?: string) {
@@ -1470,11 +1529,11 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       {tab === 'token' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
-          MiniMax 用量 <span>控制台消费明细 · 授权一次自动同步 · 按天×模型+真实费用</span>
+          MiniMax 用量 <span>M Plan 用量总览 · 授权一次自动同步 · 按天×模型</span>
         </h3>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
           状态:
-          {mm?.autoSync ? '✅ 自动同步中' : mm?.configured ? '⚠️ 已授权但凭证失效(需重新点书签)' : '未授权(首次需点书签)'}
+          {mm?.autoSync ? '✅ 自动同步中' : mm?.configured ? '⚠️ 已授权但凭证失效(需重新授权)' : '未授权(首次需点书签)'}
           {mm?.authAt ? ` · 授权于 ${new Date(mm.authAt).toLocaleString()}` : ''}
           {mm?.lastData?.at
             ? ` · 上次同步 ${mm.lastData.count ?? 0} 行 @ ${new Date(mm.lastData.at).toLocaleString()}`
@@ -1501,6 +1560,12 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
             复制书签脚本
           </button>
           <button
+            className="zx-btn zx-btn-sm"
+            onClick={() => void copyText(mmDiagScript(), '诊断脚本已复制(在控制台 F12 → Console 粘贴回车,结果会复制到剪贴板)')}
+          >
+            复制诊断脚本
+          </button>
+          <button
             className="zx-btn zx-btn-sm zx-btn-ghost"
             disabled={mmBusy}
             onClick={() => {
@@ -1520,10 +1585,12 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
           </button>
         </div>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
-          用法:① 登录 <span className="zx-accent">platform.minimax.cn</span>(控制台)后,把「⇢ 拖到书签栏」拖到浏览器书签栏,
-          再在该已登录页面点书签 → 书签把登录凭证交给本站,<span className="zx-accent">服务器随后每 10 分钟自动同步</span>(之后无需再点);
-          ② 或点「复制书签脚本」,在控制台 <span className="zx-accent">F12 → Console</span> 粘贴回车。
-          凭证仅存服务器、不下发前端;失效时重新点一次书签即可。若凭证读不到会自动回退到「本次直推数据」。
+          用法:① 登录 <span className="zx-accent">platform.minimax.cn</span>(控制台)后,把「⇢ 拖到书签栏」拖到书签栏,
+          再在该页面点书签 → 书签尝试把登录凭证交给本站,<span className="zx-accent">服务器随后每 10 分钟自动同步</span>;
+          若凭证读不到(登录 Cookie 多为 HttpOnly),会自动回退到「本次直推 M Plan 用量数据」兜底。
+          ② 或点「复制书签脚本」在控制台 <span className="zx-accent">F12 → Console</span> 粘贴。
+          ③ 数据源为 M Plan <span className="zx-accent">usage_overview</span>(按天×模型 token);成本按 MiniMax 官方单价折算。
+          若一直取不到数据,点「复制诊断脚本」运行后把结果发给站长。
         </p>
         {mm?.authError && (
           <div className="zx-msg err">凭证失效:{mm.authError} —— 请重新点书签授权</div>

@@ -1,4 +1,4 @@
-import { PRICING, estimateCost } from '../../pricing.js'
+import { priceOf, estimateCost } from '../../pricing.js'
 import type { UsageRow } from '../../schema.js'
 import type { DataSource, Range, SourceAvailability } from '../../usage-sel.js'
 import type { FeatureId } from '../../features.js'
@@ -17,10 +17,9 @@ const hashStr = (s: string) => {
 }
 
 export const modelColor = (model: string) =>
-  PRICING.find((p) => p.model === model)?.color ?? MODEL_PALETTE[hashStr(model) % MODEL_PALETTE.length]
+  priceOf(model)?.color ?? MODEL_PALETTE[hashStr(model) % MODEL_PALETTE.length]
 
-export const modelLabel = (model: string) =>
-  PRICING.find((p) => p.model === model)?.label ?? model
+export const modelLabel = (model: string) => priceOf(model)?.label ?? model
 
 export const rowCost = (r: UsageRow) =>
   typeof r.cost === 'number' ? r.cost : estimateCost(r).total

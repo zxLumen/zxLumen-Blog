@@ -35,6 +35,7 @@ const K_AUTH_ERR = 'minimax_auth_error'
 /** 控制台 API 基址(可被 env 覆盖,便于国际站 minimax.io) */
 const BASE = (process.env.MINIMAX_BASE_URL || 'https://www.minimax.cn').replace(/\/$/, '')
 const AMOUNT_PATH = '/account/amount'
+const OVERVIEW_PATH = '/backend/account/token_plan/usage_overview'
 const SUMMARY_PATH = '/backend/account/token_plan/usage_summary'
 
 /* ---------- meta 存取 ---------- */
@@ -364,7 +365,81 @@ async function fetchQuotaSummary(cookie: string, groupId: string): Promise<unkno
 }
 
 /**
- * 用已存凭证从服务器直连拉取指定区间并落库(自动同步核心)。
+ * M Plan 用量总览(token_plan/usage_overview):返回按天×模型的 token。
+ * `date_model_usage: [{ date, total_token, cache_hit_percent, models: [{ model, input_token, output_token }] }]`
+ * `period` 仅支持 day/7d/30d,统一取 30d;返回 `applicable=false` 表示该接口不适用(调用方可回退按量付费接口)。
+ */
+interface OverviewModel {
+  model?: string
+  input_token?: number
+  output_token?: number
+  total_token?: number
+  cache_hit_percent?: number
+}
+interface OverviewDay {
+  date?: string
+  total_token?: number
+  cache_hit_percent?: number
+  models?: OverviewModel[]
+}
+
+/** date_model_usage → 通用 records(复用既有聚合) */
+export function recordsFromOverview(days: OverviewDay[] | undefined): MinimaxStoredRecord[] {
+  const out: MinimaxStoredRecord[] = []
+  for (const d of days || []) {
+    const date = String(d?.date ?? '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+    for (const m of d.models || []) {
+      const model = String(m?.model ?? '').trim()
+      if (!model) continue
+      out.push({
+        consume_time: date,
+        model,
+        consume_input_token: num(m.input_token),
+        consume_output_token: num(m.output_token),
+      })
+    }
+  }
+  return out
+}
+
+async function fetchOverview(
+  cookie: string,
+  groupId: string,
+): Promise<{ applicable: boolean; records: MinimaxStoredRecord[]; raw: unknown | null }> {
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${OVERVIEW_PATH}?period=30d`, {
+      headers: { Cookie: cookie, Accept: 'application/json', ...(groupId ? { 'X-Group-Id': groupId } : {}) },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20000),
+    })
+  } catch (e) {
+    throw usageError(
+      e instanceof Error && e.name === 'TimeoutError' ? 'TIMEOUT' : 'HTTP',
+      e instanceof Error && e.name === 'TimeoutError' ? 'MiniMax 接口超时' : 'MiniMax 接口请求失败',
+    )
+  }
+  const j = (await res.json().catch(() => null)) as
+    | { base_resp?: { status_code?: number; status_msg?: string }; data?: unknown; date_model_usage?: OverviewDay[] }
+    | null
+  const sc = j?.base_resp?.status_code
+  if (res.status === 401 || res.status === 403 || sc === 1004 || sc === 1005) {
+    throw usageError('INVALID_TOKEN', j?.base_resp?.status_msg || `授权失效(HTTP ${res.status}),请重新授权`)
+  }
+  // 非 0 业务码 / 非 200:视为「该接口不适用」,交给调用方回退
+  if (!res.ok || !j || (sc !== undefined && sc !== 0)) {
+    return { applicable: false, records: [], raw: j ?? null }
+  }
+  const body = (j.data && typeof j.data === 'object' ? (j.data as Record<string, unknown>) : j) as {
+    date_model_usage?: OverviewDay[]
+  }
+  return { applicable: true, records: recordsFromOverview(body.date_model_usage), raw: body }
+}
+
+/**
+ * 用已存凭证从服务器直连拉取并落库(自动同步核心)。
+ * 优先 M Plan `usage_overview`;不适用时回退按量付费 `/account/amount`。
  * 授权失效抛 `INVALID_TOKEN`,由调度器记录后停摆。
  */
 export async function fetchMinimaxUsageFromServer(range: UsageRange = '30d'): Promise<MinimaxStored> {
@@ -372,9 +447,14 @@ export async function fetchMinimaxUsageFromServer(range: UsageRange = '30d'): Pr
   if (!cookie) throw usageError('UNCONFIGURED', '尚未授权(请在控制台点书签)')
   const groupId = await getMinimaxGroupId()
   const { start, end } = windowOf(range)
-  const records = await fetchAllRecords(cookie, groupId, start, end)
+  const ov = await fetchOverview(cookie, groupId)
+  let records = ov.records
+  if (!ov.applicable) {
+    // 非 M Plan(或 overview 不可用):按量付费接口
+    records = await fetchAllRecords(cookie, groupId, start, end)
+  }
   const quota = await fetchQuotaSummary(cookie, groupId)
-  return commitSnapshot(start, end, records, quota)
+  return commitSnapshot(start, end, records, quota ?? ov.raw)
 }
 
 /* ---------- 后台自动同步调度 ---------- */

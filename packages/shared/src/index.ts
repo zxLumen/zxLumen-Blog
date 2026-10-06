@@ -58,6 +58,7 @@ export type { StoredApp, AppItem, AppOpenIn } from './schema.js'
 // 计价与统计
 export {
   PRICING,
+  priceOf,
   estimateCost,
   costOfRows,
   tokensOf,
