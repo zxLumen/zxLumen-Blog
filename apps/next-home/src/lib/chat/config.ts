@@ -1,5 +1,4 @@
 import { getDb } from '../db'
-import { getDefaultProvider } from '../ai-gateway'
 import {
   getProvider,
   isEmbeddingModel,
@@ -87,6 +86,9 @@ export const DEFAULT_CONFIG: ChatBotConfig = {
   promptExtra: '',
 }
 
+/** 博客自身的网关入口(面板展示与实际调用都用它;博客自身也作为一个应用经网关,便于统计) */
+export const GATEWAY_ENTRY = process.env.ZX_SELF_GATEWAY_URL || 'http://localhost:3000/api/ai/v1'
+
 const cleanList = (v: unknown): string[] =>
   Array.isArray(v) ? v.map((s) => String(s).trim()).filter(Boolean) : []
 
@@ -108,13 +110,25 @@ function normalize(cfg: ChatBotConfig): ChatBotConfig {
 export function getConfig(): ChatBotConfig {
   const db = getDb()
   const raw = db.getMeta(K_CFG)
-  if (!raw) return normalize({ ...DEFAULT_CONFIG })
+  if (!raw) return applyGatewayTarget(normalize({ ...DEFAULT_CONFIG }))
   try {
     const p = JSON.parse(raw) as Partial<ChatBotConfig>
-    return normalize({ ...DEFAULT_CONFIG, ...p })
+    return applyGatewayTarget(normalize({ ...DEFAULT_CONFIG, ...p }))
   } catch {
-    return normalize({ ...DEFAULT_CONFIG })
+    return applyGatewayTarget(normalize({ ...DEFAULT_CONFIG }))
   }
+}
+
+/** 选了「博客 AI 网关」时,地址与模型直接取密钥池的「默认对话 / 默认向量」密钥 */
+function applyGatewayTarget(cfg: ChatBotConfig): ChatBotConfig {
+  let next = cfg
+  if (cfg.chatProvider === 'zx-gateway') {
+    next = { ...next, chatBaseUrl: GATEWAY_ENTRY }
+  }
+  if (cfg.embedProvider === 'zx-gateway') {
+    next = { ...next, embedBaseUrl: GATEWAY_ENTRY }
+  }
+  return next
 }
 
 export function saveConfig(partial: Partial<ChatBotConfig>): ChatBotConfig {
@@ -156,16 +170,12 @@ export function embedProtocol(): ProviderProtocol {
 export function getChatApiKey(): string {
   const env = process.env.CHATBOT_API_KEY
   if (env) return env.trim()
-  const gw = getDefaultProvider('chat')
-  if (gw?.apiKey) return gw.apiKey
   return getDb().getMeta(K_CHAT_KEY) || ''
 }
 
 export function getEmbedApiKey(): string {
   const env = process.env.CHATBOT_EMBED_API_KEY
   if (env) return env.trim()
-  const gw = getDefaultProvider('embed')
-  if (gw?.apiKey) return gw.apiKey
   return getDb().getMeta(K_EMBED_KEY) || ''
 }
 

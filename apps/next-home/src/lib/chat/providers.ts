@@ -24,6 +24,7 @@ export const PROVIDERS: ProviderPreset[] = [
   { id: 'siliconflow', name: '硅基流动 SiliconFlow', protocol: 'openai', baseUrl: 'https://api.siliconflow.cn/v1', embeddings: true },
   { id: 'openrouter', name: 'OpenRouter', protocol: 'openai', baseUrl: 'https://openrouter.ai/api/v1', embeddings: false },
   { id: 'opencode-z', name: 'OpenCode Go', protocol: 'openai', baseUrl: 'https://opencode.ai/zen/go/v1', embeddings: false },
+  { id: 'zx-gateway', name: '博客 AI 网关', protocol: 'openai', baseUrl: '', embeddings: true },
   { id: 'custom', name: '自定义(OpenAI 兼容)', protocol: 'openai', baseUrl: '', embeddings: true },
 ]
 

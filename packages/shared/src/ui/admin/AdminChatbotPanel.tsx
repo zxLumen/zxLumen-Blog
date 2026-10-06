@@ -765,6 +765,23 @@ const [logQDebounced, setLogQDebounced] = useState('')
     }
   }
 
+  const createToken = async (kind: 'chat' | 'embed') => {
+    try {
+      const r = await adminFetch('/api/admin/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create-token' }),
+      })
+      const d = (await r.json().catch(() => ({}))) as { token?: string; error?: string }
+      if (!r.ok || !d.token) throw new Error(d.error || '创建失败')
+      if (kind === 'chat') setChatKey(d.token)
+      else setEmbedKey(d.token)
+      notify('ok', '已生成令牌,记得点「保存」')
+    } catch (e) {
+      notify('err', e instanceof Error ? e.message : '创建失败')
+    }
+  }
+
   const save = async () => {
     if (!cfg) return
     setSaving(true)
@@ -1141,7 +1158,20 @@ const clearLogs = async () => {
           </label>
         </div>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>聊天 API Key 已统一在「AI 密钥」页管理(取「默认对话」密钥;回退环境变量 CHATBOT_API_KEY)</span>
+          {cfg.chatProvider === 'zx-gateway' ? (
+            <>
+              <input className="zx-input" type="password" style={{ maxWidth: 300, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+                placeholder={cfg.chatApiKey ? `已配置 ${cfg.chatApiKey}` : '应用令牌(经博客 AI 网关)'} value={chatKey} onChange={(e) => setChatKey(e.target.value)} autoComplete="off" />
+              <button type="button" className="zx-btn zx-btn-sm" onClick={() => void createToken('chat')}>创建令牌</button>
+              <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>在「AI 密钥」页可见并统计用量</span>
+            </>
+          ) : (
+            <>
+              <input className="zx-input" type="password" style={{ maxWidth: 280, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+                placeholder={cfg.chatApiKey ? `已配置 ${cfg.chatApiKey}(留空不改)` : '聊天 API Key'} value={chatKey} onChange={(e) => setChatKey(e.target.value)} autoComplete="off" />
+              <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>回退环境变量 CHATBOT_API_KEY;Key 仅存服务器</span>
+            </>
+          )}
         </div>
         <textarea className="zx-input zx-textarea" style={{ marginTop: '0.6rem' }} rows={4} placeholder="语气样本(每行一条;供 AI 生成问候时参考口吻,不直接展示)" value={(cfg.greetings ?? []).join('\n')} onChange={(e) => set('greetings', e.target.value.split(/[\n、]/).map((s) => s.trim()).filter(Boolean))} />
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.4rem' }}>
@@ -1194,7 +1224,16 @@ const clearLogs = async () => {
             维数
             <input className="zx-input" style={{ maxWidth: 80 }} type="number" value={cfg.embedDim} onChange={(e) => set('embedDim', num(e.target.value, 0))} />
           </label>
-          <span className="zx-muted zx-mono" style={{ fontSize: '0.66rem' }}>Embed Key 见「AI 密钥」页(取「默认向量」密钥)</span>
+          {cfg.embedProvider === 'zx-gateway' ? (
+            <>
+              <input className="zx-input" style={{ maxWidth: 260, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} type="password"
+                placeholder={cfg.embedApiKey ? `已配置 ${cfg.embedApiKey}` : '应用令牌(经博客 AI 网关)'} value={embedKey} onChange={(e) => setEmbedKey(e.target.value)} autoComplete="off" />
+              <button type="button" className="zx-btn zx-btn-sm" onClick={() => void createToken('embed')}>创建令牌</button>
+            </>
+          ) : (
+            <input className="zx-input" style={{ maxWidth: 260, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }} type="password"
+              placeholder={cfg.embedApiKey ? `已配置 ${cfg.embedApiKey}(留空不改)` : 'Embed API Key(本地 Ollama 可留空)'} value={embedKey} onChange={(e) => setEmbedKey(e.target.value)} autoComplete="off" />
+          )}
         </div>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="每次检索注入的知识块数量(1–10)">
