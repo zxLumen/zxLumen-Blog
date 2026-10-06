@@ -2,30 +2,33 @@ import { isAdmin } from '@/lib/auth'
 import { readJson } from '@/lib/db'
 import {
   clearMinimaxData,
+  fetchMinimaxHistory,
   fetchMinimaxQuota,
   getLastError,
   getMinimaxQuota,
+  getSession,
   getSnapshotStatus,
   getSubKey,
-  getSyncKey,
-  rotateSyncKey,
+  sessionExpiry,
+  setSession,
   setSubKey,
 } from '@/lib/minimax'
 
 export const dynamic = 'force-dynamic'
 
 async function status() {
-  const [key, snap, err, subKey, quota] = await Promise.all([
-    getSyncKey(),
+  const [snap, err, subKey, session, quota] = await Promise.all([
     getSnapshotStatus(),
     getLastError(),
     getSubKey(),
+    getSession(),
     Promise.resolve(getMinimaxQuota()),
   ])
   return {
-    syncKey: key,
-    configured: !!subKey || !!snap,
+    configured: !!subKey || !!session || !!snap,
     subKeySet: !!subKey,
+    sessionSet: !!session,
+    sessionExp: session ? sessionExpiry(session) : null,
     quota: quota || null,
     lastData: snap || null,
     lastError: err || null,
@@ -39,10 +42,11 @@ export async function GET() {
 
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const body = await readJson<{ action?: string; key?: string }>(req).catch(() => null)
+  const body = await readJson<{ action?: string; key?: string; cookie?: string }>(req).catch(() => null)
   const action = body?.action
 
-  if (action === 'save') {
+  // 订阅 Key → 额度自动同步
+  if (action === 'saveKey') {
     const key = (body?.key ?? '').trim()
     if (!key) return Response.json({ error: '请粘贴订阅 Key' }, { status: 400 })
     if (!/^sk-/.test(key)) return Response.json({ error: 'Key 应以 sk- 开头(订阅 Key 形如 sk-cp-...)' }, { status: 400 })
@@ -55,13 +59,24 @@ export async function POST(req: Request) {
     }
   }
 
-  if (action === 'clear') {
-    clearMinimaxData()
-    return Response.json({ ok: true, ...(await status()) })
+  // 会话 Cookie → 逐天历史自动同步
+  if (action === 'saveSession') {
+    const cookie = (body?.cookie ?? '').trim()
+    if (!cookie) return Response.json({ error: '请粘贴 Cookie' }, { status: 400 })
+    if (!cookie.includes('_token')) {
+      return Response.json({ error: 'Cookie 里没有 _token,请从 DevTools 复制 www.minimax.cn 请求的完整 Cookie' }, { status: 400 })
+    }
+    await setSession(cookie)
+    try {
+      const stored = await fetchMinimaxHistory('30d')
+      return Response.json({ ok: true, rows: stored.rows.length, records: stored.records, ...(await status()) })
+    } catch (e) {
+      return Response.json({ error: e instanceof Error ? e.message : '历史拉取失败', ...(await status()) }, { status: 400 })
+    }
   }
 
-  if (action === 'rotate') {
-    await rotateSyncKey()
+  if (action === 'clear') {
+    clearMinimaxData()
     return Response.json({ ok: true, ...(await status()) })
   }
 

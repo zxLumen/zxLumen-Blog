@@ -76,12 +76,14 @@ export interface ZhipuStatus {
 }
 
 export interface MmStatus {
-  /** 是否已配置(订阅 Key 或已有历史数据) */
+  /** 是否已配置(订阅 Key / 会话 Cookie / 已有数据) */
   configured?: boolean
   /** 是否已配置订阅 Key(额度自动同步) */
   subKeySet?: boolean
-  /** 同步密钥(书签 POST 用) */
-  syncKey?: string
+  /** 是否已配置会话 Cookie(历史自动同步) */
+  sessionSet?: boolean
+  /** 会话 Cookie 里 _token 的过期时间(ms) */
+  sessionExp?: number | null
   /** 最近一次额度快照 */
   quota?: MinimaxQuota | null
   /** 历史快照状态 */

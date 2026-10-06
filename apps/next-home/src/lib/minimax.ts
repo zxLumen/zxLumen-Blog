@@ -1,4 +1,3 @@
-import crypto from 'node:crypto'
 import type { UsageRow } from '@zx/shared'
 import { getDb } from './db'
 import { windowOf, type UsageFilter, type UsageRange } from './usage/range'
@@ -6,68 +5,59 @@ import { invalidateAvailability } from './usage-sources'
 import type { PlatformUsageBase } from './usage/types'
 
 /**
- * MiniMax 用量数据源。两条腿:
+ * MiniMax 用量数据源。两条腿,均**服务器端自动拉取**(一次性配置):
  *
- * 1. **额度(自动)**:订阅 Key(`sk-cp-...`)+ `Authorization: Bearer` →
- *    `GET https://api.minimax.cn/v1/token_plan/remains` → 按模型的 5 小时/周
- *    用量与剩余(和官方 `mmx quota` 同源)。`ensureMinimaxScheduler()` 每 10 分钟自动拉。
- * 2. **逐天历史(书签)**:`_token` 是 HttpOnly,JS 读不到 → 书签在 `*.minimax.cn`
- *    同源 fetch `usage_hourly_detail`(逐小时×模型×来源)POST 到 `/api/admin/minimax/sync`,
- *    服务端聚合入库。**Cookie 始终留在浏览器**。
+ * 1. **额度(订阅 Key)**:`Authorization: Bearer sk-cp-...` →
+ *    `GET https://api.minimax.cn/v1/token_plan/remains` → 按模型的 5 小时/周用量与剩余
+ *    (与官方 `mmx quota` 同源)。
+ * 2. **逐天历史(会话 Cookie)**:`_token` 是 HttpOnly,唯一能拉历史的凭证 →
+ *    粘贴一次(从 DevTools 复制的整段 Cookie)→ 服务器用它请求
+ *    `GET https://www.minimax.cn/backend/account/token_plan/usage_hourly_detail`
+ *    (逐小时×模型×来源,含 input/output/cache),≤30 天分块。
  *
- * 前端读库内快照,任意区间本地过滤。
+ * `ensureMinimaxScheduler()` 每 10 分钟自动拉两者。前端读库内快照,任意区间本地过滤。
  */
 
-const K_SYNC = 'minimax_sync_key'
-const K_SYNC_AT = 'minimax_sync_at'
 const K_DATA = 'minimax_sync_data'
+const K_SYNC_AT = 'minimax_sync_at'
 const K_ERR = 'minimax_last_error'
 const K_SUBKEY = 'minimax_sub_key'
 const K_QUOTA = 'minimax_quota'
+const K_SESSION = 'minimax_session'
 
-/** 开放平台 API 基址(额度接口;可被 env 覆盖) */
+/** 开放平台 API 基址(额度接口) */
 const API_BASE = (process.env.MINIMAX_API_BASE_URL || 'https://api.minimax.cn').replace(/\/$/, '')
 const REMAINS_PATH = '/v1/token_plan/remains'
-
-/* ---------- 同步密钥(跨站书签 POST 校验) ---------- */
-
-export async function getSyncKey(): Promise<string> {
-  const db = getDb()
-  let k = db.getMeta(K_SYNC)
-  if (!k) {
-    k = crypto.randomBytes(16).toString('hex')
-    db.setMeta(K_SYNC, k)
-  }
-  return k
-}
-
-export async function rotateSyncKey(): Promise<string> {
-  const k = crypto.randomBytes(16).toString('hex')
-  getDb().setMeta(K_SYNC, k)
-  return k
-}
-
-export function verifySyncKey(key: string): boolean {
-  if (!key) return false
-  return getDb().getMeta(K_SYNC) === key
-}
+/** 控制台 API 基址(历史接口) */
+const CONSOLE_BASE = (process.env.MINIMAX_CONSOLE_BASE_URL || 'https://www.minimax.cn').replace(/\/$/, '')
+const HOURLY_PATH = '/backend/account/token_plan/usage_hourly_detail'
 
 export const getLastError = async () => getDb().getMeta(K_ERR) ?? ''
 export const setLastError = async (e: string) => getDb().setMeta(K_ERR, e)
 
-/* ---------- 订阅 Key(额度自动同步) ---------- */
+/* ---------- 凭证 ---------- */
 
 export const getSubKey = async () => getDb().getMeta(K_SUBKEY) ?? ''
-export async function setSubKey(k: string) {
-  getDb().setMeta(K_SUBKEY, k.trim())
-}
-export function clearSubKey() {
-  const db = getDb()
-  db.setMeta(K_SUBKEY, '')
-  db.setMeta(K_QUOTA, '')
+export const setSubKey = async (k: string) => getDb().setMeta(K_SUBKEY, k.trim())
+
+export const getSession = async () => getDb().getMeta(K_SESSION) ?? ''
+export const setSession = async (c: string) => getDb().setMeta(K_SESSION, c.trim())
+
+/** 从会话 Cookie 里的 `_token`(JWT)解出过期时间(ms);失败返回 null */
+export function sessionExpiry(cookie: string): number | null {
+  const m = cookie.match(/(?:^|;\s*)_token=([^;]+)/)
+  if (!m) return null
+  const parts = decodeURIComponent(m[1]).split('.')
+  if (parts.length < 2) return null
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as { exp?: number }
+    return payload.exp ? payload.exp * 1000 : null
+  } catch {
+    return null
+  }
 }
 
-/* ---------- 额度类型 ---------- */
+/* ---------- 额度(订阅 Key) ---------- */
 
 export interface MinimaxQuotaModel {
   name: string
@@ -80,7 +70,6 @@ export interface MinimaxQuotaModel {
   weeklyResetMs?: number
   weeklyStatus?: number
 }
-
 export interface MinimaxQuota {
   models: MinimaxQuotaModel[]
   creditBalance?: number
@@ -104,7 +93,6 @@ interface RemainsResp {
 
 const clampPct = (n: number) => Math.max(0, Math.min(100, n))
 
-/** 拉取 M Plan 额度并落库(自动同步核心) */
 export async function fetchMinimaxQuota(): Promise<MinimaxQuota> {
   const key = await getSubKey()
   if (!key) throw new Error('未配置订阅 Key')
@@ -150,7 +138,6 @@ export async function fetchMinimaxQuota(): Promise<MinimaxQuota> {
   return quota
 }
 
-/** 读取最近一次额度快照 */
 export function getMinimaxQuota(): MinimaxQuota | null {
   const raw = getDb().getMeta(K_QUOTA)
   if (!raw) return null
@@ -162,32 +149,7 @@ export function getMinimaxQuota(): MinimaxQuota | null {
   }
 }
 
-/* ---------- 后台自动同步调度(额度) ---------- */
-
-const SCHEDULE_MS = 10 * 60_000
-
-export function ensureMinimaxScheduler(): void {
-  const g = globalThis as unknown as { __mmInit?: boolean; __mmTimer?: ReturnType<typeof setInterval> }
-  if (g.__mmInit) return
-  g.__mmInit = true
-
-  const tick = () => {
-    void (async () => {
-      try {
-        if (!(await getSubKey())) return
-        await fetchMinimaxQuota()
-      } catch (e) {
-        await setLastError(e instanceof Error ? e.message : '额度同步失败')
-        invalidateAvailability()
-      }
-    })()
-  }
-  tick()
-  g.__mmTimer = setInterval(tick, SCHEDULE_MS)
-  ;(g.__mmTimer as unknown as { unref?: () => void }).unref?.()
-}
-
-/* ---------- 逐天历史(书签推送) ---------- */
+/* ---------- 逐天历史(会话 Cookie) ---------- */
 
 export interface MinimaxEntry {
   time_range?: string
@@ -199,12 +161,6 @@ export interface MinimaxEntry {
   cache_read_token?: number | null
   cache_create_token?: number | null
   [k: string]: unknown
-}
-
-export interface MinimaxSyncPayload {
-  start?: string
-  end?: string
-  entries?: MinimaxEntry[]
 }
 
 export interface MinimaxStored {
@@ -268,17 +224,7 @@ export function aggregateMinimaxEntries(entries: MinimaxEntry[]): { rows: UsageR
   return { rows, rawCount: entries?.length ?? 0 }
 }
 
-export function setMinimaxSyncData(payload: MinimaxSyncPayload): MinimaxStored {
-  const start = String(payload.start ?? '').slice(0, 10)
-  const end = String(payload.end ?? '').slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-    throw new Error('start/end 需为 YYYY-MM-DD')
-  }
-  if (start > end) throw new Error('start 需 ≤ end')
-  const entries = Array.isArray(payload.entries) ? payload.entries : []
-  if (entries.length === 0) throw new Error('entries 为空')
-  const { rows, rawCount } = aggregateMinimaxEntries(entries)
-  if (rows.length === 0) throw new Error('聚合后无可用记录(全部为空或非 token 行)')
+function commitHistory(start: string, end: string, rows: UsageRow[], rawCount: number): MinimaxStored {
   const stored: MinimaxStored = { at: Date.now(), start, end, rows, records: rawCount }
   const db = getDb()
   db.setMeta(K_DATA, JSON.stringify(stored))
@@ -286,6 +232,56 @@ export function setMinimaxSyncData(payload: MinimaxSyncPayload): MinimaxStored {
   db.setMeta(K_ERR, '')
   invalidateAvailability()
   return stored
+}
+
+interface HourlyResp {
+  base_resp?: { status_code?: number; status_msg?: string }
+  entries?: MinimaxEntry[]
+  has_more?: boolean
+}
+
+/** 拉一个 ≤30 天的窗口(接口上限含首尾 30 天) */
+async function fetchHourlyWindow(cookie: string, start: string, end: string): Promise<MinimaxEntry[]> {
+  const url = `${CONSOLE_BASE}${HOURLY_PATH}?start_time=${start}&end_time=${end}`
+  let res: Response
+  try {
+    res = await fetch(url, {
+      headers: { Cookie: cookie, Accept: 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(25000),
+    })
+  } catch (e) {
+    throw new Error(e instanceof Error && e.name === 'TimeoutError' ? 'MiniMax 历史接口超时' : 'MiniMax 历史接口请求失败')
+  }
+  const j = (await res.json().catch(() => null)) as HourlyResp | null
+  const sc = j?.base_resp?.status_code
+  if (res.status === 401 || res.status === 403 || sc === 1004 || sc === 1005) {
+    throw new Error(j?.base_resp?.status_msg || '会话已失效,请重新粘贴 Cookie')
+  }
+  if (!res.ok || !j || (sc !== undefined && sc !== 0)) {
+    throw new Error(j?.base_resp?.status_msg || `历史接口返回错误(HTTP ${res.status})`)
+  }
+  return Array.isArray(j.entries) ? j.entries : []
+}
+
+const dayMs = 86400000
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+
+/** 拉区间历史(自动按 ≤30 天分块);落库并返回 */
+export async function fetchMinimaxHistory(range: UsageRange = '30d'): Promise<MinimaxStored> {
+  const cookie = await getSession()
+  if (!cookie) throw new Error('未配置会话 Cookie')
+  const { start, end } = windowOf(range)
+  const startMs = Date.parse(`${start}T00:00:00Z`)
+  const endMs = Date.parse(`${end}T00:00:00Z`)
+  const entries: MinimaxEntry[] = []
+  // 分块:每块 ≤30 天(含首尾 → 29 天差)
+  for (let s = startMs; s <= endMs; s += 29 * dayMs) {
+    const e = Math.min(s + 29 * dayMs, endMs)
+    entries.push(...(await fetchHourlyWindow(cookie, isoDay(s), isoDay(e))))
+  }
+  const { rows, rawCount } = aggregateMinimaxEntries(entries)
+  return commitHistory(start, end, rows, rawCount)
 }
 
 export function getLastSync(): MinimaxStored | null {
@@ -299,15 +295,45 @@ export function getLastSync(): MinimaxStored | null {
   }
 }
 
-/** 清除全部(额度 + 订阅 Key + 历史 + 错误) */
+/** 清除全部(额度 + 订阅 Key + 会话 + 历史 + 错误) */
 export function clearMinimaxData(): void {
   const db = getDb()
-  db.setMeta(K_DATA, '')
-  db.setMeta(K_SYNC_AT, '')
-  db.setMeta(K_ERR, '')
-  db.setMeta(K_SUBKEY, '')
-  db.setMeta(K_QUOTA, '')
+  for (const k of [K_DATA, K_SYNC_AT, K_ERR, K_SUBKEY, K_QUOTA, K_SESSION]) db.setMeta(k, '')
   invalidateAvailability()
+}
+
+/* ---------- 后台自动同步调度 ---------- */
+
+const SCHEDULE_MS = 10 * 60_000
+
+/** 每 10 分钟自动拉「额度(订阅 Key)」+「历史(会话 Cookie)」 */
+export function ensureMinimaxScheduler(): void {
+  const g = globalThis as unknown as { __mmInit?: boolean; __mmTimer?: ReturnType<typeof setInterval> }
+  if (g.__mmInit) return
+  g.__mmInit = true
+
+  const tick = () => {
+    void (async () => {
+      const errs: string[] = []
+      try {
+        if (await getSubKey()) await fetchMinimaxQuota()
+      } catch (e) {
+        errs.push(e instanceof Error ? e.message : '额度同步失败')
+      }
+      try {
+        if (await getSession()) await fetchMinimaxHistory('30d')
+      } catch (e) {
+        errs.push(e instanceof Error ? e.message : '历史同步失败')
+      }
+      if (errs.length) {
+        await setLastError(errs.join('; '))
+        invalidateAvailability()
+      }
+    })()
+  }
+  tick()
+  g.__mmTimer = setInterval(tick, SCHEDULE_MS)
+  ;(g.__mmTimer as unknown as { unref?: () => void }).unref?.()
 }
 
 /* ---------- 用量接口(纯本地,不打网络) ---------- */
@@ -336,18 +362,17 @@ export function getMinimaxUsage(range: UsageRange, filter?: UsageFilter): Platfo
   return { source: 'minimax', rows, models, apiKeys, currency: 'CNY', granularity: 'day', start, end }
 }
 
-/** 是否有可展示内容(额度快照 或 历史);供面板可用性探测 */
+/** 是否有可展示内容(额度 或 历史);供面板可用性探测 */
 export function hasMinimaxData(): boolean {
   const q = getMinimaxQuota()
   if (q && q.models.length > 0) return true
   const stored = getLastSync()
   if (!stored?.rows?.length) return false
-  const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+  const cutoff = new Date(Date.now() - 30 * dayMs).toISOString().slice(0, 10)
   const maxDay = stored.rows.reduce((m, r) => (r.ts.slice(0, 10) > m ? r.ts.slice(0, 10) : m), '')
   return !!maxDay && maxDay >= cutoff
 }
 
-/** admin 状态摘要(历史快照) */
 export async function getSnapshotStatus(): Promise<{ at: number; count: number; start?: string; end?: string } | null> {
   const stored = getLastSync()
   if (!stored) return null
