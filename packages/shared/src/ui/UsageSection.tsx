@@ -447,8 +447,8 @@ export function UsageSection({
     }
     if (dataSrc === 'minimax' && !fetchedLive) {
       if (at)
-        return `// MiniMax:数据来自书签同步快照 · 同步于 ${fmtAt(at)}${lastError ? ` · ${lastError}` : ''}`
-      return `// MiniMax:未同步 — 登录 minimax.cn 后在 admin「Token用量」拖「MiniMax 书签」到书签栏,点击即推送数据`
+        return `// MiniMax:服务器自动同步(每 10 分钟)· 更新于 ${fmtAt(at)}${lastError ? ` · ${lastError}` : ''}`
+      return `// MiniMax:未授权 — 登录 platform.minimax.cn 控制台后,在 admin「Token用量」点「MiniMax 书签」授权一次即可自动同步`
     }
     if (!fetchedLive) {
       if (usingMock) return '// 当前为 demo 数据;配置 DeepSeek 令牌(admin)或接入上报后显示真实用量'

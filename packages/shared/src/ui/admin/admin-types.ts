@@ -75,8 +75,14 @@ export interface ZhipuStatus {
 }
 
 export interface MmStatus {
-  /** 是否有书签推送的快照(用于面板显示「已同步 / 未同步」) */
+  /** 是否已授权(存有登录凭证) */
   configured?: boolean
+  /** 自动同步是否在跑(已授权且凭证未失效) */
+  autoSync?: boolean
+  /** 授权时间(ISO) */
+  authAt?: string | null
+  /** 凭证失效原因(需重新授权) */
+  authError?: string | null
   /** 同步密钥(书签 POST 用) */
   syncKey?: string
   /** 快照状态 */
