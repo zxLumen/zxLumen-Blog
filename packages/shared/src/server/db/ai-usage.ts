@@ -3,6 +3,7 @@ import type { AiUsageStore, NewAiUsageInput, SqliteDb } from './types.js'
 
 const mapAiUsage = (r: Record<string, unknown>): AiUsageRow => ({
   day: r.day as string,
+  hour: (r.hour as number) ?? 0,
   appId: r.app_id as string,
   providerId: (r.provider_id as string) ?? '',
   model: (r.model as string) ?? '',
@@ -16,15 +17,16 @@ export function aiUsageStore(db: SqliteDb): AiUsageStore {
   return {
     addAiUsage(input: NewAiUsageInput) {
       db.prepare(
-        `INSERT INTO ai_usage (day, app_id, provider_id, model, requests, input_tokens, output_tokens, cache_hit_tokens)
-         VALUES (@day, @app_id, @provider_id, @model, @requests, @input_tokens, @output_tokens, @cache_hit_tokens)
-         ON CONFLICT(day, app_id, provider_id, model) DO UPDATE SET
+        `INSERT INTO ai_usage (day, hour, app_id, provider_id, model, requests, input_tokens, output_tokens, cache_hit_tokens)
+         VALUES (@day, @hour, @app_id, @provider_id, @model, @requests, @input_tokens, @output_tokens, @cache_hit_tokens)
+         ON CONFLICT(day, hour, app_id, provider_id, model) DO UPDATE SET
            requests = requests + excluded.requests,
            input_tokens = input_tokens + excluded.input_tokens,
            output_tokens = output_tokens + excluded.output_tokens,
            cache_hit_tokens = cache_hit_tokens + excluded.cache_hit_tokens`,
       ).run({
         day: input.day,
+        hour: Math.max(0, Math.min(23, Math.round(input.hour ?? 0))),
         app_id: input.appId ?? '',
         provider_id: input.providerId ?? '',
         model: input.model ?? '',

@@ -32,9 +32,10 @@ CREATE TABLE IF NOT EXISTS usage (
 
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage(ts);
 
--- AI 网关用量(按 北京日 × 应用令牌 × 密钥池 × 模型 聚合;每次请求 upsert 累加)
+-- AI 网关用量(按 北京日 × 北京时 × 应用令牌 × 密钥池 × 模型 聚合;每次请求 upsert 累加)
 CREATE TABLE IF NOT EXISTS ai_usage (
   day             TEXT NOT NULL,                 -- 北京日 YYYY-MM-DD
+  hour            INTEGER NOT NULL DEFAULT 0,    -- 北京时 0-23
   app_id          TEXT NOT NULL,                 -- 应用令牌 id
   provider_id     TEXT NOT NULL DEFAULT '',      -- 密钥池 provider id
   model           TEXT NOT NULL DEFAULT '',
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   input_tokens    INTEGER NOT NULL DEFAULT 0,
   output_tokens   INTEGER NOT NULL DEFAULT 0,
   cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (day, app_id, provider_id, model)
+  PRIMARY KEY (day, hour, app_id, provider_id, model)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_day ON ai_usage(day);
@@ -209,9 +210,10 @@ export interface UsageRow {
   cost?: number
 }
 
-/** AI 网关用量行(按 北京日 × 应用 × 密钥池 × 模型 聚合) */
+/** AI 网关用量行(按 北京日 × 北京时 × 应用 × 密钥池 × 模型 聚合) */
 export interface AiUsageRow {
   day: string
+  hour: number
   appId: string
   providerId: string
   model: string

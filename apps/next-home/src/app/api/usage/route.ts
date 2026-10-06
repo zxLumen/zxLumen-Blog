@@ -384,19 +384,19 @@ function minimaxUsage(range: UsageRange, start?: string, end?: string) {
  * 行内 `apiKey` = 应用令牌名(应用维度),`serviceAccount` = 密钥池名(provider 维度)。
  */
 function gatewayUsage(range: UsageRange, start?: string, end?: string) {
-  const { rows, start: s, end: e } = getGatewayUsageRows(range, start || end ? { start, end } : undefined)
-  const models = Array.from(new Set(rows.map((r) => r.model))).sort()
-  const apiKeys = Array.from(new Set(rows.map((r) => r.apiKey ?? '').filter(Boolean))).sort()
+  const d = getGatewayUsageRows(range, start || end ? { start, end } : undefined)
+  const models = Array.from(new Set(d.rows.map((r) => r.model))).sort()
+  const apiKeys = Array.from(new Set(d.rows.map((r) => r.apiKey ?? '').filter(Boolean))).sort()
   return Response.json(
     {
       source: 'gateway',
-      rows,
+      rows: d.rows,
       models,
       apiKeys,
       currency: 'CNY',
-      granularity: 'day',
-      start: s,
-      end: e,
+      granularity: d.granularity,
+      start: d.start,
+      end: d.end,
       at: Date.now(),
     },
     { headers: noStore },

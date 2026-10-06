@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { AiUsageRow, UsageRange, UsageRow } from '@zx/shared'
 import { getDb } from './db'
-import { windowOf } from './usage/range'
+import { granularityOf, windowOf } from './usage/range'
 
 export const GATEWAY_META_KEY = 'ai_gateway_config'
 
@@ -226,6 +226,8 @@ export function resolveProvider(
 /* ---------- 用量(北京日 × 应用 × 密钥池 × 模型;存 ai_usage 表) ---------- */
 
 export const bjToday = () => new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
+/** 北京时 0-23 */
+export const bjHour = () => new Date(Date.now() + 8 * 3600_000).getUTCHours()
 
 /** 一行算作多少 tokens(input/output/cache 相加;cache 为 prompt 的子集,入库时已从 input 扣除) */
 const tokensOfAi = (r: AiUsageRow) => r.inputTokens + r.outputTokens + r.cacheHitTokens
@@ -256,6 +258,7 @@ export function recordGatewayUsage(input: {
 }): void {
   getDb().addAiUsage({
     day: bjToday(),
+    hour: bjHour(),
     appId: input.appId,
     providerId: input.providerId,
     model: input.model,
@@ -270,29 +273,46 @@ export function resetAppUsage(appId: string): void {
   getDb().resetAiUsage(appId)
 }
 
-/** 区间内网关用量 → UsageRow(apiKey=应用名,serviceAccount=密钥池名);供接口与 SSR 复用 */
+/** 区间内网关用量 → UsageRow(apiKey=应用名,serviceAccount=密钥池名);供接口与 SSR 复用。
+ *  今天/昨天按小时(24 格),其余区间聚合到天。 */
 export function getGatewayUsageRows(
   range: UsageRange,
   filter?: { start?: string; end?: string },
-): { rows: UsageRow[]; start: string; end: string } {
+): { rows: UsageRow[]; start: string; end: string; granularity: 'hour' | 'day' } {
   const win = windowOf(range, filter)
+  const hourly = granularityOf(range) === 'hour'
   const cfg = getGatewayConfig()
   const appName = new Map(cfg.apps.map((a) => [a.id, a.name || a.id]))
   const provName = new Map(cfg.providers.map((p) => [p.id, p.name || p.id]))
-  const rows: UsageRow[] = getDb()
-    .listAiUsage({ from: win.start, to: win.end })
-    .map((r) => ({
-      ts: `${r.day}T00:00:00Z`,
-      model: r.model || '(未指定模型)',
-      inputTokens: r.inputTokens,
-      outputTokens: r.outputTokens,
-      cacheHitTokens: r.cacheHitTokens,
-      requests: r.requests,
-      source: 'gateway',
-      apiKey: appName.get(r.appId) ?? r.appId,
-      serviceAccount: provName.get(r.providerId) ?? (r.providerId || '未绑定密钥'),
-    }))
-  return { rows, start: win.start, end: win.end }
+  const map = new Map<string, UsageRow>()
+  for (const r of getDb().listAiUsage({ from: win.start, to: win.end })) {
+    const app = appName.get(r.appId) ?? r.appId
+    const prov = provName.get(r.providerId) ?? (r.providerId || '未绑定密钥')
+    const model = r.model || '(未指定模型)'
+    const ts = hourly ? `${r.day}T${String(r.hour).padStart(2, '0')}:00:00Z` : `${r.day}T00:00:00Z`
+    const k = `${ts}|${model}|${app}|${prov}`
+    const cur = map.get(k)
+    if (cur) {
+      cur.inputTokens += r.inputTokens
+      cur.outputTokens += r.outputTokens
+      cur.cacheHitTokens += r.cacheHitTokens
+      cur.requests = (cur.requests ?? 0) + r.requests
+    } else {
+      map.set(k, {
+        ts,
+        model,
+        inputTokens: r.inputTokens,
+        outputTokens: r.outputTokens,
+        cacheHitTokens: r.cacheHitTokens,
+        requests: r.requests,
+        source: 'gateway',
+        apiKey: app,
+        serviceAccount: prov,
+      })
+    }
+  }
+  const rows = Array.from(map.values()).sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+  return { rows, start: win.start, end: win.end, granularity: hourly ? 'hour' : 'day' }
 }
 
 /** 校验额度:已用 + 本次预估是否超限;返回错误信息或 null */

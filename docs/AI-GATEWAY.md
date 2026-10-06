@@ -60,14 +60,14 @@ OpenCode Go 端点(`opencode.ai/zen/go`)要求 `x-opencode-session` 头,网关�
 
 ## 用量统计
 
-每次请求按 **北京日 × 应用令牌 × 密钥池(provider) × 模型** 累加进 SQLite 表 `ai_usage`
+每次请求按 **北京日 × 北京时 × 应用令牌 × 密钥池(provider) × 模型** 累加进 SQLite 表 `ai_usage`
 (`requests` / `input_tokens` / `output_tokens` / `cache_hit_tokens`)。
 首页「Token用量」新增 **AI 网关** 数据源(供应商 tab),按所选区间展示:
 
 - 总览(请求数 / 总 token / 输入 / 输出 / 缓存);
-- 每日趋势 + 按模型分布;
+- 趋势(**今天/昨天按小时,24 格**;其余按天)+ 按模型分布;
 - **按应用令牌** 与 **按密钥池(上游)** 两个维度的用量排行(可点击筛选);
-- 明细表(按天 × 模型,key 列 = 应用)。
+- 明细表(**今天/昨天按小时**记,其余按天;key 列 = 应用)。
 
 不显示成本(上游 baseUrl/模型任意,无统一价目)。
 

@@ -55,6 +55,10 @@ export function openDb(path: string): Db {
     throw new Error(`synchronous 期望 2(FULL),实际 ${sync}:设置未生效 —— 已中止启动`)
   }
 
+  // 迁移:ai_usage 增加 hour 维度(PK 变更无法 ALTER → 重建;该表为新表,重建安全)
+  const acols = (db.prepare('PRAGMA table_info(ai_usage)').all() as { name: string }[]).map((c) => c.name)
+  if (acols.length > 0 && !acols.includes('hour')) db.exec('DROP TABLE ai_usage')
+
   db.exec(SCHEMA_SQL)
 
   // 迁移:老库补列

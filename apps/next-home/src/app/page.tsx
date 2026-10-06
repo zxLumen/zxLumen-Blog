@@ -65,10 +65,11 @@ export default async function Home() {
     viewerCid,
   });
 
-  // 预取当前(存档/默认)数据源的 30 天用量;失败回退本地 usage 表(再空则前端用 mock)
+  // 预取当前(存档/默认)数据源、访客所选区间的用量;失败回退本地 usage 表(再空则前端用 mock)
   let usage: UsageRow[] | undefined;
   let usageWindow: { start?: string; end?: string } | undefined;
-  const ssr = await fetchSsrUsage(ssrSrc, "30d");
+  const ssrRange = initialSel.per[ssrSrc]?.range ?? "30d";
+  const ssr = await fetchSsrUsage(ssrSrc, ssrRange);
   if (ssr) {
     usage = ssr.rows;
     usageWindow = { start: ssr.start, end: ssr.end };

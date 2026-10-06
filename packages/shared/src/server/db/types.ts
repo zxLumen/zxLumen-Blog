@@ -42,9 +42,10 @@ export interface NewUsageInput {
   source?: string
 }
 
-/** AI 网关门关量入库(按天聚合累加) */
+/** AI 网关量入库(按天×时聚合累加) */
 export interface NewAiUsageInput {
   day: string
+  hour?: number
   appId?: string
   providerId?: string
   model?: string

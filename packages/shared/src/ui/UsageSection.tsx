@@ -96,7 +96,13 @@ export function UsageSection({
   const [live, setLive] = useState<UsageRow[] | null>(null)
   const [fetchedFor, setFetchedFor] = useState<{ range: Range; src: DataSource } | null>(null)
   const [source, setSource] = useState<'server' | 'deepseek' | 'opencode' | 'zhipu' | 'stale' | 'local' | 'none' | 'unconfigured' | 'invalid' | 'error'>('server')
-  const [granularity, setGranularity] = useState<'day' | 'hour'>('day')
+  // 首个渲染(SSR/hydration)先按「源 + 存档区间」推断粒度,避免今天/昨天先画成 1 根日柱;
+  // 客户端拉到数据后再以响应里的 granularity 为准。
+  const [granularity, setGranularity] = useState<'day' | 'hour'>(() => {
+    const r = initialSel?.per?.[dataSrc]?.range ?? '30d'
+    const hourlySrc = dataSrc === 'deepseek' || dataSrc === 'opencode' || dataSrc === 'gateway'
+    return hourlySrc && (r === 'today' || r === 'yesterday') ? 'hour' : 'day'
+  })
   const hourMode = granularity === 'hour'
   const [platformLimit, setPlatformLimit] = useState(false)
   const [currency, setCurrency] = useState<'CNY' | 'USD'>('CNY')
