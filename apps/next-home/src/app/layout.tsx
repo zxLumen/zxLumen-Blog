@@ -89,7 +89,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         >
           {children}
         </AppShell>
-        <LuminariFloatsClient />
+        <LuminariFloatsClient dismissable={appearance.floatsDismissable} />
       </body>
     </html>
   );

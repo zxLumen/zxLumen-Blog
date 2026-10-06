@@ -1,6 +1,6 @@
 'use client'
 
-import { Badge, Button, Checkbox, Group, Paper, Stack, Text, Title } from '@mantine/core'
+import { Badge, Button, Checkbox, Group, Paper, Stack, Switch, Text, Title } from '@mantine/core'
 import { useCallback, useEffect, useState } from 'react'
 import type { AppearanceConfig } from '../../theme.js'
 import { MantineBridge } from './mantine-bridge.js'
@@ -246,6 +246,21 @@ export function AdminThemePanel({
             <Text c="dimmed" fz="xs" ff="var(--font-mono)">
               提示:默认项必须处于放行集合内;取消勾选会自动把默认项切到集合内其它项。至少保留 1 个主题与 1 个布局。
             </Text>
+
+            <Paper withBorder radius={8} p="md">
+              <Stack gap="xs">
+                <Text fw={600} fz="sm">主页四周生灵</Text>
+                <Switch
+                  size="xs"
+                  checked={config.floatsDismissable}
+                  onChange={(e) => setConfig({ ...config, floatsDismissable: e.currentTarget.checked })}
+                  label="允许访客关闭主页四周的生灵展示"
+                />
+                <Text c="dimmed" fz="xs">
+                  开启后,访客(宽屏)可在右下角收起/重新显示生灵层,选择记在本机;关闭则不给收起入口,生灵层始终显示。
+                </Text>
+              </Stack>
+            </Paper>
           </>
         )}
       </Stack>

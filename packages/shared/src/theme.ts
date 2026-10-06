@@ -326,14 +326,17 @@ export interface AppearanceConfig {
   layouts: LayoutId[]
   defaultTheme: string
   defaultLayout: LayoutId
+  /** 是否允许访客关闭主页四周的生灵层(关闭后本站不再展示收起入口)。 */
+  floatsDismissable: boolean
 }
 
-/** 出厂默认配置:全部放行,默认 github-light / sidebar */
+/** 出厂默认配置:全部放行,默认 github-light / sidebar,允许访客关闭生灵层 */
 export const DEFAULT_APPEARANCE: AppearanceConfig = {
   themes: THEME_IDS,
   layouts: LAYOUT_IDS,
   defaultTheme: DEFAULT_THEME,
   defaultLayout: DEFAULT_LAYOUT,
+  floatsDismissable: true,
 }
 
 /** meta 表存储键 */

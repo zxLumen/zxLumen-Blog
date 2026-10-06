@@ -6,6 +6,6 @@ const LuminariFloats = dynamic(() => import("./LuminariFloats").then((m) => m.Lu
   ssr: false,
 });
 
-export function LuminariFloatsClient() {
-  return <LuminariFloats />;
+export function LuminariFloatsClient({ dismissable = false }: { dismissable?: boolean }) {
+  return <LuminariFloats dismissable={dismissable} />;
 }

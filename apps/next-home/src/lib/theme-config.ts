@@ -32,7 +32,11 @@ export function normalizeAppearance(raw: unknown): AppearanceConfig {
   const defaultLayout =
     safe.defaultLayout && finalLayouts.includes(safe.defaultLayout) ? safe.defaultLayout : finalLayouts[0]
 
-  return { themes: finalThemes, layouts: finalLayouts, defaultTheme, defaultLayout }
+  // 缺省放行访客关闭(旧配置没有该字段时按 true,保证功能默认可用)
+  const floatsDismissable =
+    typeof safe.floatsDismissable === 'boolean' ? safe.floatsDismissable : true
+
+  return { themes: finalThemes, layouts: finalLayouts, defaultTheme, defaultLayout, floatsDismissable }
 }
 
 /** 读取外观配置(admin 可配;缺省为全量放行) */

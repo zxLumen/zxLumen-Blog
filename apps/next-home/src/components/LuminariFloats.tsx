@@ -43,12 +43,19 @@ interface Turn {
   text: string;
 }
 
-export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: number }) {
+export function LuminariFloats({
+  refreshMs = 5 * 60 * 1000,
+  dismissable = false,
+}: {
+  refreshMs?: number;
+  dismissable?: boolean;
+}) {
   const [items, setItems] = useState<FieldCreature[]>(() => readFieldCache());
   const [turns, setTurns] = useState<Turn[]>([]);
   const [turnIdx, setTurnIdx] = useState(0);
   const [narrow, setNarrow] = useState(true);
   const [hover, setHover] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<boolean>(() => readHidden());
 
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trackRef = useRef<Record<string, number>>({}); // 沿周长的距离
@@ -120,7 +127,7 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
 
   // 严格沿四周行走:rAF 逐帧推进每只的周长进度,直接写 DOM transform(不走 React 重渲染)
   useLayoutEffect(() => {
-    if (narrow || !items.length) return;
+    if (narrow || hidden || !items.length) return;
     let raf = 0;
 
     const { x0, y0, x1, y1 } = pathRect();
@@ -187,7 +194,7 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [items, narrow]);
+  }, [items, narrow, hidden]);
 
   const live = useMemo(() => {
     const m = new Map<string, { cc: ReturnType<typeof compileBlueprint>; matureDay: number }>();
@@ -207,10 +214,27 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
   if (narrow || !items.length) return null;
 
   const active = turns.length ? turns[turnIdx % turns.length] : null;
+  const isHidden = dismissable && hidden;
 
   return (
-    <div className="cf-layer" aria-hidden>
-      {items.map((it) => {
+    <>
+      {dismissable ? (
+        <button
+          type="button"
+          className="cf-toggle"
+          aria-pressed={isHidden}
+          title={isHidden ? "显示四周生灵" : "收起四周生灵"}
+          onClick={() => {
+            const v = !isHidden;
+            setHidden(v);
+            writeHidden(v);
+          }}
+        >
+          {isHidden ? "✦ 生灵" : "✕ 收起"}
+        </button>
+      ) : null}
+      <div className="cf-layer" aria-hidden>
+        {isHidden ? null : items.map((it) => {
         const lc = live.get(it.id);
         const hovered = hover === it.id;
         const bubble = hovered ? it.say : active && active.id === it.id ? active.text : "";
@@ -247,8 +271,9 @@ export function LuminariFloats({ refreshMs = 5 * 60 * 1000 }: { refreshMs?: numb
             </div>
           </div>
         );
-      })}
-    </div>
+        })}
+      </div>
+    </>
   );
 }
 
@@ -376,6 +401,28 @@ function writeFieldCache(list: FieldCreature[]) {
       createdAt: it.createdAt,
     }));
     localStorage.setItem(FIELD_CACHE_KEY, JSON.stringify(slim));
+  } catch {
+    /* ignore */
+  }
+}
+
+/* ------------- 访客「收起生灵层」的本地偏好(每台设备一个) ------------- */
+
+const HIDE_KEY = "zx.luminari.floats.hidden";
+
+function readHidden(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(HIDE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeHidden(v: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(HIDE_KEY, v ? "1" : "0");
   } catch {
     /* ignore */
   }
