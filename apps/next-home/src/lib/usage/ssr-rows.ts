@@ -9,6 +9,7 @@ import {
 } from '../opencode'
 import { fetchUsageZhipu } from '../zhipu'
 import { getMinimaxUsage } from '../minimax'
+import { getGatewayUsageRows } from '../ai-gateway'
 
 export interface SsrUsage {
   rows: UsageRow[]
@@ -47,6 +48,11 @@ export async function fetchSsrUsage(src: DataSource, range: UsageRange = '30d'):
       // 书签推送快照,本地读,零延迟
       const d = getMinimaxUsage(range)
       if (d.rows.length === 0) return null
+      return { rows: d.rows, start: d.start, end: d.end }
+    }
+    if (src === 'gateway') {
+      // 自建网关用量,读本地表
+      const d = getGatewayUsageRows(range)
       return { rows: d.rows, start: d.start, end: d.end }
     }
     const d = await fetchUsage(range)

@@ -3,6 +3,7 @@ import { granularityOf } from '@/lib/usage/range'
 import { codeToSource, errorCode } from '@/lib/usage/errors'
 import { REPORT_TOKEN, readJson } from '@/lib/db'
 import { getDb } from '@/lib/db'
+import { getGatewayUsageRows } from '@/lib/ai-gateway'
 import { fetchUsage, getLastError, getLastRows, type UsageRange } from '@/lib/deepseek'
 import {
   fetchUsageOpenCodeWs,
@@ -378,6 +379,30 @@ function minimaxUsage(range: UsageRange, start?: string, end?: string) {
   )
 }
 
+/**
+ * AI 网关数据源:读本地 `ai_usage` 表(自建代理网关的按天×应用×密钥池×模型用量)。
+ * 行内 `apiKey` = 应用令牌名(应用维度),`serviceAccount` = 密钥池名(provider 维度)。
+ */
+function gatewayUsage(range: UsageRange, start?: string, end?: string) {
+  const { rows, start: s, end: e } = getGatewayUsageRows(range, start || end ? { start, end } : undefined)
+  const models = Array.from(new Set(rows.map((r) => r.model))).sort()
+  const apiKeys = Array.from(new Set(rows.map((r) => r.apiKey ?? '').filter(Boolean))).sort()
+  return Response.json(
+    {
+      source: 'gateway',
+      rows,
+      models,
+      apiKeys,
+      currency: 'CNY',
+      granularity: 'day',
+      start: s,
+      end: e,
+      at: Date.now(),
+    },
+    { headers: noStore },
+  )
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const raw = url.searchParams.get('range') || '30d'
@@ -394,6 +419,9 @@ export async function GET(req: Request) {
   }
   if (sourceParam === 'minimax') {
     return minimaxUsage(range, start, end)
+  }
+  if (sourceParam === 'gateway') {
+    return gatewayUsage(range, start, end)
   }
 
   const filter =

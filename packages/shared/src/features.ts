@@ -15,6 +15,8 @@ export const FEATURE_IDS = [
   'usage-zhipu',
   // Token用量 MiniMax 数据源(控制台消费明细 · 书签推送)
   'usage-minimax',
+  // Token用量 AI 网关数据源(自建代理网关 · 按应用/密钥池/模型)
+  'usage-gateway',
   // 首页统计区块(访客 PV/UV/趋势、留言、项目点击/简历下载)
   'visitor-stats',
 ] as const

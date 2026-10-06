@@ -115,6 +115,16 @@ async function collectErrors(): Promise<NonNullable<SourceAvailability['errors']
   return errors
 }
 
+/** AI 网关:近 30 天有 ai_usage 记录即在面板显示 */
+async function hasGatewayData(): Promise<boolean> {
+  try {
+    const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+    return getDb().listAiUsage({ from: cutoff }).length > 0
+  } catch {
+    return false
+  }
+}
+
 /** 计算各源可用性(已配置 + 近30天有数据),供面板隐藏空源;结果缓存 60s */
 export async function getSourceAvailability(): Promise<SourceAvailability> {
   // 顺带确保自建小时采样在跑(幂等;首页有访问即可,不依赖 admin 操作)
@@ -125,14 +135,15 @@ export async function getSourceAvailability(): Promise<SourceAvailability> {
   ensureMinimaxScheduler()
   const hit = availCache.get(AVAIL_KEY)
   if (hit) return hit
-  const [deepseek, opencode, zhipu, minimax, errors] = await Promise.all([
+  const [deepseek, opencode, zhipu, minimax, gateway, errors] = await Promise.all([
     hasDeepseekData(),
     hasOpenCodeData(),
     hasZhipuData(),
     hasMinimaxData(),
+    hasGatewayData(),
     collectErrors(),
   ])
-  const result: SourceAvailability = { deepseek, opencode, zhipu, minimax, errors }
+  const result: SourceAvailability = { deepseek, opencode, zhipu, minimax, gateway, errors }
   availCache.set(AVAIL_KEY, result)
   return result
 }

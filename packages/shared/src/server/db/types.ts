@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import type {
+  AiUsageRow,
   ChatDayCount,
   ChatLogRow,
   ChatSessionPage,
@@ -41,6 +42,18 @@ export interface NewUsageInput {
   source?: string
 }
 
+/** AI 网关门关量入库(按天聚合累加) */
+export interface NewAiUsageInput {
+  day: string
+  appId?: string
+  providerId?: string
+  model?: string
+  requests?: number
+  inputTokens?: number
+  outputTokens?: number
+  cacheHitTokens?: number
+}
+
 export interface NewFeedbackInput {
   cid?: string
   message: string
@@ -78,6 +91,12 @@ export interface Db {
   listUsage(days?: number): UsageRow[]
   allUsage(): UsageRow[]
   addUsage(input: NewUsageInput): UsageRow
+  /** AI 网关:累加一条(天×应用×密钥池×模型)用量 */
+  addAiUsage(input: NewAiUsageInput): void
+  /** AI 网关:区间用量行(北京日闭区间) */
+  listAiUsage(opts?: { from?: string; to?: string }): AiUsageRow[]
+  /** AI 网关:重置用量(按应用;不传则全部);返回删除条数 */
+  resetAiUsage(appId?: string): number
   /** 入库一条访客反馈,返回新行 id */
   addFeedback(input: NewFeedbackInput): number
   /** 更新反馈的发信状态(pending→sent/failed) */
@@ -182,6 +201,7 @@ export type CommentStore = Pick<
 >
 
 export type UsageStore = Pick<Db, 'listUsage' | 'allUsage' | 'addUsage'>
+export type AiUsageStore = Pick<Db, 'addAiUsage' | 'listAiUsage' | 'resetAiUsage'>
 export type FeedbackStore = Pick<Db, 'addFeedback' | 'setFeedbackStatus'>
 export type EventStore = Pick<Db, 'addEvent' | 'addEventOnce'>
 export type StatsStore = Pick<Db, 'stats'>

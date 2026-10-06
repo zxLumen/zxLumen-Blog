@@ -1,4 +1,5 @@
 import type { GoQuota, MinimaxQuota, ZhipuQuota } from './constants.js'
+import type { UsageRow } from '../../schema.js'
 
 const fmtReset = (v?: string | number) =>
   v
@@ -137,6 +138,60 @@ export function MinimaxQuotaPanel({ quota }: { quota: MinimaxQuota }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+const fmtTokens = (n: number) =>
+  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n)
+
+/** AI 网关:按「应用令牌」与「密钥池(上游)」两个维度的用量排行(令牌维度、请求数) */
+export function GatewayBreakdown({ rows }: { rows: UsageRow[] }) {
+  const agg = (get: (r: UsageRow) => string) => {
+    const m = new Map<string, { tokens: number; requests: number }>()
+    for (const r of rows) {
+      const k = get(r) || '(未绑定)'
+      const cur = m.get(k) ?? { tokens: 0, requests: 0 }
+      cur.tokens += r.inputTokens + r.outputTokens + r.cacheHitTokens
+      cur.requests += r.requests ?? 0
+      m.set(k, cur)
+    }
+    return Array.from(m, ([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.tokens - a.tokens)
+      .slice(0, 12)
+  }
+  const byApp = agg((r) => r.apiKey ?? '')
+  const byProv = agg((r) => r.serviceAccount ?? '')
+  const max = Math.max(1, ...byApp.map((x) => x.tokens), ...byProv.map((x) => x.tokens))
+  const list = (title: string, items: { name: string; tokens: number; requests: number }[]) => (
+    <div style={{ flex: 1, minWidth: 240 }}>
+      <div className="zx-quota-head" style={{ marginBottom: 4 }}>
+        <span className="zx-quota-label">{title}</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="zx-muted zx-mono" style={{ fontSize: '0.68rem' }}>暂无</div>
+      ) : (
+        items.map((x) => (
+          <div key={x.name} style={{ marginTop: 6 }}>
+            <div className="zx-quota-head">
+              <span className="zx-quota-label" style={{ fontWeight: 400 }}>{x.name}</span>
+              <span className="zx-quota-pct">
+                {fmtTokens(x.tokens)}
+                {x.requests ? ` · ${x.requests}次` : ''}
+              </span>
+            </div>
+            <div className="zx-quota-bar">
+              <span style={{ width: `${Math.round((x.tokens / max) * 100)}%` }} />
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', gap: '1.4rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
+      {list('按应用令牌', byApp)}
+      {list('按密钥池(上游)', byProv)}
     </div>
   )
 }

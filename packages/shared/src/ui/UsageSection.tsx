@@ -22,7 +22,7 @@ import {
   type MinimaxQuota,
   type ZhipuQuota,
 } from './usage/constants.js'
-import { GoQuotaPanel, MinimaxQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
+import { GatewayBreakdown, GoQuotaPanel, MinimaxQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
 import { RecentTable, UsageCharts } from './usage/UsageCharts.js'
 import { Pagination } from './Pagination.js'
 
@@ -106,11 +106,11 @@ export function UsageSection({
   const [zhipuQuota, setZhipuQuota] = useState<ZhipuQuota | null>(null)
   const [minimaxQuota, setMinimaxQuota] = useState<MinimaxQuota | null>(null)
   const [win, setWin] = useState<{ start?: string; end?: string }>(ssrWin ?? {})
-  const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [], minimax: [] })
+  const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [], minimax: [], gateway: [] })
   // 区间/自定义日期按数据源各自保存:切源自动切到该源的一套
   const [per, setPer] = useState<Record<DataSource, RangeSel>>(initialSel?.per ?? DEFAULT_SEL.per)
   const [pickedKeys, setPickedKeys] = useState<Record<DataSource, string[]>>(initialSel?.pickedKeys ?? DEFAULT_SEL.pickedKeys)
-  const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [], minimax: [] })
+  const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [], minimax: [], gateway: [] })
   const [picked, setPicked] = useState<Record<DataSource, string[]>>(initialSel?.picked ?? DEFAULT_SEL.picked)
   // OpenCode workspace 列表(来自接口)+ 选择(单选,空=全部/总用量)
   const [wsList, setWsList] = useState<{ id: string; name: string }[]>([])
@@ -216,7 +216,8 @@ export function UsageSection({
   const allData = useMemo(() => {
     if (fetchedLive) return live ?? []
     if (serverRows) return serverRows // SSR 首帧已带该源数据
-    if (dataSrc === 'opencode' || dataSrc === 'zhipu' || dataSrc === 'minimax') return [] // 实时拉取前留空,避免混入其它源
+    if (dataSrc === 'opencode' || dataSrc === 'zhipu' || dataSrc === 'minimax' || dataSrc === 'gateway')
+      return [] // 实时/本地拉取前留空,避免混入其它源
     return genMockUsage(30)
   }, [fetchedLive, live, serverRows, dataSrc])
   const usingMock = dataSrc === 'deepseek' && !fetchedLive && !serverRows
@@ -281,7 +282,7 @@ export function UsageSection({
   const fmtCost = currency === 'USD' ? fmtUsd : fmtCny
   const rowLabel = (r: UsageRow) =>
     hourMode ? `${fmtDate(r.ts)} ${r.ts.slice(11, 13)}:00` : fmtDate(r.ts)
-  const keyLabel = dataSrc === 'opencode' ? 'service account' : 'key'
+  const keyLabel = dataSrc === 'opencode' ? 'service account' : dataSrc === 'gateway' ? '应用' : 'key'
   // RECENT 明细的 key 列取值:opencode 显示服务账号(多工作区已带 `工作区 · ` 前缀),其余显示 apiKey
   const keyOf = (r: UsageRow) => (dataSrc === 'opencode' ? r.serviceAccount ?? '' : r.apiKey ?? '')
 
@@ -433,7 +434,16 @@ export function UsageSection({
   const fmtAt = (t?: number) => (t ? new Date(t).toLocaleString() : '—')
   const rangeWin = win.start && win.end ? `${win.start} ~ ${win.end}` : ''
   const note = (() => {
-    const srcName = dataSrc === 'opencode' ? 'OpenCode 官方 Console' : dataSrc === 'zhipu' ? '智谱 monitor API' : dataSrc === 'minimax' ? 'MiniMax 官方 API 用量' : 'DeepSeek 平台'
+    const srcName =
+      dataSrc === 'opencode'
+        ? 'OpenCode 官方 Console'
+        : dataSrc === 'zhipu'
+          ? '智谱 monitor API'
+          : dataSrc === 'minimax'
+            ? 'MiniMax 官方 API 用量'
+            : dataSrc === 'gateway'
+              ? '自建 AI 网关'
+              : 'DeepSeek 平台'
     if (dataSrc === 'opencode' && !fetchedLive) {
       if (source === 'unconfigured')
         return `// OpenCode:未配置 workspace(在 admin「Token用量」里添加 workspace + oc_sk_ Key)${lastError ? ` · ${lastError}` : ''}`
@@ -451,7 +461,10 @@ export function UsageSection({
     if (dataSrc === 'minimax' && !fetchedLive) {
       if (at)
         return `// MiniMax:服务器自动同步(每 10 分钟)· 更新于 ${fmtAt(at)}${lastError ? ` · ${lastError}` : ''}`
-      return `// MiniMax:未授权 — 登录 platform.minimax.cn 控制台后,在 admin「Token用量」点「MiniMax 书签」授权一次即可自动同步`
+      return `// MiniMax:未配置 — 在 admin「Token用量」粘贴订阅 Key(额度)与会话 Cookie(逐天趋势)后自动同步`
+    }
+    if (dataSrc === 'gateway' && !fetchedLive) {
+      return `// AI 网关:自建代理网关(按天 × 应用令牌 × 密钥池 × 模型)`
     }
     if (!fetchedLive) {
       if (usingMock) return '// 当前为 demo 数据;配置 DeepSeek 令牌(admin)或接入上报后显示真实用量'
@@ -589,14 +602,14 @@ export function UsageSection({
         ))}
       </div>
 
-      {dataSrc === 'opencode' && saList.length > 0 && (
-        <div className="zx-seg" role="group" aria-label="服务账号筛选">
+      {(dataSrc === 'opencode' || dataSrc === 'gateway') && saList.length > 0 && (
+        <div className="zx-seg" role="group" aria-label={dataSrc === 'gateway' ? '密钥池筛选' : '服务账号筛选'}>
           <button
             type="button"
             className={`zx-chip${curPickedSa.length === 0 ? ' is-active' : ''}`}
             onClick={clearPickedSa}
           >
-            全部服务账号
+            {dataSrc === 'gateway' ? '全部密钥池' : '全部服务账号'}
           </button>
           {saList.map((sa) => (
             <button
@@ -612,13 +625,13 @@ export function UsageSection({
       )}
 
       {keys.length > 0 && dataSrc !== 'opencode' && (
-        <div className="zx-seg" role="group" aria-label="API Key 筛选">
+        <div className="zx-seg" role="group" aria-label={dataSrc === 'gateway' ? '应用筛选' : 'API Key 筛选'}>
           <button
             type="button"
             className={`zx-chip${curPickedKeys.length === 0 ? ' is-active' : ''}`}
             onClick={clearPickedKeys}
           >
-            全部 API Key
+            {dataSrc === 'gateway' ? '全部应用' : '全部 API Key'}
           </button>
           {keys.map((k) => (
             <button
@@ -656,11 +669,15 @@ export function UsageSection({
             <div className="zx-stat-label">请求数</div>
           </div>
         )}
-        <div className="zx-stat">
-          <div className="zx-stat-now">{fmtCost(totalCost)}</div>
-          <div className="zx-stat-label">成本 · {rangeLabel(range)}</div>
-        </div>
+        {dataSrc !== 'gateway' && (
+          <div className="zx-stat">
+            <div className="zx-stat-now">{fmtCost(totalCost)}</div>
+            <div className="zx-stat-label">成本 · {rangeLabel(range)}</div>
+          </div>
+        )}
       </div>
+
+      {dataSrc === 'gateway' && <GatewayBreakdown rows={active} />}
 
       <UsageCharts
         hourMode={hourMode}

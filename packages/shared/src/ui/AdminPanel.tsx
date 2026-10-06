@@ -12,6 +12,7 @@ import { AdminVlogPanel } from './admin/AdminVlogPanel.js'
 import { AdminAppsPanel } from './admin/AdminAppsPanel.js'
 import { AdminThemePanel } from './admin/AdminThemePanel.js'
 import { AdminChatbotPanel } from './admin/AdminChatbotPanel.js'
+import { AdminAiPanel } from './admin/AdminAiPanel.js'
 import { VisitorDetailRow } from './admin/VisitorDetailRow.js'
 import { adminFetch } from './admin/admin-fetch.js'
 import {
@@ -859,7 +860,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
         <div className="zx-tabs is-inline">
-          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'vlog', 'apps', 'themes', 'chatbot'] as const).map((t) => (
+          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'vlog', 'apps', 'themes', 'chatbot', 'ai'] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -884,7 +885,9 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
                               ? '外观'
                               : t === 'chatbot'
                                 ? '机器人'
-                                : 'Token用量'}
+                                : t === 'ai'
+                                  ? 'AI 密钥'
+                                  : 'Token用量'}
             </button>
           ))}
         </div>
@@ -922,7 +925,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       )}
 
       {tab === 'ai' && (
-        <></>
+        <AdminAiPanel active onNotify={(m) => setMsg(m)} showTabs tab={tab} />
       )}
 
       {tab === 'profile' && (

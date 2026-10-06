@@ -1,0 +1,107 @@
+# AI 网关与统一密钥
+
+主站(zxLumen-Blog)作为**唯一的大模型密钥持有方**,对外暴露一个 **OpenAI 兼容代理网关**。
+旗下所有应用(聊天机器人、luminari、Opentodo、yijing64、StockApp、RAG-Knowledge-QA…)
+都经该网关调用大模型,**真实 provider key 只存主站数据库**,不下发到子应用。
+
+> 「Token用量」里的智谱 / DeepSeek / OpenCode 凭据是**用量监控**专用,与本网关无关,仍各自独立管理。
+
+## 网关接口
+
+OpenAI 兼容,透传到上游:
+
+| 路径 | 用途 |
+| --- | --- |
+| `POST /api/ai/v1/chat/completions` | 对话补全(支持流式 SSE) |
+| `POST /api/ai/v1/embeddings` | 向量 |
+| `GET /api/ai/v1/models` | 模型列表 |
+
+地址:
+- 公网:`https://${DOMAIN}/api/ai/v1`
+- 容器内网(推荐,子应用同处 `web` 网络):`http://app:3000/api/ai/v1`
+
+## 鉴权
+
+请求头二选一,值为**应用令牌**(admin「AI 密钥」页为每个应用签发):
+
+```
+Authorization: Bearer zxai_xxxxxxxx...
+# 或
+x-zx-app-token: zxai_xxxxxxxx...
+```
+
+无令牌 / 令牌无效 → `401`;超额 → `429`;上游不可达 → `502`。
+令牌可随时在面板禁用或「重新生成」。
+
+## 路由与模型
+
+网关按如下顺序选上游密钥:
+1. 该令牌**绑定的密钥**(`providerId`);
+2. 否则按请求体 `model` 在密钥池里匹配(`models` 字段);
+3. 否则用**默认对话 / 默认向量**密钥。
+
+**模型选择优先级**(高 → 低):
+1. 应用令牌的「固定模型」;
+2. 该密钥的「默认模型」;
+3. 子应用请求体里的 `model`。
+
+密钥池提供常见供应商预设(OpenCode Go/Zen、DeepSeek、智谱、OpenAI、百炼、Moonshot、
+硅基流动、OpenRouter、Ollama),选中即自动填 baseUrl;密钥池与令牌都支持「拉取模型」
+(读上游 `GET /models`)后下拉选择;不选则自动回退下一级。
+上游 `baseUrl` 由密钥决定,子应用只发 `model`(或完全不发)。
+OpenCode Go 端点(`opencode.ai/zen/go`)要求 `x-opencode-session` 头,网关会自动补上,子应用无需处理。
+
+## 额度限流
+
+每个令牌可设 **每日 token 上限** 与 **总量 token 上限**(0 = 不限)。
+网关按上游返回的 `usage` 累计(prompt/completion/cached),北京时间日切;
+流式请求网关会自动补 `stream_options.include_usage` 以拿到 usage。超限直接 `429`。
+面板可查看今日 / 累计用量并「重置用量」。
+
+## 用量统计
+
+每次请求按 **北京日 × 应用令牌 × 密钥池(provider) × 模型** 累加进 SQLite 表 `ai_usage`
+(`requests` / `input_tokens` / `output_tokens` / `cache_hit_tokens`)。
+首页「Token用量」新增 **AI 网关** 数据源(供应商 tab),按所选区间展示:
+
+- 总览(请求数 / 总 token / 输入 / 输出 / 缓存);
+- 每日趋势 + 按模型分布;
+- **按应用令牌** 与 **按密钥池(上游)** 两个维度的用量排行(可点击筛选);
+- 明细表(按天 × 模型,key 列 = 应用)。
+
+不显示成本(上游 baseUrl/模型任意,无统一价目)。
+
+
+## 子应用接入
+
+子应用的 AI 配置(provider + baseURL + key)改为指向网关:
+
+| 项 | 值 |
+| --- | --- |
+| provider | 博客 AI 网关(OpenAI 兼容) |
+| baseURL | `http://app:3000/api/ai/v1`(内网)或 `https://${DOMAIN}/api/ai/v1` |
+| apiKey | 该应用的接入令牌(面板复制) |
+| model | 照常填写(网关按它路由;或由令牌固定) |
+
+- luminari / Opentodo / yijing64 / StockApp:`web/lib/providers.js` + `settings.js`
+- RAG-Knowledge-QA:`src/qa/providers.py` + `src/qa/llm_config.py`
+- 各应用均保留「直连」选项,便于本地开发(默认走网关)。
+
+部署时经 `docker-compose.yml` 注入(见主仓 compose 各服务):
+
+```
+ZX_AI_GATEWAY_URL=http://app:3000/api/ai/v1
+ZX_AI_APP_TOKEN=<面板复制的令牌>
+```
+
+## 与聊天机器人的关系
+
+主站聊天机器人的 Chat / Embedding 密钥也取自本网关的「默认对话 / 默认向量」密钥
+(环境变量 `CHATBOT_API_KEY` / `CHATBOT_EMBED_API_KEY` 仍优先)。
+旧键 `chatbot_chat_key` / `chatbot_embed_key` 会在首次打开面板时**自动迁移**进密钥池。
+
+## 安全
+
+- 真实 key 只存服务器 SQLite(`meta.ai_gateway_config`),面板只回掩码。
+- 令牌明文存库以便复制,不进镜像 / 不进 git。
+- 网关仅接受已签发令牌,未授权请求一律拒绝。

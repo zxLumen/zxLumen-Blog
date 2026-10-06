@@ -71,7 +71,7 @@ export { genMockUsage, dailyAggregate, modelAggregate } from './mock.js'
 
 // 数据库 schema
 export { SCHEMA_SQL } from './schema.js'
-export type { CommentRow, PagedComments, UsageRow, Visibility, EventType, NewEventInput, DayPoint, StatsResult, VisitorDetail, VisitorEvent } from './schema.js'
+export type { CommentRow, PagedComments, UsageRow, AiUsageRow, Visibility, EventType, NewEventInput, DayPoint, StatsResult, VisitorDetail, VisitorEvent } from './schema.js'
 
 // 格式化
 export { fmtInt, fmtCompact, fmtCny, fmtUsd, fmtDate, fmtDateTime } from './format.js'

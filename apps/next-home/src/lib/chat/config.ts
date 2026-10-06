@@ -1,4 +1,5 @@
 import { getDb } from '../db'
+import { getDefaultProvider } from '../ai-gateway'
 import {
   getProvider,
   isEmbeddingModel,
@@ -155,12 +156,16 @@ export function embedProtocol(): ProviderProtocol {
 export function getChatApiKey(): string {
   const env = process.env.CHATBOT_API_KEY
   if (env) return env.trim()
+  const gw = getDefaultProvider('chat')
+  if (gw?.apiKey) return gw.apiKey
   return getDb().getMeta(K_CHAT_KEY) || ''
 }
 
 export function getEmbedApiKey(): string {
   const env = process.env.CHATBOT_EMBED_API_KEY
   if (env) return env.trim()
+  const gw = getDefaultProvider('embed')
+  if (gw?.apiKey) return gw.apiKey
   return getDb().getMeta(K_EMBED_KEY) || ''
 }
 
