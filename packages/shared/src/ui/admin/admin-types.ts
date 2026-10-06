@@ -1,4 +1,5 @@
 /** 后台各面板共用的类型定义 */
+import type { MinimaxQuota } from '../usage/constants.js'
 
 export interface NotifyMsg {
   kind: 'ok' | 'err'
@@ -75,11 +76,15 @@ export interface ZhipuStatus {
 }
 
 export interface MmStatus {
-  /** 是否已有同步数据 */
+  /** 是否已配置(订阅 Key 或已有历史数据) */
   configured?: boolean
+  /** 是否已配置订阅 Key(额度自动同步) */
+  subKeySet?: boolean
   /** 同步密钥(书签 POST 用) */
   syncKey?: string
-  /** 快照状态 */
+  /** 最近一次额度快照 */
+  quota?: MinimaxQuota | null
+  /** 历史快照状态 */
   lastData?: { at?: number; count?: number; start?: string; end?: string } | null
   /** 最近一次同步失败原因 */
   lastError?: string | null

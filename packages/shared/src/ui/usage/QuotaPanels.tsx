@@ -1,4 +1,4 @@
-import type { GoQuota, ZhipuQuota } from './constants.js'
+import type { GoQuota, MinimaxQuota, ZhipuQuota } from './constants.js'
 
 const fmtReset = (v?: string | number) =>
   v
@@ -95,6 +95,50 @@ export function ZhipuQuotaPanel({ quota }: { quota: ZhipuQuota }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** MiniMax M Plan 额度:按模型显示 5 小时 / 周 已用 % */
+export function MinimaxQuotaPanel({ quota }: { quota: MinimaxQuota }) {
+  // 只显示「进行中」的窗口(状态 1);未开始(0/2)/不在套餐(3)不显示。无状态字段时退回「有用量才显示」
+  const active = (status: number | undefined, usedPct: number) => (status === undefined ? usedPct > 0 : status === 1)
+  const cells = quota.models.flatMap((m) => {
+    const out: { key: string; label: string; pct: number; reset?: number }[] = []
+    if (active(m.intervalStatus, m.intervalUsedPct)) {
+      out.push({ key: `${m.name}-5h`, label: `${m.name} · 5 小时`, pct: m.intervalUsedPct, reset: m.intervalResetMs })
+    }
+    if (active(m.weeklyStatus, m.weeklyUsedPct)) {
+      out.push({ key: `${m.name}-wk`, label: `${m.name} · 本周`, pct: m.weeklyUsedPct, reset: m.weeklyResetMs })
+    }
+    return out
+  })
+  return (
+    <div className="zx-quota">
+      {cells.map((c) => {
+        const pct = Math.max(0, Math.min(100, Math.round(c.pct)))
+        const resetTxt = fmtReset(c.reset)
+        return (
+          <div className="zx-quota-item" key={c.key}>
+            <div className="zx-quota-head">
+              <span className="zx-quota-label">MiniMax · {c.label}</span>
+              <span className="zx-quota-pct">{pct}%</span>
+            </div>
+            <div className="zx-quota-bar">
+              <span style={{ width: `${pct}%` }} />
+            </div>
+            {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
+          </div>
+        )
+      })}
+      {typeof quota.creditBalance === 'number' && quota.creditBalance > 0 && (
+        <div className="zx-quota-item">
+          <div className="zx-quota-head">
+            <span className="zx-quota-label">MiniMax · 积分余额</span>
+            <span className="zx-quota-pct">{quota.creditBalance}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

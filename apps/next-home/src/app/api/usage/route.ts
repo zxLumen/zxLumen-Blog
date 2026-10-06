@@ -25,7 +25,7 @@ import {
   getLastRows as zhipuLastRows,
   getLastError as zhipuLastError,
 } from '@/lib/zhipu'
-import { getMinimaxUsage } from '@/lib/minimax'
+import { getMinimaxUsage, getMinimaxQuota } from '@/lib/minimax'
 import {
   isConsoleConfigured,
   syncConsoleLogs,
@@ -360,6 +360,7 @@ async function zhipuUsage(range: UsageRange, start?: string, end?: string) {
  */
 function minimaxUsage(range: UsageRange, start?: string, end?: string) {
   const d = getMinimaxUsage(range, start || end ? { start, end } : undefined)
+  const quota = getMinimaxQuota()
   return Response.json(
     {
       source: 'minimax',
@@ -371,6 +372,7 @@ function minimaxUsage(range: UsageRange, start?: string, end?: string) {
       start: d.start,
       end: d.end,
       at: Date.now(),
+      ...(quota ? { minimaxQuota: quota } : {}),
     },
     { headers: noStore },
   )

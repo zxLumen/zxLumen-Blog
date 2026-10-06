@@ -93,6 +93,7 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
   const [zpBusy, setZpBusy] = useState(false)
   const [mm, setMm] = useState<MmStatus | null>(null)
   const [mmBusy, setMmBusy] = useState(false)
+  const [mmKey, setMmKey] = useState('')
   // 前端 Token用量「数据源展示顺序」(admin 可调 ↑/↓)
   const [srcOrder, setSrcOrder] = useState<DataSource[] | null>(null)
   const [srcOrderBusy, setSrcOrderBusy] = useState(false)
@@ -525,40 +526,24 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
     return (head + body + '})()').replace(/\n\s*/g, ' ')
   }
 
-  /** 面板内「立即同步」:浏览器直连 www.minimax.cn(能否带 Cookie 取决于 SameSite) */
-  async function mmIngest() {
+  /** 保存订阅 Key 并立即验证额度(自动同步) */
+  async function mmSaveKey() {
+    if (!mmKey.trim()) return setMsg({ kind: 'err', text: '请先粘贴订阅 Key' })
     setMmBusy(true)
     setMsg(null)
     try {
-      const end = new Date()
-      const start = new Date(end.getTime() - 30 * 86400000)
-      const s = start.toISOString().slice(0, 10)
-      const e = end.toISOString().slice(0, 10)
-      const url = `https://www.minimax.cn/backend/account/token_plan/usage_hourly_detail?start_time=${s}&end_time=${e}`
-      const r = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } })
-      const j = (await r.json().catch(() => null)) as { base_resp?: { status_code?: number; status_msg?: string }; entries?: unknown[] } | null
-      const sc = j?.base_resp?.status_code
-      if (!r.ok || !j || (sc !== 0 && sc !== undefined)) {
-        throw new Error(
-          j?.base_resp?.status_msg ||
-            (sc === 1004 || r.status === 401
-              ? '浏览器未带登录 Cookie(可能 SameSite/第三方 Cookie 限制)——请改用「⇢ 拖到书签栏」在控制台点一次'
-              : `拉取失败 HTTP ${r.status}`),
-        )
-      }
-      const entries = (j.entries ?? []) as unknown[]
-      if (!entries.length) throw new Error('区间内无用量记录')
       const res = await adminFetch('/api/admin/minimax', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ingest', start: s, end: e, entries }),
+        body: JSON.stringify({ action: 'save', key: mmKey.trim() }),
       })
-      const d = (await res.json().catch(() => ({}))) as { error?: string; rows?: number }
+      const d = (await res.json().catch(() => ({}))) as { error?: string; models?: number }
       await loadMinimax()
-      if (!res.ok) throw new Error(d.error || '入库失败')
-      setMsg({ kind: 'ok', text: `已同步 · ${entries.length} 条 → ${d.rows ?? 0} 个聚合行` })
+      if (!res.ok) throw new Error(d.error || '验证失败')
+      setMmKey('')
+      setMsg({ kind: 'ok', text: `已保存 · 拉到 ${d.models ?? 0} 个模型的额度;之后每 10 分钟自动更新` })
     } catch (err) {
-      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '同步失败' })
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '验证失败' })
     } finally {
       setMmBusy(false)
     }
@@ -1462,61 +1447,82 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       {tab === 'token' && (
       <div className="zx-panel" style={{ marginBottom: '1rem' }}>
         <h3>
-          MiniMax 用量 <span>M Plan 逐小时用量 · 书签一键同步 · 按天×模型</span>
+          MiniMax 用量 <span>M Plan 额度自动同步 + 书签拉逐天历史</span>
         </h3>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
-          状态:{mm?.configured ? '已有同步数据' : '未同步(首次需点一次书签)'}
-          {mm?.lastData?.at
-            ? ` · 上次同步 ${mm.lastData.count ?? 0} 行 @ ${new Date(mm.lastData.at).toLocaleString()}`
-            : ''}
-          {mm?.lastData?.start && mm?.lastData?.end ? ` · 区间 ${mm.lastData.start} ~ ${mm.lastData.end}` : ''}
+          额度:
+          {mm?.subKeySet
+            ? mm?.quota?.models?.length
+              ? `✅ 自动同步中(${mm.quota.models.length} 个模型)`
+              : '已配置 Key(待首次拉取)'
+            : '未配置订阅 Key'}
+          {mm?.quota?.at ? ` · 更新于 ${new Date(mm.quota.at).toLocaleString()}` : ''}
+          <br />
+          历史:{mm?.lastData?.at
+            ? `${mm.lastData.count ?? 0} 行 @ ${new Date(mm.lastData.at).toLocaleString()} · ${mm.lastData.start ?? ''}~${mm.lastData.end ?? ''}`
+            : '未同步(可选:点书签拉最近 30 天逐天趋势)'}
         </p>
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <a
-            ref={mmBookmarkRef}
-            className="zx-btn zx-btn-sm zx-btn-primary"
-            draggable
-            title="拖到浏览器书签栏;在已登录的 platform.minimax.cn 控制台页面点击"
-            onClick={(e) => e.preventDefault()}
-            onDragStart={(e) => {
-              e.currentTarget.href = mmBookmarkHref
-            }}
-          >
-            ⇢ 拖到书签栏
-          </a>
-          <button
-            className="zx-btn zx-btn-sm"
-            onClick={() => void copyText(mmScript(), '书签脚本已复制(在 platform.minimax.cn 控制台 F12 → Console 粘贴回车)')}
-          >
-            复制书签脚本
-          </button>
-          <button className="zx-btn zx-btn-sm" disabled={mmBusy} onClick={() => void mmIngest()} title="浏览器直接拉取(需同浏览器已登录 minimax.cn)">
-            {mmBusy ? '同步中…' : '立即同步(浏览器直连)'}
-          </button>
-          <button
-            className="zx-btn zx-btn-sm zx-btn-ghost"
-            disabled={mmBusy}
-            onClick={() => {
-              if (confirm('轮换同步密钥?旧书签将失效,需重新拖一次')) void mmAction('rotate')
-            }}
-          >
-            轮换密钥
-          </button>
-          <button
-            className="zx-btn zx-btn-sm zx-btn-ghost"
-            disabled={mmBusy || !mm?.configured}
-            onClick={() => {
-              if (confirm('清除 MiniMax 同步数据?')) void mmAction('clear')
-            }}
-          >
-            清除数据
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              className="zx-input"
+              type="password"
+              style={{ maxWidth: 380, fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}
+              placeholder="粘贴订阅 Key(sk-cp-...)— 额度自动同步"
+              value={mmKey}
+              onChange={(e) => setMmKey(e.target.value)}
+              autoComplete="off"
+            />
+            <button className="zx-btn zx-btn-sm zx-btn-primary" disabled={mmBusy || !mmKey.trim()} onClick={() => void mmSaveKey()}>
+              {mmBusy ? '验证中…' : '保存并验证'}
+            </button>
+            <button
+              className="zx-btn zx-btn-sm zx-btn-ghost"
+              disabled={mmBusy || !mm?.configured}
+              onClick={() => {
+                if (confirm('清除 MiniMax 订阅 Key 与所有数据?')) void mmAction('clear')
+              }}
+            >
+              清除
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <a
+              ref={mmBookmarkRef}
+              className="zx-btn zx-btn-sm"
+              draggable
+              title="拖到浏览器书签栏;在已登录的 platform.minimax.cn 控制台页面点击"
+              onClick={(e) => e.preventDefault()}
+              onDragStart={(e) => {
+                e.currentTarget.href = mmBookmarkHref
+              }}
+            >
+              ⇢ 拖书签拉逐天历史
+            </a>
+            <button
+              className="zx-btn zx-btn-sm"
+              onClick={() => void copyText(mmScript(), '书签脚本已复制(在 platform.minimax.cn 控制台 F12 → Console 粘贴回车)')}
+            >
+              复制书签脚本
+            </button>
+            <button
+              className="zx-btn zx-btn-sm zx-btn-ghost"
+              disabled={mmBusy}
+              onClick={() => {
+                if (confirm('轮换书签同步密钥?旧书签将失效,需重新拖一次')) void mmAction('rotate')
+              }}
+            >
+              轮换书签密钥
+            </button>
+          </div>
         </div>
         <p className="zx-muted zx-mono" style={{ fontSize: '0.68rem', marginTop: '0.6rem', lineHeight: 1.6 }}>
-          用法(无需 F12):① 登录 <span className="zx-accent">platform.minimax.cn</span>(控制台)后,把「⇢ 拖到书签栏」拖到浏览器书签栏;
-          ② 在该已登录页面点书签 → 书签同源拉取最近 30 天 <span className="zx-accent">usage_hourly_detail</span>(逐小时 × 模型 × 来源,含 input/output/cache)
-          并推送到本站;③ 或点「立即同步(浏览器直连)」试试零点击(能否带 Cookie 取决于浏览器 SameSite/第三方 Cookie 策略,失败就用书签)。
-          Cookie 始终留在浏览器、<span className="zx-accent">不上服务器</span>;服务器零凭证。成本按 MiniMax 官方单价折算。
+          ① <span className="zx-accent">额度(自动)</span>:在 <span className="zx-accent">platform.minimaxi.cn/console/plan</span> 复制订阅 Key(
+          <span className="zx-accent">sk-cp-...</span>)粘贴保存 → 服务器每 10 分钟自动拉取,面板显示按模型的 5 小时/本周用量与剩余。
+          Key 仅存服务器、不下发前端。
+          <br />
+          ② <span className="zx-accent">逐天历史(可选)</span>:登录 <span className="zx-accent">platform.minimax.cn</span> 控制台后,把「⇢ 拖书签拉逐天历史」拖到书签栏并在该页点一下
+          → 书签同源拉取最近 30 天 <span className="zx-accent">usage_hourly_detail</span>(逐小时×模型×来源)推送到本站;会话 Cookie 始终留在浏览器。
         </p>
         {mm?.lastError && <div className="zx-msg err">{mm.lastError}</div>}
       </div>

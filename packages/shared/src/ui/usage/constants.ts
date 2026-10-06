@@ -80,3 +80,25 @@ export interface ZhipuQuota {
   limits: ZhipuQuotaLimit[]
   level?: string
 }
+
+/** MiniMax M Plan 额度(来自 /v1/token_plan/remains,按模型) */
+export interface MinimaxQuotaModel {
+  name: string
+  /** 5 小时窗口 */
+  intervalUsedPct: number
+  intervalRemainingPct: number
+  intervalResetMs?: number
+  /** 窗口状态(1=进行中;0/2=未开始;3=不在套餐) */
+  intervalStatus?: number
+  /** 周窗口 */
+  weeklyUsedPct: number
+  weeklyRemainingPct: number
+  weeklyResetMs?: number
+  weeklyStatus?: number
+}
+
+export interface MinimaxQuota {
+  models: MinimaxQuotaModel[]
+  creditBalance?: number
+  at?: number
+}

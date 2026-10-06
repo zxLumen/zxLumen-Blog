@@ -19,9 +19,10 @@ import {
   RANGES,
   SOURCES,
   type GoQuota,
+  type MinimaxQuota,
   type ZhipuQuota,
 } from './usage/constants.js'
-import { GoQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
+import { GoQuotaPanel, MinimaxQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
 import { RecentTable, UsageCharts } from './usage/UsageCharts.js'
 import { Pagination } from './Pagination.js'
 
@@ -103,6 +104,7 @@ export function UsageSection({
   const [lastError, setLastError] = useState<string | undefined>()
   const [hourlySource, setHourlySource] = useState<'logs' | 'sampled' | undefined>()
   const [zhipuQuota, setZhipuQuota] = useState<ZhipuQuota | null>(null)
+  const [minimaxQuota, setMinimaxQuota] = useState<MinimaxQuota | null>(null)
   const [win, setWin] = useState<{ start?: string; end?: string }>(ssrWin ?? {})
   const [knownModels, setKnownModels] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [], minimax: [] })
   // 区间/自定义日期按数据源各自保存:切源自动切到该源的一套
@@ -161,7 +163,7 @@ export function UsageSection({
     void wsKey
     fetch(url, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; hourlySource?: 'logs' | 'sampled'; goQuotas?: { name: string; quota: GoQuota | null }[]; zhipuQuota?: ZhipuQuota | null; workspaces?: { id: string; name: string }[] }) => {
+      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; hourlySource?: 'logs' | 'sampled'; goQuotas?: { name: string; quota: GoQuota | null }[];         zhipuQuota?: ZhipuQuota | null; minimaxQuota?: MinimaxQuota | null; workspaces?: { id: string; name: string }[] }) => {
         if (!alive) return
         const s = (d.source as typeof source) || 'none'
         setSource(s)
@@ -181,6 +183,7 @@ export function UsageSection({
         setGoQuotas(d.goQuotas ?? [])
         if (d.workspaces) setWsList(d.workspaces)
         setZhipuQuota(d.zhipuQuota ?? null)
+        setMinimaxQuota(d.minimaxQuota ?? null)
         setWin({ start: d.start, end: d.end })
         setLive(d.rows ?? [])
         setFetchedFor({ range, src })
@@ -518,6 +521,10 @@ export function UsageSection({
 
       {dataSrc === 'zhipu' && zhipuQuota && zhipuQuota.limits.length > 0 && (
         <ZhipuQuotaPanel quota={zhipuQuota} />
+      )}
+
+      {dataSrc === 'minimax' && minimaxQuota && minimaxQuota.models.length > 0 && (
+        <MinimaxQuotaPanel quota={minimaxQuota} />
       )}
 
       <div className="zx-seg" role="group" aria-label="时间范围">
