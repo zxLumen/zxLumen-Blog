@@ -731,7 +731,7 @@ export function filterUsageOpenCode(
     )
   }
 
-  rows = rows.sort((a, b) => (a.ts < b.ts ? -1 : 1))
+  rows = normalizeSaRows(rows.sort((a, b) => (a.ts < b.ts ? -1 : 1)))
   const models = Array.from(new Set(rows.map((r) => r.model)))
   const providers = Array.from(new Set(rows.map((r) => r.apiKey ?? '').filter(Boolean)))
   return { rows, models, providers, currency: 'USD', granularity, start, end, platformLimit }

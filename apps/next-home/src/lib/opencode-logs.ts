@@ -506,24 +506,44 @@ export async function syncConsoleLogs(
   return { ok: !err, hours, error: err }
 }
 
+/** 把仍是原始 `svcacct_` ID 的 serviceAccount 用当前映射表换成名字(自愈;不必等映射表重刷 + 重新同步) */
+let lastRemapForce = 0
+async function remapServiceAccounts(rows: UsageRow[]): Promise<UsageRow[]> {
+  const rawIds = rows.map((r) => r.serviceAccount ?? '').filter((s) => s.startsWith('svcacct_'))
+  if (!rawIds.length) return rows
+  let { saccts } = await loadConsoleWsMap()
+  // 有映射不到的 ID(新 SA / 映射表陈旧)且距上次强刷 >60s:强刷一次映射表,新 SA 立刻可解析
+  if (rawIds.some((id) => !saccts[id]) && Date.now() - lastRemapForce > 60_000) {
+    lastRemapForce = Date.now()
+    saccts = (await loadConsoleWsMap(true)).saccts
+  }
+  return rows.map((r) => {
+    const sa = r.serviceAccount ?? ''
+    return sa.startsWith('svcacct_') && saccts[sa] ? { ...r, serviceAccount: saccts[sa] } : r
+  })
+}
+
 /** 取已同步的小时行(可选按区间 / org 过滤) */
 export async function getConsoleHourlyRows(
-  range?: UsageRange,
+  range: UsageRange | undefined,
   filter?: { start?: string; end?: string },
   orgIds?: string[],
 ): Promise<UsageRow[]> {
   const { byOrg } = await readStore()
-  if (!range) return Object.values(byOrg).flat()
-  const { start, end } = windowOf(range, filter)
   const out: UsageRow[] = []
-  for (const [orgId, rows] of Object.entries(byOrg)) {
-    if (orgIds && !orgIds.includes(orgId)) continue
-    for (const r of rows) {
-      const day = r.ts.slice(0, 10)
-      if (day >= start && day <= end) out.push(r)
+  if (!range) {
+    for (const rows of Object.values(byOrg)) out.push(...rows)
+  } else {
+    const { start, end } = windowOf(range, filter)
+    for (const [orgId, rows] of Object.entries(byOrg)) {
+      if (orgIds && !orgIds.includes(orgId)) continue
+      for (const r of rows) {
+        const day = r.ts.slice(0, 10)
+        if (day >= start && day <= end) out.push(r)
+      }
     }
   }
-  return out
+  return remapServiceAccounts(out)
 }
 
 /** 是否配置了控制台会话 */

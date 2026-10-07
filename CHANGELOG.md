@@ -6,10 +6,23 @@
 
 ### 测试
 
-- 新增 `tests-suite/`(**与业务代码平级、不进生产镜像**)与数据层测试(L1):`tests-suite/data/*.test.mjs`
+- 新增 `tests-suite/`(**与业务代码平级、不进生产镜像**)。**L1 数据层**:`tests-suite/data/*.test.mjs`
   用 `node --test` + 内存库 `:memory:` 覆盖留言(公开/私密可见性、递归归档/恢复/彻底删、分页界)、
-  埋点与去重、meta/usage/ai_usage 聚合、chat_logs 会话归并、知识库 doc/chunk/FTS。根 `package.json`
-  加 `test` / `test:data` / `test:unit` 脚本。方案见 `docs/TESTING.md`。
+  埋点与去重、meta/usage/ai_usage 聚合、chat_logs 会话归并、知识库 doc/chunk/FTS。**L2 接口契约 / 集成**:
+  `tests-suite/api/*`(Vitest)由 `run.mjs` 用**临时库**启动生产构建,覆盖健康/可观测、管理员鉴权
+  (登录/篡改/伪造会话)、留言(校验/私密/冒用站长昵称/限流)、埋点,以及集成点(luminari 代理
+  `field`/`chatter` 优雅降级、AI 网关无令牌 401 / 未知端点 404 / CORS 预检);`.dockerignore` 排除
+  `tests-suite`,生产镜像不带测试依赖。根 `package.json` 加 `test` / `test:data` / `test:api` / `test:unit`。
+  **L3 端到端**:`tests-suite/e2e/*.spec.ts`(Playwright 1.63)由
+  `playwright.config.ts` 的 `webServer` 拉起生产构建(临时库),覆盖首页/health/404、`/lab/*`
+  未登录重定向、admin 登录(失败/成功)、发表公开留言;根 `package.json` 加 `test:e2e`。
+  **L6 压测**:`tests-suite/load/`(k6)`lib.js` + 场景 S0 quick / S1 稳态读 / S2 突刺 / S3 写并发 /
+  S4 聊天 / S5 网关 / S6 Soak / S7 静态 / S8 限流(计数阈值断言 429),`run.mjs` 自动起临时库服务;
+  根 `package.json` 加 `test:load`。**L7 线上只读冒烟**:`tests-suite/smoke/online-smoke.mjs`
+  (仅 GET:首页 / health / metrics 应 404 / TLS 剩余天数 / 子域可达),`test:smoke`。
+  **CI 门禁**:新增 `.github/workflows/test.yml`(lint → 单测 → 构建 → 接口 → E2E → 压测冒烟),
+  `deploy.yml` 以 `uses` 复用并将 `build-deploy` 置于 `needs: test` 之后(测试不过不部署)。
+  方案见 `docs/TESTING.md`。
 
 ### 新增
 
@@ -17,6 +30,7 @@
 - **Token用量 OpenCode 固定全 workspace + Go 配额合并为总体**:OpenCode 面板**移除顶部 workspace 选择器**,固定展示全部 workspace(服务端不再按 `ws` 过滤,始终合并);Go 订阅的 **5 小时 / 本周 / 本月** 配额由各 workspace 合并为一个「总体」(各窗口取平均已用 %,重置时间取最早),不再逐 workspace 分列。
 - **修复:OpenCode 新增的 workspace/org 未被计入「今天/昨天」小时用量**。根因:控制台「推理日志」同步用的**组织列表被永久缓存**(`fetchOrgs` 只在首次枚举),新加的组织(如新建的 OpenCode org)不会进入小时级同步 → 面板「今天/昨天」漏掉它的用量(而每日导出/近 30 天视图正常,因为那是按 key 拉的)。现改为 **10 分钟 TTL 自动重枚举**;并在 admin 保存 workspace 时**立即重枚举组织 + 刷新 svcacct 映射 + 强制同步一次**,新组织即刻出现在小时数据里。
 - **Token用量 RECENT 明细支持「按列聚合」**:表格上方新增「聚合维度」切换(天/小时、模型、服务账号/Key)——勾选的列参与分组,未勾选的列被合并(并从表中隐藏)。默认全选 = 原有明细;例如只勾「模型」即跨天/跨 key 按模型汇总,只勾「服务账号」即按 key 汇总。聚合时 token/请求数/成本累加;成本仅在原始行带金额时累加,否则仍按价目表估算。
+- **修复:OpenCode「今天/昨天」显示原始 `svcacct_...` 服务账号 ID**。控制台日志同步按「服务账号映射表」把 `serviceAccountID` 换名字,新建成、映射表尚未收录的 SA 会回退成原始 ID;而「今天/昨天」视图直接用日志、不走归一化,于是原始 ID 直接显示(近 30 天用每日导出的 `user_name` 列,不受影响)。现改为:①**读取时**用当前映射表把仍是 `svcacct_` 的 ID 换回名字,映射表陈旧(有解析不到的 ID)时**强刷一次**(60s 节流),新 SA 即刻可解析;②「今天/昨天」路径也套用**服务账号归一化**,各视图口径一致。
 
 - **主页四周生灵可关闭(站长可控)**。外观配置新增开关「允许访客关闭主页四周的生灵展示」
   (`appearance_config.floatsDismissable`,默认开)。开启时,访客在「生灵」应用(应用栏进入)
