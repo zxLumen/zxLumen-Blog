@@ -48,6 +48,14 @@ export function UsageSection({
   // RECENT 明细表翻页
   const [recentPage, setRecentPage] = useState(1)
   const [recentPageSize, setRecentPageSize] = useState(10)
+  // RECENT 聚合维度:按选中的列分组(默认全选 = 明细)
+  const [recentGroup, setRecentGroup] = useState<{ time: boolean; model: boolean; key: boolean }>({
+    time: true,
+    model: true,
+    key: true,
+  })
+  const toggleRecentGroup = (dim: 'time' | 'model' | 'key') =>
+    setRecentGroup((g) => ({ ...g, [dim]: !g[dim] }))
   // 各源可用性(已配置 + 近30天有数据,含快照回退);null=未知(全部显示)
   const [avail, setAvail] = useState<Record<DataSource, boolean> | null>(
     availableSources ? pickAvail(availableSources) : null,
@@ -341,11 +349,38 @@ export function UsageSection({
   const byModel = modelAggregate(active)
   const maxDaily = Math.max(1, ...daySeries.map((d) => d[1] + d[2]))
 
-  const sortedRecent = useMemo(() => [...active].sort((a, b) => (a.ts < b.ts ? 1 : -1)), [active])
-  const recentTotal = sortedRecent.length
+  // 按选中的维度聚合(默认全选 = 明细)。cost 仅在原始行带数值时累加,否则保持 undefined 交给 rowCost 估算。
+  const aggregatedRecent = useMemo(() => {
+    const on = recentGroup
+    const keyVal = (r: UsageRow) => (dataSrc === 'opencode' ? r.serviceAccount ?? '' : r.apiKey ?? '')
+    const map = new Map<string, UsageRow>()
+    for (const r of active) {
+      const k = `${on.time ? r.ts : ''}|${on.model ? r.model : ''}|${on.key ? keyVal(r) : ''}`
+      const ex = map.get(k)
+      if (ex) {
+        ex.inputTokens += r.inputTokens
+        ex.outputTokens += r.outputTokens
+        ex.cacheHitTokens += r.cacheHitTokens
+        ex.requests = (ex.requests ?? 0) + (r.requests ?? 0)
+        if (typeof r.cost === 'number' || typeof ex.cost === 'number') ex.cost = (ex.cost ?? 0) + (r.cost ?? 0)
+      } else {
+        map.set(k, { ...r })
+      }
+    }
+    const rows = [...map.values()]
+    if (on.time) rows.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0))
+    else
+      rows.sort(
+        (a, b) =>
+          b.inputTokens + b.outputTokens + b.cacheHitTokens - (a.inputTokens + a.outputTokens + a.cacheHitTokens),
+      )
+    return rows
+  }, [active, recentGroup, dataSrc])
+
+  const recentTotal = aggregatedRecent.length
   const recentTotalPages = Math.max(1, Math.ceil(recentTotal / recentPageSize))
   const recentPageClamped = Math.min(recentPage, recentTotalPages)
-  const recent = sortedRecent.slice((recentPageClamped - 1) * recentPageSize, recentPageClamped * recentPageSize)
+  const recent = aggregatedRecent.slice((recentPageClamped - 1) * recentPageSize, recentPageClamped * recentPageSize)
 
   // 切换数据源/区间/筛选时 RECENT 回到第 1 页(用字符串 key 保证依赖稳定)
   const recentResetKey = [
@@ -356,6 +391,7 @@ export function UsageSection({
     curPicked.join(','),
     curPickedKeys.join(','),
     curPickedSa.join(','),
+    `${recentGroup.time}${recentGroup.model}${recentGroup.key}`,
   ].join('|')
   useEffect(() => {
     setRecentPage(1)
@@ -659,6 +695,8 @@ export function UsageSection({
         showReq={showReq}
         rowLabel={rowLabel}
         fmtCost={fmtCost}
+        groupBy={recentGroup}
+        onToggleGroup={toggleRecentGroup}
       />
       <Pagination
         page={recentPageClamped}

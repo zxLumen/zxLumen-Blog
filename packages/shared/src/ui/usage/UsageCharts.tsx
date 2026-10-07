@@ -123,6 +123,8 @@ export function RecentTable({
   showReq,
   rowLabel,
   fmtCost,
+  groupBy,
+  onToggleGroup,
 }: {
   hourMode: boolean
   rangeLabel: string
@@ -135,22 +137,48 @@ export function RecentTable({
   showReq: boolean
   rowLabel: (r: UsageRow) => string
   fmtCost: (n: number) => string
+  /** 聚合维度:勾选的列参与分组,未勾选的列被合并(隐藏) */
+  groupBy: { time: boolean; model: boolean; key: boolean }
+  onToggleGroup: (dim: 'time' | 'model' | 'key') => void
 }) {
+  const dims: { id: 'time' | 'model' | 'key'; label: string; show: boolean }[] = [
+    { id: 'time', label: hourMode ? '天/小时' : '天', show: true },
+    { id: 'model', label: '模型', show: true },
+    { id: 'key', label: keyLabel, show: hasKey },
+  ]
+  const activeLabels = dims.filter((d) => d.show && groupBy[d.id]).map((d) => d.label)
   return (
     <div className="zx-panel">
       <h3>
         RECENT{' '}
         <span>
           {rangeLabel}
-          {rangeWin ? ` · ${rangeWin}` : ''} {hourMode ? '分时明细(天/小时/模型)' : '明细(按天/模型)'}
+          {rangeWin ? ` · ${rangeWin}` : ''} · 聚合({activeLabels.join(' + ') || '合计'})
         </span>
       </h3>
+      <div className="zx-seg" role="group" aria-label="聚合维度" style={{ marginBottom: '0.6rem' }}>
+        <span className="zx-muted zx-mono" style={{ fontSize: '0.68rem' }}>
+          聚合维度:
+        </span>
+        {dims
+          .filter((d) => d.show)
+          .map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              className={`zx-chip${groupBy[d.id] ? ' is-active' : ''}`}
+              onClick={() => onToggleGroup(d.id)}
+            >
+              {d.label}
+            </button>
+          ))}
+      </div>
       <table className="zx-table">
         <thead>
           <tr>
-            <th>{hourMode ? 'day/hour' : 'day'}</th>
-            <th>model</th>
-            {hasKey && <th>{keyLabel}</th>}
+            {groupBy.time && <th>{hourMode ? 'day/hour' : 'day'}</th>}
+            {groupBy.model && <th>model</th>}
+            {hasKey && groupBy.key && <th>{keyLabel}</th>}
             <th className="num">input</th>
             <th className="num">output</th>
             <th className="num">cache</th>
@@ -161,9 +189,9 @@ export function RecentTable({
         <tbody>
           {recent.map((r, i) => (
             <tr key={i}>
-              <td className="zx-mono">{rowLabel(r)}</td>
-              <td>{modelLabel(r.model)}</td>
-              {hasKey && <td className="zx-mono">{(keyOf ? keyOf(r) : r.apiKey || '') || '—'}</td>}
+              {groupBy.time && <td className="zx-mono">{rowLabel(r)}</td>}
+              {groupBy.model && <td>{modelLabel(r.model)}</td>}
+              {hasKey && groupBy.key && <td className="zx-mono">{(keyOf ? keyOf(r) : r.apiKey || '') || '—'}</td>}
               <td className="num">{fmtInt(r.inputTokens)}</td>
               <td className="num">{fmtInt(r.outputTokens)}</td>
               <td className="num">{fmtInt(r.cacheHitTokens)}</td>
