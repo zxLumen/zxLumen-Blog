@@ -1,6 +1,6 @@
 /* 四周生灵层(内联渲染,数据经 /api/luminari/field 代理自 luminari)。
-   搬自 luminari web/src/styles.css 的 .cf-* 段;整层 pointer-events:none,
-   只有单个生灵 .cf-item 放行 hover/点击(悬停气泡)。z-index 高于内容、低于弹窗。 */
+   整层 pointer-events:none —— 生灵一律不拦截指针事件(点击/滚动穿透到底下页面)。
+   z-index 高于内容、低于弹窗。 */
 .cf-layer {
   position: fixed;
   top: 0;
@@ -15,8 +15,7 @@
   top: 0;
   left: 0;
   width: 144px;
-  pointer-events: auto;
-  cursor: default;
+  pointer-events: none;
   transition: none;
   will-change: transform;
 }

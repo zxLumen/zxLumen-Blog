@@ -56,7 +56,6 @@ export function LuminariFloats({
   const [turns, setTurns] = useState<Turn[]>([]);
   const [turnIdx, setTurnIdx] = useState(0);
   const [narrow, setNarrow] = useState(true);
-  const [hover, setHover] = useState<string | null>(null);
   const [hidden, setHidden] = useState<boolean>(() => readFloatsHidden());
 
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -225,8 +224,7 @@ export function LuminariFloats({
     <div className="cf-layer" aria-hidden>
       {items.map((it) => {
         const lc = live.get(it.id);
-        const hovered = hover === it.id;
-        const bubble = hovered ? it.say : active && active.id === it.id ? active.text : "";
+        const bubble = active && active.id === it.id ? active.text : "";
         return (
           <div
             key={it.id}
@@ -234,8 +232,6 @@ export function LuminariFloats({
               nodeRefs.current[it.id] = el;
             }}
             className={`cf-item${it.mine ? " is-mine" : ""}`}
-            onMouseEnter={() => setHover(it.id)}
-            onMouseLeave={() => setHover((h) => (h === it.id ? null : h))}
           >
             {bubble ? <div className="cf-bubble">{bubble}</div> : null}
             {lc ? (
