@@ -25,6 +25,8 @@ import {
   setConsoleCreds,
   clearConsoleCreds,
   syncConsoleLogs,
+  fetchOrgs,
+  loadConsoleWsMap,
   extractCookie,
   extractOrg,
 } from '@/lib/opencode-logs'
@@ -89,6 +91,11 @@ export async function POST(req: Request) {
     // 换过 key:清掉「凭证失效」短路标记 + 可用性缓存,面板立刻重新探测
     await clearLastFailure()
     invalidateAvailability()
+    // 新加/改过 workspace:立即重枚举组织 + 刷新 svcacct 映射 + 强制同步一次(让新 org 立刻进小时数据)
+    void fetchOrgs(true)
+      .then(() => loadConsoleWsMap(true))
+      .then(() => syncConsoleLogs({ force: true }))
+      .catch(() => {})
     return Response.json({ ok: true, ...(await status()) })
   }
 

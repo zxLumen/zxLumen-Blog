@@ -35,6 +35,8 @@ const HOUR = 3_600_000
 const KEEP_DAYS = 3
 /** 非 force 时的最小同步间隔(避免每次首页/接口都打官方) */
 const SYNC_MIN_MS = 2 * 60_000
+/** 组织列表缓存 TTL:到点重新枚举,保证「新加的 workspace/org」会被纳入同步 */
+const ORG_TTL_MS = 10 * 60_000
 /** 单次(每 workspace)最多翻页数(防呆) */
 const MAX_PAGES = 80
 /** 单页超时(< 客户端超时) */
@@ -204,8 +206,10 @@ export async function fetchOrgs(force = false): Promise<ConsoleOrg[]> {
     const cached = db.getMeta(K_ORGS)
     if (cached) {
       try {
-        const a = JSON.parse(cached) as ConsoleOrg[]
-        if (Array.isArray(a) && a.length) return a
+        const parsed = JSON.parse(cached) as ConsoleOrg[] | { at?: number; list?: ConsoleOrg[] }
+        const list = Array.isArray(parsed) ? parsed : (parsed.list ?? [])
+        const at = Array.isArray(parsed) ? 0 : (parsed.at ?? 0)
+        if (Array.isArray(list) && list.length && Date.now() - at < ORG_TTL_MS) return list
       } catch {
         /* ignore */
       }
@@ -232,7 +236,7 @@ export async function fetchOrgs(force = false): Promise<ConsoleOrg[]> {
     /* 回退 */
   }
   if (list.length) {
-    db.setMeta(K_ORGS, JSON.stringify(list))
+    db.setMeta(K_ORGS, JSON.stringify({ at: Date.now(), list }))
     return list
   }
   const pasted = db.getMeta(K_ORG) || ''
