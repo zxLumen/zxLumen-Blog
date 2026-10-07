@@ -16,6 +16,7 @@ import {
   getLastFailure as zhipuLastFailure,
 } from './zhipu'
 import { hasMinimaxData, ensureMinimaxScheduler } from './minimax'
+import { getGatewayUsageRows } from './ai-gateway'
 import { getDb } from './db'
 import { makeTtlCache } from './usage/cache'
 import type { SourceAvailability } from '@zx/shared'
@@ -115,11 +116,10 @@ async function collectErrors(): Promise<NonNullable<SourceAvailability['errors']
   return errors
 }
 
-/** AI 网关:近 30 天有 ai_usage 记录即在面板显示 */
+/** AI 网关:近 30 天有「仍存在的应用」的用量即在面板显示(已删除应用的用量不计) */
 async function hasGatewayData(): Promise<boolean> {
   try {
-    const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-    return getDb().listAiUsage({ from: cutoff }).length > 0
+    return getGatewayUsageRows('30d').rows.length > 0
   } catch {
     return false
   }

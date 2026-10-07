@@ -286,7 +286,9 @@ export function getGatewayUsageRows(
   const provName = new Map(cfg.providers.map((p) => [p.id, p.name || p.id]))
   const map = new Map<string, UsageRow>()
   for (const r of getDb().listAiUsage({ from: win.start, to: win.end })) {
-    const app = appName.get(r.appId) ?? r.appId
+    // 已从配置里删除的应用:不展示其历史用量
+    if (!appName.has(r.appId)) continue
+    const app = appName.get(r.appId) as string
     const prov = provName.get(r.providerId) ?? (r.providerId || '未绑定密钥')
     const model = r.model || '(未指定模型)'
     const ts = hourly ? `${r.day}T${String(r.hour).padStart(2, '0')}:00:00Z` : `${r.day}T00:00:00Z`
