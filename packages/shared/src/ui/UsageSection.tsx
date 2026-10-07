@@ -118,19 +118,14 @@ export function UsageSection({
   const [pickedKeys, setPickedKeys] = useState<Record<DataSource, string[]>>(initialSel?.pickedKeys ?? DEFAULT_SEL.pickedKeys)
   const [knownKeys, setKnownKeys] = useState<Record<DataSource, string[]>>({ deepseek: [], opencode: [], zhipu: [], minimax: [], gateway: [] })
   const [picked, setPicked] = useState<Record<DataSource, string[]>>(initialSel?.picked ?? DEFAULT_SEL.picked)
-  // OpenCode workspace 列表(来自接口)+ 选择(单选,空=全部/总用量)
-  const [wsList, setWsList] = useState<{ id: string; name: string }[]>([])
-  const [pickedWs, setPickedWs] = useState<Record<DataSource, string[]>>(initialSel?.pickedWs ?? DEFAULT_SEL.pickedWs)
   // OpenCode service account 筛选(多选,空=全部)
   const [pickedSa, setPickedSa] = useState<Record<DataSource, string[]>>(initialSel?.pickedSa ?? DEFAULT_SEL.pickedSa)
-  const [goQuotas, setGoQuotas] = useState<{ name: string; quota: GoQuota | null }[]>([])
+  // OpenCode Go 订阅配额(全 workspace 合并后的总体)
+  const [goQuota, setGoQuota] = useState<GoQuota | null>(null)
   const curPicked = picked[dataSrc] ?? []
   // opencode 不做「提供方」筛选:忽略(并清空)其选择,避免旧 cookie 残留仍偷偷过滤
   const curPickedKeys = dataSrc === 'opencode' ? [] : (pickedKeys[dataSrc] ?? [])
   const curPickedSa = pickedSa[dataSrc] ?? []
-  const curPickedWs = (pickedWs[dataSrc] ?? []).slice(0, 1)
-  // 稳定的 workspace 选择 key(字符串):用于 fetch 依赖,选择变化才重新拉取
-  const wsKey = (pickedWs.opencode ?? []).slice(0, 1).join(',')
   const curRangeSel = per[dataSrc] ?? defaultRangeSel()
   const range = curRangeSel.range
   const customStart = curRangeSel.customStart
@@ -141,8 +136,8 @@ export function UsageSection({
 
   // 任一筛选变化即写入存档 cookie(服务端随后用它渲染首帧,客户端再写入保持同步)
   useEffect(() => {
-    writeUsageSelCookie({ dataSrc, per, picked, pickedKeys: { ...pickedKeys, opencode: [] }, pickedWs, pickedSa })
-  }, [dataSrc, per, picked, pickedKeys, pickedWs, pickedSa])
+    writeUsageSelCookie({ dataSrc, per, picked, pickedKeys: { ...pickedKeys, opencode: [] }, pickedWs: DEFAULT_SEL.pickedWs, pickedSa })
+  }, [dataSrc, per, picked, pickedKeys, pickedSa])
 
   useEffect(() => {
     if (rows?.length) {
@@ -162,14 +157,9 @@ export function UsageSection({
       if (!customApplied) return
       url += `&start=${customApplied.start}&end=${customApplied.end}`
     }
-    if (src === 'opencode') {
-      const sel = (pickedWs.opencode ?? []).slice(0, 1)
-      if (sel.length > 0) url += `&ws=${sel.join(',')}`
-    }
-    void wsKey
     fetch(url, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; hourlySource?: 'logs' | 'sampled'; goQuotas?: { name: string; quota: GoQuota | null }[];         zhipuQuota?: ZhipuQuota | null; minimaxQuota?: MinimaxQuota | null; workspaces?: { id: string; name: string }[] }) => {
+      .then((d: { source?: string; rows?: UsageRow[]; models?: string[]; apiKeys?: string[]; currency?: string; at?: number; lastError?: string; start?: string; end?: string; granularity?: 'hour' | 'day'; platformLimit?: boolean; hourlySource?: 'logs' | 'sampled'; goQuota?: GoQuota | null;         zhipuQuota?: ZhipuQuota | null; minimaxQuota?: MinimaxQuota | null; workspaces?: { id: string; name: string }[] }) => {
         if (!alive) return
         const s = (d.source as typeof source) || 'none'
         setSource(s)
@@ -186,8 +176,7 @@ export function UsageSection({
           else delete next[src]
           return next
         })
-        setGoQuotas(d.goQuotas ?? [])
-        if (d.workspaces) setWsList(d.workspaces)
+        setGoQuota(d.goQuota ?? null)
         setZhipuQuota(d.zhipuQuota ?? null)
         setMinimaxQuota(d.minimaxQuota ?? null)
         setWin({ start: d.start, end: d.end })
@@ -215,7 +204,7 @@ export function UsageSection({
     return () => {
       alive = false
     }
-  }, [range, customApplied, dataSrc, wsKey])
+  }, [range, customApplied, dataSrc])
 
   const serverRows = dataSrc === ssrSrc && rows && rows.length > 0 ? rows : null
   const fetchedLive = fetchedFor?.range === range && fetchedFor?.src === dataSrc && live !== null
@@ -367,7 +356,6 @@ export function UsageSection({
     curPicked.join(','),
     curPickedKeys.join(','),
     curPickedSa.join(','),
-    curPickedWs.join(','),
   ].join('|')
   useEffect(() => {
     setRecentPage(1)
@@ -404,18 +392,6 @@ export function UsageSection({
 
   function clearPickedSa() {
     setPickedSa((prev) => ({ ...prev, [dataSrc]: [] }))
-  }
-
-  // workspace 单选:点已选中的即取消(回到「全部」)
-  function toggleWs(id: string) {
-    setPickedWs((prev) => {
-      const list = prev[dataSrc] ?? []
-      return { ...prev, [dataSrc]: list.includes(id) ? [] : [id] }
-    })
-  }
-
-  function clearPickedWs() {
-    setPickedWs((prev) => ({ ...prev, [dataSrc]: [] }))
   }
 
   function onRange(r: Range) {
@@ -514,29 +490,7 @@ export function UsageSection({
         </div>
       )}
 
-      {dataSrc === 'opencode' && wsList.length > 0 && (
-        <div className="zx-seg" role="group" aria-label="workspace 筛选">
-          <button
-            type="button"
-            className={`zx-chip${curPickedWs.length === 0 ? ' is-active' : ''}`}
-            onClick={clearPickedWs}
-          >
-            全部 workspace
-          </button>
-          {wsList.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              className={`zx-chip${curPickedWs.includes(w.id) ? ' is-active' : ''}`}
-              onClick={() => toggleWs(w.id)}
-            >
-              {w.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {dataSrc === 'opencode' && goQuotas.length > 0 && <GoQuotaPanel quotas={goQuotas} />}
+      {dataSrc === 'opencode' && goQuota && <GoQuotaPanel quota={goQuota} />}
 
       {dataSrc === 'zhipu' && zhipuQuota && zhipuQuota.limits.length > 0 && (
         <ZhipuQuotaPanel quota={zhipuQuota} />

@@ -13,38 +13,33 @@ const fmtReset = (v?: string | number) =>
       })
     : ''
 
-/** OpenCode Go 订阅配额:每个 workspace 一行(5 小时 / 周 / 月,固定 3 列) */
-export function GoQuotaPanel({ quotas }: { quotas: { name: string; quota: GoQuota | null }[] }) {
+/** OpenCode Go 订阅配额(全 workspace 合并后的总体):5 小时 / 周 / 月,固定 3 列 */
+export function GoQuotaPanel({ quota, label = 'OpenCode Go' }: { quota: GoQuota; label?: string }) {
+  const cells = [
+    ['5 小时', quota.rolling],
+    ['本周', quota.weekly],
+    ['本月', quota.monthly],
+  ] as const
   return (
     <div className="zx-quota is-fixed3">
-      {quotas.flatMap(({ name, quota }) =>
-        quota
-          ? (
-              [
-                ['5 小时', quota.rolling],
-                ['本周', quota.weekly],
-                ['本月', quota.monthly],
-              ] as const
-            ).map(([label, w]) => {
-              const pct = Math.max(0, Math.min(100, Math.round(w?.percent ?? 0)))
-              const resetTxt = fmtReset(w?.resetsAt)
-              return (
-                <div className="zx-quota-item" key={`${name}-${label}`}>
-                  <div className="zx-quota-head">
-                    <span className="zx-quota-label">
-                      {name} · Go {label}
-                    </span>
-                    <span className="zx-quota-pct">{pct}%</span>
-                  </div>
-                  <div className="zx-quota-bar">
-                    <span style={{ width: `${pct}%` }} />
-                  </div>
-                  {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
-                </div>
-              )
-            })
-          : [],
-      )}
+      {cells.map(([lab, w]) => {
+        const pct = Math.max(0, Math.min(100, Math.round(w?.percent ?? 0)))
+        const resetTxt = fmtReset(w?.resetsAt)
+        return (
+          <div className="zx-quota-item" key={lab}>
+            <div className="zx-quota-head">
+              <span className="zx-quota-label">
+                {label} · {lab}
+              </span>
+              <span className="zx-quota-pct">{pct}%</span>
+            </div>
+            <div className="zx-quota-bar">
+              <span style={{ width: `${pct}%` }} />
+            </div>
+            {resetTxt && <div className="zx-quota-reset zx-muted zx-mono">重置 {resetTxt}</div>}
+          </div>
+        )
+      })}
     </div>
   )
 }

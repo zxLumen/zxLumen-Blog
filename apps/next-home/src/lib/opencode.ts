@@ -906,3 +906,25 @@ export async function fetchGoQuotaWs(ws: OcWorkspace): Promise<GoQuota | null> {
   goQuotaCache.set(key, quota)
   return quota
 }
+
+/**
+ * 把多个 workspace 的 Go 配额合并为「总体」:各窗口取平均已用 %(接口只给百分比),
+ * 重置时间取最早的一个,状态取用量最高者的状态。
+ */
+export function mergeGoQuota(quotas: Array<GoQuota | null | undefined>): GoQuota | null {
+  const valid = quotas.filter((q): q is GoQuota => !!q)
+  if (!valid.length) return null
+  const avg = (pick: (q: GoQuota) => GoQuotaWindow | undefined): GoQuotaWindow | undefined => {
+    const ws = valid.map(pick).filter((w): w is GoQuotaWindow => !!w && typeof w.percent === 'number')
+    if (!ws.length) return undefined
+    const percent = ws.reduce((a, w) => a + w.percent, 0) / ws.length
+    const resets = ws.map((w) => w.resetsAt).filter((x): x is string => !!x).sort()
+    const worst = ws.slice().sort((a, b) => b.percent - a.percent)[0]
+    return { percent: Math.round(percent * 10) / 10, resetsAt: resets[0], status: worst?.status }
+  }
+  return {
+    rolling: avg((q) => q.rolling),
+    weekly: avg((q) => q.weekly),
+    monthly: avg((q) => q.monthly),
+  }
+}

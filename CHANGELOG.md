@@ -7,6 +7,7 @@
 ### 新增
 
 - **Token用量 OpenCode 服务账号归一化**:读取时对 OpenCode 用量的「服务账号」(控制台每个 key 对应的 token 名)做归一 —— ①去掉任意开头的 `word_` 前缀(`bak_coding`→`coding`,将来的 `abc_` 亦然);②模糊归并到**动态推导**的规范名集合(不硬编码,随数据自动新增);③**跨 workspace 合并**(不再显示 `workspace名 · ` 前缀);④非标识符形态(邮箱等)等无法识别的统一归到 `coding`。规范名集合取自全部 workspace 快照,故按单个 workspace 筛选时也一致。只影响展示/筛选,不改库。见 `apps/next-home/src/lib/opencode.ts`。
+- **Token用量 OpenCode 固定全 workspace + Go 配额合并为总体**:OpenCode 面板**移除顶部 workspace 选择器**,固定展示全部 workspace(服务端不再按 `ws` 过滤,始终合并);Go 订阅的 **5 小时 / 本周 / 本月** 配额由各 workspace 合并为一个「总体」(各窗口取平均已用 %,重置时间取最早),不再逐 workspace 分列。
 
 - **主页四周生灵可关闭(站长可控)**。外观配置新增开关「允许访客关闭主页四周的生灵展示」
   (`appearance_config.floatsDismissable`,默认开)。开启时,访客在「生灵」应用(应用栏进入)

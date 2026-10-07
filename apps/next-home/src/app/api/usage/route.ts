@@ -9,6 +9,7 @@ import {
   fetchUsageOpenCodeWs,
   filterUsageOpenCode,
   mergeUsageOpenCode,
+  mergeGoQuota,
   fetchGoQuotaWs,
   getWorkspaces,
   getLastData,
@@ -97,8 +98,8 @@ async function localUsage(range: UsageRange, start?: string, end?: string): Prom
 
 const isIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
 
-/** OpenCode 数据源:官方 Console 导出,多 workspace 合并;今天/昨天按小时,其余按天 */
-async function opencodeUsage(range: UsageRange, start?: string, end?: string, wsParam?: string) {
+/** OpenCode 数据源:官方 Console 导出,固定展示**全部 workspace** 合并;今天/昨天按小时,其余按天 */
+async function opencodeUsage(range: UsageRange, start?: string, end?: string) {
   // 启动自建小时采样(仅注册一次;不影响本次请求)
   ensureHourlyScheduler()
   // 启动控制台推理日志后台同步(仅注册一次;未配置 Cookie 时为空操作)
@@ -113,11 +114,8 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
       : undefined
 
   const all = await getWorkspaces()
-  const wanted = (wsParam ?? '').trim()
-  const selected =
-    !wanted || wanted === 'all'
-      ? all
-      : all.filter((w) => wanted.split(',').map((s) => s.trim()).includes(w.id))
+  // 固定展示全部 workspace(不再支持按 ws 过滤)
+  const selected = all
 
   const send = (
     d: {
@@ -137,8 +135,9 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
       goQuotas?: { name: string; quota: GoQuota | null }[]
       hourlySource?: 'logs' | 'sampled'
     },
-  ) =>
-    Response.json(
+  ) => {
+    const goQuota = opts?.goQuotas ? mergeGoQuota(opts.goQuotas.map((g) => g.quota)) : null
+    return Response.json(
       {
         source,
         rows: d.rows,
@@ -152,11 +151,12 @@ async function opencodeUsage(range: UsageRange, start?: string, end?: string, ws
         at,
         workspaces: all.map((w) => ({ id: w.id, name: w.name })),
         ...(opts?.hourlySource ? { hourlySource: opts.hourlySource } : {}),
-        ...(opts?.goQuotas ? { goQuotas: opts.goQuotas } : {}),
+        ...(goQuota ? { goQuota } : {}),
         ...(opts?.lastError ? { lastError: opts.lastError } : {}),
       },
       { headers: noStore },
     )
+  }
 
   if (selected.length === 0) {
     return Response.json(
@@ -412,7 +412,7 @@ export async function GET(req: Request) {
 
   const sourceParam = url.searchParams.get('source') || 'deepseek'
   if (sourceParam === 'opencode') {
-    return opencodeUsage(range, start, end, url.searchParams.get('ws') || undefined)
+    return opencodeUsage(range, start, end)
   }
   if (sourceParam === 'zhipu') {
     return zhipuUsage(range, start, end)
