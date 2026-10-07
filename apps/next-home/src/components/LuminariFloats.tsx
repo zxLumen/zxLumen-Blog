@@ -359,7 +359,9 @@ function fieldDay(createdAt: string | number | undefined, matureDay: number): nu
 
 /* ------------- 上次成功的四周层缓存(避免慢/空响应把整层弄没) ------------- */
 
-const FIELD_CACHE_KEY = "zx.luminari.field";
+// v2:缓存带上 blueprint —— 刷新首帧即可渲染活动的透明 SVG,不再先闪一下
+// 带底色的静态 PNG(旧 v1 精简缓存即时失效)。
+const FIELD_CACHE_KEY = "zx.luminari.field.v2";
 
 function readFieldCache(): FieldCreature[] {
   if (typeof window === "undefined") return [];
@@ -373,20 +375,13 @@ function readFieldCache(): FieldCreature[] {
   }
 }
 
-// 存精简版(不带 blueprint,回退时用静态 PNG),避免 localStorage 太大
+// 带上 blueprint:首帧就能编译出活的 RigCreature(透明 SVG),避免回退到带底色的静态
+// PNG 闪一下(v1 精简掉了 blueprint,刷新必闪)。field 只回 Top5 + 本人参排(≤10 只),
+// blueprint 每只约 2~3KB,合计远低于 localStorage 上限。
 function writeFieldCache(list: FieldCreature[]) {
   if (typeof window === "undefined") return;
   try {
-    const slim = list.map((it) => ({
-      id: it.id,
-      name: it.name,
-      total: it.total,
-      say: it.say,
-      img: it.img,
-      mine: it.mine,
-      createdAt: it.createdAt,
-    }));
-    localStorage.setItem(FIELD_CACHE_KEY, JSON.stringify(slim));
+    localStorage.setItem(FIELD_CACHE_KEY, JSON.stringify(list));
   } catch {
     /* ignore */
   }
