@@ -113,10 +113,12 @@ let n = 0
 db.transaction(() => {
   for (const { r, key } of src) {
     const nk = norm(key)
-    const prov = candidatesFor(nk, provs)[0] || null
     const cs = candidatesFor(nk, apps)
+    let prov = candidatesFor(nk, provs)[0] || null
     let app = cs.find((a) => prov && a.providerId === prov.id) || cs[0] || null
     if (!app && fallback) app = apps.find((a) => a.id === fallback || a.name === fallback) || null
+    // provider 名匹配不到时,退用「匹配到的应用所绑定的 provider」
+    if (!prov && app?.providerId) prov = provs.find((p) => p.id === app.providerId) || null
     if (app) matched.set(key, app.name)
     else unmatched.add(key)
     const ts = String(r.ts || '')

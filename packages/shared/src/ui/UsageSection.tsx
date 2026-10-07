@@ -22,7 +22,7 @@ import {
   type MinimaxQuota,
   type ZhipuQuota,
 } from './usage/constants.js'
-import { GatewayBreakdown, GoQuotaPanel, MinimaxQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
+import { GatewayApps, GoQuotaPanel, MinimaxQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
 import { RecentTable, UsageCharts } from './usage/UsageCharts.js'
 import { Pagination } from './Pagination.js'
 
@@ -608,14 +608,14 @@ export function UsageSection({
         ))}
       </div>
 
-      {(dataSrc === 'opencode' || dataSrc === 'gateway') && saList.length > 0 && (
-        <div className="zx-seg" role="group" aria-label={dataSrc === 'gateway' ? '密钥池筛选' : '服务账号筛选'}>
+      {dataSrc === 'opencode' && saList.length > 0 && (
+        <div className="zx-seg" role="group" aria-label="服务账号筛选">
           <button
             type="button"
             className={`zx-chip${curPickedSa.length === 0 ? ' is-active' : ''}`}
             onClick={clearPickedSa}
           >
-            {dataSrc === 'gateway' ? '全部密钥池' : '全部服务账号'}
+            全部服务账号
           </button>
           {saList.map((sa) => (
             <button
@@ -683,7 +683,7 @@ export function UsageSection({
         )}
       </div>
 
-      {dataSrc === 'gateway' && <GatewayBreakdown rows={active} />}
+      {dataSrc === 'gateway' && <GatewayApps rows={active} />}
 
       <UsageCharts
         hourMode={hourMode}

@@ -1,4 +1,8 @@
+import { useMemo, useState } from 'react'
+import { fmtCompact } from '../../format.js'
+import { modelColor } from './constants.js'
 import type { GoQuota, MinimaxQuota, ZhipuQuota } from './constants.js'
+import { Donut } from './Donut.js'
 import type { UsageRow } from '../../schema.js'
 
 const fmtReset = (v?: string | number) =>
@@ -142,56 +146,66 @@ export function MinimaxQuotaPanel({ quota }: { quota: MinimaxQuota }) {
   )
 }
 
-const fmtTokens = (n: number) =>
-  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n)
-
-/** AI 网关:按「应用令牌」与「密钥池(上游)」两个维度的用量排行(令牌维度、请求数) */
-export function GatewayBreakdown({ rows }: { rows: UsageRow[] }) {
-  const agg = (get: (r: UsageRow) => string) => {
-    const m = new Map<string, { tokens: number; requests: number }>()
+/** AI 网关:按「应用令牌」的 tokens 占比(甜甜圈,与 BY_MODEL 同款) */
+export function GatewayApps({ rows }: { rows: UsageRow[] }) {
+  const [hover, setHover] = useState<string | null>(null)
+  const apps = useMemo(() => {
+    const m = new Map<string, { input: number; output: number }>()
     for (const r of rows) {
-      const k = get(r) || '(未绑定)'
-      const cur = m.get(k) ?? { tokens: 0, requests: 0 }
-      cur.tokens += r.inputTokens + r.outputTokens + r.cacheHitTokens
-      cur.requests += r.requests ?? 0
+      const k = r.apiKey || '(未知)'
+      const cur = m.get(k) ?? { input: 0, output: 0 }
+      cur.input += r.inputTokens + r.cacheHitTokens
+      cur.output += r.outputTokens
       m.set(k, cur)
     }
-    return Array.from(m, ([name, v]) => ({ name, ...v }))
-      .sort((a, b) => b.tokens - a.tokens)
-      .slice(0, 12)
-  }
-  const byApp = agg((r) => r.apiKey ?? '')
-  const byProv = agg((r) => r.serviceAccount ?? '')
-  const max = Math.max(1, ...byApp.map((x) => x.tokens), ...byProv.map((x) => x.tokens))
-  const list = (title: string, items: { name: string; tokens: number; requests: number }[]) => (
-    <div style={{ flex: 1, minWidth: 240 }}>
-      <div className="zx-quota-head" style={{ marginBottom: 4 }}>
-        <span className="zx-quota-label">{title}</span>
-      </div>
-      {items.length === 0 ? (
-        <div className="zx-muted zx-mono" style={{ fontSize: '0.68rem' }}>暂无</div>
-      ) : (
-        items.map((x) => (
-          <div key={x.name} style={{ marginTop: 6 }}>
-            <div className="zx-quota-head">
-              <span className="zx-quota-label" style={{ fontWeight: 400 }}>{x.name}</span>
-              <span className="zx-quota-pct">
-                {fmtTokens(x.tokens)}
-                {x.requests ? ` · ${x.requests}次` : ''}
-              </span>
-            </div>
-            <div className="zx-quota-bar">
-              <span style={{ width: `${Math.round((x.tokens / max) * 100)}%` }} />
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  )
+    return Array.from(m, ([model, v]) => ({ model, ...v })).sort(
+      (a, b) => b.input + b.output - (a.input + a.output),
+    )
+  }, [rows])
+  const total = Math.max(1, apps.reduce((a, m) => a + m.input + m.output, 0))
+  const active = hover ? apps.find((a) => a.model === hover) ?? null : null
   return (
-    <div style={{ display: 'flex', gap: '1.4rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
-      {list('按应用令牌', byApp)}
-      {list('按密钥池(上游)', byProv)}
+    <div className="zx-panel" style={{ marginTop: '0.8rem' }}>
+      <h3>
+        BY_APP <span>应用令牌 · tokens 占比</span>
+      </h3>
+      <div style={{ display: 'grid', gap: '1rem', placeItems: 'center' }}>
+        <Donut data={apps} hover={hover} onHover={setHover} />
+        <div className={`zx-donut-caption${active ? ' is-active' : ''}`}>
+          {active ? (
+            <>
+              <span
+                className="zx-legend-dot"
+                style={{ background: modelColor(active.model), color: modelColor(active.model) }}
+              />
+              <span>{active.model}</span>
+              <span className="zx-muted">
+                · {fmtCompact(active.input + active.output)} ·{' '}
+                {(((active.input + active.output) / total) * 100).toFixed(1)}%
+              </span>
+            </>
+          ) : (
+            <span className="zx-muted">悬停查看应用占比</span>
+          )}
+        </div>
+        <div className="zx-legend" style={{ width: '100%' }}>
+          {apps.map((m) => (
+            <div
+              className={`zx-legend-item${hover === m.model ? ' is-active' : ''}`}
+              key={m.model}
+              onMouseEnter={() => setHover(m.model)}
+              onMouseLeave={() => setHover(null)}
+            >
+              <span
+                className="zx-legend-dot"
+                style={{ background: modelColor(m.model), color: modelColor(m.model) }}
+              />
+              <span style={{ flex: 1 }}>{m.model}</span>
+              <span className="zx-mono">{fmtCompact(m.input + m.output)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
