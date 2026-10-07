@@ -60,7 +60,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   const initScript = `${themeInitScript(appearance.themes, appearance.layouts, appearance.defaultTheme, appearance.defaultLayout, mockCid || undefined)};${NAV_INIT_SCRIPT}`;
 
-  const adminTools = admin ? <MockUserSwitch current={mockCid} /> : null;
+  const adminTools = admin ? <MockUserSwitch key="mock-user-switch" current={mockCid} /> : null;
 
   return (
     <html
