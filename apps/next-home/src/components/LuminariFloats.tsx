@@ -21,8 +21,9 @@ import { RigCreature } from "@/components/lab/renderers/RigCreature";
 
 const NARROW = "(max-width: 820px)";
 const W_BOX = 144; // 水平占地(生灵本体宽)
-const H_BOX = 168; // 垂直占地(本体 + 名字行)
-const M = 6; // 贴边留白
+const H_BOX = 150; // 垂直占地(本体 + 名字行;名字已上移,故比 168 小)
+const M = 0; // 贴边留白(尽量贴边;左右仍避开侧边栏/应用栏)
+const EDGE_PAD = 10; // 自适应画框在本体四周留的内边距(约 8%+2);向外溢出同量即让本体贴边
 const DAY_MS = 24 * 60 * 60 * 1000; // 现实一天
 const FILL = 0.76; // 生灵占画框比例(越大越填满)
 const MIN_SCALE = 0.82; // 幼体尺寸下限
@@ -142,9 +143,10 @@ export function LuminariFloats({
       (it) => trackRef.current[it.id] === undefined || spdRef.current[it.id] === undefined,
     );
     if (missing.length) {
-      const n = items.length;
-      const seg = P / n;
-      const minSep = Math.min(400, seg * 0.9);
+        const n = items.length;
+        const seg = P / n;
+        // 尽量收紧:最小间距只需略大于一个本体宽,避免明显重叠即可
+        const minSep = Math.min(180, seg * 0.5);
       if (missing.length === n) {
         // 整圈等分 + 随机抖动,既打散又保证不挨太近
         const slots = shuffle(Array.from({ length: n }, (_, i) => i));
@@ -320,12 +322,14 @@ function pointOnPerimeter(
   return { x: x0, y: y1 - d };
 }
 
-/** 安全区域内、给生灵留下的行走矩形(左上角可落点范围) */
+/** 安全区域内、给生灵留下的行走矩形(左上角可落点范围)
+ *  横向允许向外溢出 EDGE_PAD,抵消画框内边距,让本体左右两侧都贴到边缘;
+ *  纵向只在顶部溢出(本体居上),底部不留溢出,免得名字被裁。 */
 function pathRect(): { x0: number; y0: number; x1: number; y1: number } {
   const { left, top, right, bottom } = safeRect();
-  const x0 = left;
-  const y0 = top;
-  const x1 = Math.max(x0, right - W_BOX);
+  const x0 = left - EDGE_PAD;
+  const y0 = top - EDGE_PAD;
+  const x1 = Math.max(x0, right - W_BOX + EDGE_PAD);
   const y1 = Math.max(y0, bottom - H_BOX);
   return { x0, y0, x1, y1 };
 }

@@ -43,7 +43,7 @@
   filter: drop-shadow(0 0 10px var(--accent));
 }
 .cf-name {
-  margin-top: -8px;
+  margin-top: -14px;
   font-size: 13px;
   text-align: center;
   color: var(--fg);
