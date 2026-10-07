@@ -2199,6 +2199,15 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   align-items: stretch;
 }
 
+/* AI 网关等:侧栏(应用排行)与模型饼图同排,柱状图独占整行 */
+.zx-usage-charts.is-stacked {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.zx-usage-charts > .zx-chart-wide {
+  grid-column: 1 / -1;
+}
+
 /* 两列面板等高:柱状图随右侧图例拉伸,柱区填满面板高度,避免下方空白 */
 .zx-usage-charts > .zx-panel {
   display: flex;

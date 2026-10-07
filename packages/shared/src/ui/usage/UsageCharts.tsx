@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { fmtCompact, fmtInt } from '../../format.js'
 import type { UsageRow } from '../../schema.js'
 import { modelColor, modelLabel, rowCost } from './constants.js'
@@ -15,6 +15,7 @@ export function UsageCharts({
   maxDaily,
   byModel,
   hasPicked,
+  appsPanel,
 }: {
   hourMode: boolean
   rangeLabel: string
@@ -23,80 +24,90 @@ export function UsageCharts({
   maxDaily: number
   byModel: Array<{ model: string; input: number; output: number }>
   hasPicked: boolean
+  /** 可选侧栏(如 AI 网关的应用排行),与模型饼图同排;柱状图则独占整行 */
+  appsPanel?: ReactNode
 }) {
   const [hover, setHover] = useState<string | null>(null)
   const barTip = useBarTooltip()
   const total = Math.max(1, byModel.reduce((a, m) => a + m.input + m.output, 0))
   const activeModel = hover ? byModel.find((m) => m.model === hover) ?? null : null
 
-  return (
-    <div className="zx-usage-charts">
-      <div className="zx-panel">
-        <h3>
-          {hourMode ? 'HOURLY_TOKENS' : 'DAILY_TOKENS'}{' '}
-          <span>
-            {hourMode ? '一天内分时 · UTC+8 · input + output' : `${rangeLabel} · input + output`}
-          </span>
-        </h3>
-        <div className="zx-bars" onMouseMove={barTip.onMouseMove} onMouseLeave={barTip.onMouseLeave}>
-          {daySeries.map(([dt, input, output]) => {
-            const v = input + output
-            const label = hourMode ? `${dt.slice(5, 10)} ${dt.slice(11, 13)}:00` : dt.slice(5)
-            return (
-              <div
-                key={dt}
-                className={`zx-bar${v === 0 ? ' is-zero' : altFor(dt) ? ' is-alt' : ''}`}
-                data-label={`${label} · ${fmtCompact(v)}`}
-                style={{ height: `${Math.max(3, (v / maxDaily) * 100)}%` }}
-              />
-            )
-          })}
-        </div>
-        {barTip.node}
+  const barPanel = (
+    <div className={`zx-panel${appsPanel ? ' zx-chart-wide' : ''}`}>
+      <h3>
+        {hourMode ? 'HOURLY_TOKENS' : 'DAILY_TOKENS'}{' '}
+        <span>
+          {hourMode ? '一天内分时 · UTC+8 · input + output' : `${rangeLabel} · input + output`}
+        </span>
+      </h3>
+      <div className="zx-bars" onMouseMove={barTip.onMouseMove} onMouseLeave={barTip.onMouseLeave}>
+        {daySeries.map(([dt, input, output]) => {
+          const v = input + output
+          const label = hourMode ? `${dt.slice(5, 10)} ${dt.slice(11, 13)}:00` : dt.slice(5)
+          return (
+            <div
+              key={dt}
+              className={`zx-bar${v === 0 ? ' is-zero' : altFor(dt) ? ' is-alt' : ''}`}
+              data-label={`${label} · ${fmtCompact(v)}`}
+              style={{ height: `${Math.max(3, (v / maxDaily) * 100)}%` }}
+            />
+          )
+        })}
       </div>
+      {barTip.node}
+    </div>
+  )
 
-      <div className="zx-panel">
-        <h3>
-          BY_MODEL <span>{hasPicked ? '所选模型' : 'tokens 占比'}</span>
-        </h3>
-        <div style={{ display: 'grid', gap: '1rem', placeItems: 'center' }}>
-          <Donut data={byModel} hover={hover} onHover={setHover} />
-          <div className={`zx-donut-caption${activeModel ? ' is-active' : ''}`}>
-            {activeModel ? (
-              <>
-                <span
-                  className="zx-legend-dot"
-                  style={{ background: modelColor(activeModel.model), color: modelColor(activeModel.model) }}
-                />
-                <span>{modelLabel(activeModel.model)}</span>
-                <span className="zx-muted">
-                  · {fmtCompact(activeModel.input + activeModel.output)} ·{' '}
-                  {(((activeModel.input + activeModel.output) / total) * 100).toFixed(1)}%
-                </span>
-              </>
-            ) : (
-              <span className="zx-muted">悬停查看模型占比</span>
-            )}
-          </div>
-          <div className="zx-legend" style={{ width: '100%' }}>
-            {byModel.map((m) => (
-              <div
-                className={`zx-legend-item${hover === m.model ? ' is-active' : ''}`}
-                key={m.model}
-                onMouseEnter={() => setHover(m.model)}
-                onMouseLeave={() => setHover(null)}
-              >
-                <span
-                  className="zx-legend-dot"
-                  style={{ background: modelColor(m.model), color: modelColor(m.model) }}
-                />
-                <span style={{ flex: 1 }}>{modelLabel(m.model)}</span>
-                <span className="zx-mono">{fmtCompact(m.input + m.output)}</span>
-              </div>
-            ))}
-          </div>
+  const modelPanel = (
+    <div className="zx-panel">
+      <h3>
+        BY_MODEL <span>{hasPicked ? '所选模型' : 'tokens 占比'}</span>
+      </h3>
+      <div style={{ display: 'grid', gap: '1rem', placeItems: 'center' }}>
+        <Donut data={byModel} hover={hover} onHover={setHover} />
+        <div className={`zx-donut-caption${activeModel ? ' is-active' : ''}`}>
+          {activeModel ? (
+            <>
+              <span
+                className="zx-legend-dot"
+                style={{ background: modelColor(activeModel.model), color: modelColor(activeModel.model) }}
+              />
+              <span>{modelLabel(activeModel.model)}</span>
+              <span className="zx-muted">
+                · {fmtCompact(activeModel.input + activeModel.output)} ·{' '}
+                {(((activeModel.input + activeModel.output) / total) * 100).toFixed(1)}%
+              </span>
+            </>
+          ) : (
+            <span className="zx-muted">悬停查看模型占比</span>
+          )}
+        </div>
+        <div className="zx-legend" style={{ width: '100%' }}>
+          {byModel.map((m) => (
+            <div
+              className={`zx-legend-item${hover === m.model ? ' is-active' : ''}`}
+              key={m.model}
+              onMouseEnter={() => setHover(m.model)}
+              onMouseLeave={() => setHover(null)}
+            >
+              <span
+                className="zx-legend-dot"
+                style={{ background: modelColor(m.model), color: modelColor(m.model) }}
+              />
+              <span style={{ flex: 1 }}>{modelLabel(m.model)}</span>
+              <span className="zx-mono">{fmtCompact(m.input + m.output)}</span>
+            </div>
+          ))}
         </div>
       </div>
+    </div>
+  )
+
+  return (
+    <div className={`zx-usage-charts${appsPanel ? ' is-stacked' : ''}`}>
+      {appsPanel}
+      {appsPanel ? modelPanel : barPanel}
+      {appsPanel ? barPanel : modelPanel}
     </div>
   )
 }

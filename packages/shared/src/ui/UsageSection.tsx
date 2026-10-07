@@ -683,8 +683,6 @@ export function UsageSection({
         )}
       </div>
 
-      {dataSrc === 'gateway' && <GatewayApps rows={active} />}
-
       <UsageCharts
         hourMode={hourMode}
         rangeLabel={rangeLabel(range)}
@@ -693,6 +691,7 @@ export function UsageSection({
         maxDaily={maxDaily}
         byModel={byModel}
         hasPicked={curPicked.length > 0}
+        appsPanel={dataSrc === 'gateway' ? <GatewayApps rows={active} /> : undefined}
       />
 
       <RecentTable
