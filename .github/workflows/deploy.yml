@@ -18,7 +18,12 @@ permissions:
   packages: write
 
 jobs:
+  # 部署前门禁:复用 test.yml(全部测试通过才继续)。
+  test:
+    uses: ./.github/workflows/test.yml
+
   build-deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

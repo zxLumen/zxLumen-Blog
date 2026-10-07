@@ -1,0 +1,28 @@
+# 线上只读冒烟(定时 + 手动):仅 GET,不写数据、不压测。
+# 覆盖:主站首页 / api/health / api/metrics 应 404 / TLS 剩余天数 / 子域可达。
+# 域名优先级:仓库变量 SMOKE_DOMAIN > 默认 zxlumen.cn。
+name: online-smoke
+
+on:
+  schedule:
+    # 每 6 小时一次(UTC)
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Online read-only smoke
+        env:
+          SMOKE_DOMAIN: ${{ vars.SMOKE_DOMAIN || 'zxlumen.cn' }}
+        run: node tests-suite/smoke/online-smoke.mjs

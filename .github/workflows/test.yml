@@ -1,0 +1,68 @@
+# 测试门禁:lint → 单元/数据层 → 构建 → 接口契约 → E2E → 压测冒烟(S0)
+# 供 deploy.yml 通过 `uses` 复用(workflow_call),也在 PR / 手动时独立运行。
+name: test
+
+on:
+  workflow_call:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            packages/shared/package-lock.json
+            apps/next-home/package-lock.json
+
+      # 根依赖:vitest / @playwright/test(仅测试用,不进生产镜像)
+      - name: Install root (test deps)
+        run: npm ci
+
+      - name: Install shared
+        run: npm ci
+        working-directory: packages/shared
+
+      - name: Build shared
+        run: npm run build
+        working-directory: packages/shared
+
+      - name: Install app
+        run: npm ci
+        working-directory: apps/next-home
+
+      - name: Lint
+        run: npm run lint
+        working-directory: apps/next-home
+
+      - name: Unit + data (L1)
+        run: npm test
+
+      - name: Build app
+        run: npm run build
+        working-directory: apps/next-home
+
+      - name: API contract (L2)
+        run: node tests-suite/api/run.mjs
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E (L3)
+        run: npx playwright test --config tests-suite/e2e/playwright.config.ts
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Load smoke (S0)
+        run: node tests-suite/load/run.mjs quick
