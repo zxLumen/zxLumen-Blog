@@ -11,7 +11,7 @@ export function UsageCharts({
   hourMode,
   rangeLabel,
   daySeries,
-  altFor,
+  isWeekend,
   maxDaily,
   byModel,
   hasPicked,
@@ -20,7 +20,7 @@ export function UsageCharts({
   hourMode: boolean
   rangeLabel: string
   daySeries: Array<[string, number, number]>
-  altFor: (dt: string) => boolean
+  isWeekend: (dt: string) => boolean
   maxDaily: number
   byModel: Array<{ model: string; input: number; output: number }>
   hasPicked: boolean
@@ -47,7 +47,7 @@ export function UsageCharts({
           return (
             <div
               key={dt}
-              className={`zx-bar${v === 0 ? ' is-zero' : altFor(dt) ? ' is-alt' : ''}`}
+              className={`zx-bar${v === 0 ? ' is-zero' : isWeekend(dt) ? ' is-weekend' : ''}`}
               data-label={`${label} · ${fmtCompact(v)}`}
               style={{ height: `${Math.max(3, (v / maxDaily) * 100)}%` }}
             />

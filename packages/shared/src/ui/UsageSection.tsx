@@ -337,15 +337,11 @@ export function UsageSection({
     return out
   }, [hourMode, active, daily, win])
 
-  const altDays = useMemo(() => {
-    const set = new Set<string>()
-    let count = 0
-    for (const [dt, input, output] of daySeries) {
-      if (input + output > 0 && ++count % 6 === 0) set.add(dt)
-    }
-    return set
-  }, [daySeries])
-  const altFor = (dt: string) => altDays.has(dt)
+  // 柱状图着色:周六/周日用强调色(红),周一~周五用默认色(蓝)。按北京日判断(dt 前 10 位)。
+  const isWeekend = (dt: string) => {
+    const dow = new Date(`${dt.slice(0, 10)}T00:00:00Z`).getUTCDay()
+    return dow === 0 || dow === 6
+  }
   const byModel = modelAggregate(active)
   const maxDaily = Math.max(1, ...daySeries.map((d) => d[1] + d[2]))
 
@@ -677,7 +673,7 @@ export function UsageSection({
         hourMode={hourMode}
         rangeLabel={rangeLabel(range)}
         daySeries={daySeries}
-        altFor={altFor}
+        isWeekend={isWeekend}
         maxDaily={maxDaily}
         byModel={byModel}
         hasPicked={curPicked.length > 0}
