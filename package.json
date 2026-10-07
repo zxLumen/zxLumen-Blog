@@ -4,6 +4,17 @@
   "version": "0.1.0",
   "description": "个人主页:Next.js 16 + SQLite,自托管部署",
   "scripts": {
-    "shared:build": "cd packages/shared && npm run build"
+    "shared:build": "cd packages/shared && npm run build",
+    "test:unit": "cd packages/shared && npm test",
+    "test:data": "npm run shared:build && node --test tests-suite/data/*.test.mjs",
+    "test:api": "npm run shared:build && node tests-suite/api/run.mjs",
+    "test:e2e": "npm run shared:build && npm --prefix apps/next-home run build && npx playwright test --config tests-suite/e2e/playwright.config.ts",
+    "test:load": "npm run shared:build && node tests-suite/load/run.mjs",
+    "test:smoke": "node tests-suite/smoke/online-smoke.mjs",
+    "test": "npm run test:data && npm run test:unit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "vitest": "^5.0.3"
   }
 }
