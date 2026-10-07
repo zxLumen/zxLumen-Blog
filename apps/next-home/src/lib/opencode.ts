@@ -755,41 +755,99 @@ export interface OpenCodeMergeResult extends PlatformUsageOpenCode {
   merged: string[]
 }
 
+/* ---------- 服务账号归一化(读取时;动态推导规范名,不硬编码) ---------- */
+
+const SA_IDENT = /^[a-z0-9_-]+$/i
+
+/** 去掉任意开头的 `word_` 前缀(`bak_` / `abc_` …),循环到无 */
+function stripSaPrefix(sa: string): string {
+  let s = sa.trim()
+  for (let i = 0; i < 8 && /^[a-z0-9]+_/i.test(s); i++) s = s.replace(/^[a-z0-9]+_/i, '')
+  return s
+}
+
+/** 从当前数据动态推导「规范服务账号名」:标识符形态、且不被更短规范名前缀覆盖 */
+export function deriveServiceAccountCanonicals(values: Iterable<string>): string[] {
+  const set = new Set<string>()
+  for (const v of values) {
+    const s = stripSaPrefix(v).toLowerCase()
+    if (s && SA_IDENT.test(s)) set.add(s)
+  }
+  const arr = [...set].sort((a, b) => a.length - b.length || a.localeCompare(b))
+  const canon: string[] = []
+  for (const s of arr) if (!canon.some((c) => s !== c && s.startsWith(c))) canon.push(s)
+  return canon
+}
+
+/** 归一单个服务账号:非标识符形态(邮箱等)/ 无规范名匹配 → `coding` */
+export function normalizeServiceAccount(sa: string, canon: string[]): string {
+  const s = stripSaPrefix(sa).toLowerCase()
+  if (!s || !SA_IDENT.test(s)) return 'coding'
+  const hit = canon.filter((c) => s.startsWith(c)).sort((a, b) => b.length - a.length)[0]
+  return hit ?? 'coding'
+}
+
+/** 收集所有 workspace 快照里的服务账号(全局规范名推导 → 按 workspace 筛选时也一致) */
+const saPoolCache = makeTtlCache<string[]>('__ocSaPool', 60_000)
+function serviceAccountPool(): string[] {
+  const hit = saPoolCache.get('pool')
+  if (hit) return hit
+  const db = getDb()
+  const out: string[] = []
+  for (const prefix of ['opencode_last_data', 'opencode_hourly', 'opencode_logs_hourly']) {
+    for (const key of db.listMetaKeys(prefix)) {
+      const raw = db.getMeta(key)
+      if (!raw) continue
+      try {
+        const j = JSON.parse(raw) as { rows?: Array<{ serviceAccount?: string }> }
+        for (const r of j.rows ?? []) if (r?.serviceAccount) out.push(r.serviceAccount)
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  saPoolCache.set('pool', out)
+  return out
+}
+
+/** 归一化行的 serviceAccount 并按 (ts|model|provider|sa) 重新聚合(规范名取自全局池 ∪ 当前行) */
+function normalizeSaRows(rows: UsageRow[]): UsageRow[] {
+  if (!rows.length) return rows
+  const canon = deriveServiceAccountCanonicals([
+    ...serviceAccountPool(),
+    ...rows.map((r) => r.serviceAccount ?? ''),
+  ])
+  const mapped = rows.map((r) =>
+    r.serviceAccount ? { ...r, serviceAccount: normalizeServiceAccount(r.serviceAccount, canon) } : r,
+  )
+  return aggregateRows(
+    mapped,
+    (r) => `${r.ts}|${r.model}|${r.apiKey ?? ''}|${r.serviceAccount ?? ''}`,
+  ).sort((a, b) => (a.ts < b.ts ? -1 : 1))
+}
+
 /**
  * 合并多个 workspace 的区间用量(全选=总用量)。
- * provider 加 `workspace 名 · ` 前缀,避免不同 ws 的同名 provider 混淆。
+ * 跨 workspace 合并(不再加 `workspace 名 · ` 前缀);服务账号经 {@link normalizeServiceAccount}
+ * 归一(去前缀 / 模糊到规范名 / 未知→`coding`)。
  */
 export function mergeUsageOpenCode(
   parts: Array<{ ws: OcWorkspace; data: PlatformUsageOpenCode }>,
 ): OpenCodeMergeResult {
-  const single = parts.length === 1
-  const prefixed: UsageRow[] = []
+  const combined: UsageRow[] = []
   let granularity: 'hour' | 'day' = 'day'
   let start = ''
   let end = ''
   let platformLimit = false
-  for (const { ws, data } of parts) {
+  for (const { data } of parts) {
     // 只要有一个 workspace 出的是小时级(今天/昨天有自建小时数据),整体就按小时
     granularity = granularity === 'hour' || data.granularity === 'hour' ? 'hour' : 'day'
     start = data.start
     end = data.end
     platformLimit = platformLimit || data.platformLimit
-    for (const r of data.rows) {
-      prefixed.push(
-        single
-          ? r
-          : {
-              ...r,
-              apiKey: `${ws.name} · ${r.apiKey ?? ''}`,
-              serviceAccount: r.serviceAccount ? `${ws.name} · ${r.serviceAccount}` : r.serviceAccount,
-            },
-      )
-    }
+    combined.push(...data.rows)
   }
-  const rows = aggregateRows(
-    prefixed,
-    (r) => `${r.ts}|${r.model}|${r.apiKey ?? ''}|${r.serviceAccount ?? ''}`,
-  ).sort((a, b) => (a.ts < b.ts ? -1 : 1))
+  const rows = normalizeSaRows(combined)
   const models = Array.from(new Set(rows.map((r) => r.model)))
   const providers = Array.from(new Set(rows.map((r) => r.apiKey ?? '').filter(Boolean)))
   return {
