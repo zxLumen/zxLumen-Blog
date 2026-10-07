@@ -96,6 +96,13 @@ cd apps/next-home && npm run dev      # http://localhost:3000
 
 # 校验(提交前跑)
 cd apps/next-home && npm run lint && npm run build
+
+# 测试(上线前必跑,全绿才可上线;详见「上线前测试门禁」)
+npm test                     # L1 数据层 + 单元
+npm run test:api             # L2 接口 + 集成(临时库)
+npm run test:e2e             # L3 E2E(需 chromium)
+npm run test:load -- quick   # L6 压测冒烟(需 k6)
+SMOKE_DOMAIN=<域名> npm run test:smoke   # 线上只读冒烟(仅 GET)
 ```
 
 > 需要 Node 20+(推荐 22 LTS;`export:content` 依赖 Node 22+ 原生 TS)。
@@ -180,9 +187,30 @@ cd apps/next-home && npm run lint && npm run build
 规则:
 
 1. 改动在**本地**自测(`npm run dev`)。
-2. 验证通过后,把改动并入主线 → **打包** → 部署到线上。
+2. **上线前必须跑一遍测试并全绿**(见下方「上线前测试门禁」;CI 也会拦,但本地先跑)。
+3. 验证通过后,把改动并入主线 → **打包** → 部署到线上。
 
 > 上线即更新线上;不做线上试验,也不再需要"先 TEST 验证再晋升 LIVE"的流程。
+
+### 上线前测试门禁(**必须**)
+
+**每次上线前(即任何 push main / 触发部署前),先跑测试,全部通过才可上线。**
+最小必跑(本地,全绿):
+
+```bash
+npm test                 # L1 数据层(13)+ 单元(198)
+npm run test:api         # L2 接口 + 集成(临时库起服务;27)
+npm run test:e2e         # L3 E2E(Playwright;需 chromium)
+npm run test:load -- quick   # L6 压测冒烟(需 k6:brew install k6)
+```
+
+- 依赖:`vitest` / `@playwright/test`(根 devDeps),`k6`(系统安装)。首次 E2E 需 `npx playwright install chromium`。
+- 可选(大/慢/需真实外部时):`steady-read` / `spike` / `write-concurrency` / `soak` 等压测场景;
+  **线上只允许只读冒烟** `SMOKE_DOMAIN=<域名> npm run test:smoke`(仅 GET,不写、不压测)。
+- **禁止对线上做写操作或压测**;**测试全程用临时库,不得碰** `apps/next-home/data/zx.db`。
+- CI 门禁已内置:`.github/workflows/test.yml`(`test` job),`deploy.yml` 的 `build-deploy`
+  依赖它(`needs: test`)—— **测试不过不会部署**。本地跑一遍是为了更早发现、也覆盖 CI 未跑的项。
+- 测试方案与用例清单:`docs/TESTING.md`;套件用法:`tests-suite/README.md`;最近报告:`docs/TEST-REPORT.md`。
 
 ### 用 MOCK 身份调试(仅站长)
 
@@ -287,6 +315,8 @@ cd apps/next-home && npm run lint && npm run build
 **未经用户明确说「上线」,绝不部署线上**:不 push、不 SSH 到服务器、不重建容器。
 日常改动只在本地完成(改代码 + 本地自测 + 拉起 dev)。**提交可自行判断合适时机**
 (保持工作区干净、便于回滚);**推送与上线一律等用户明确指示**。
+
+**且:上线前必须先跑「上线前测试门禁」并全绿**(见上);测试未过一律不得 push/部署。
 
 ## Git 规范
 

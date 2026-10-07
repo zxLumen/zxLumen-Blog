@@ -109,7 +109,11 @@ npm run cover:vlog -- --only <vid>  # 只处理指定视频(--only 可重复,也
 全站**只有一个环境、一套数据**;在**本地**自测,验证通过后打包部署到线上。
 
 1. 本地 `npm run dev` 自测
-2. 验证通过后并入主线 → **打包** → 部署到线上
+2. **上线前跑一遍测试并全绿**:`npm test && npm run test:api && npm run test:e2e && npm run test:load -- quick`
+3. 验证通过后并入主线 → **打包** → 部署到线上
+
+> 测试门禁为硬性要求(见 `AGENTS.md`「上线前测试门禁」);CI 亦内置,
+> 测试不过不会部署。方案见 `docs/TESTING.md`,最近报告见 `docs/TEST-REPORT.md`。
 
 功能、主题、布局全部放行,无白名单门控。
 
