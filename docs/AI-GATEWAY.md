@@ -73,8 +73,10 @@ OpenCode Go 端点(`opencode.ai/zen/go`)要求 `x-opencode-session` 头,网关�
 
 - `speaker=null` 表示未做分离(单人转写)。
 - 形状(在 admin「AI 密钥」页的音频密钥上选择):
-  - **OpenAI 兼容**:转发到 `{baseUrl}/audio/transcriptions`(`response_format=verbose_json`),
-    **不带分离**(OpenAI Whisper、硅基流动 SenseVoice 等属此类)。
+  - **OpenAI 兼容**:普通转写用 `{baseUrl}/audio/transcriptions`(`response_format=verbose_json`);
+    当 `diarize=true` 时改用专用分离模型 **`gpt-4o-transcribe-diarize`** + `response_format=diarized_json`
+    (+ `chunking_strategy=auto` 以支持 >30s),返回 `segments[].speaker`(A/B/C → S1/S2…)。
+    硅基流动 SenseVoice 等也走此形状(但无分离,`diarize=true` 时无 speaker)。
   - **Deepgram**:`{baseUrl}/v1/listen` + `diarize_model=latest`,一次请求即含分离。
   - **AssemblyAI**:上传 → 建任务(`speaker_labels`)→ 轮询,返回 utterances。
 - 说话人仅在 `diarize=true` 且上游形状支持时出现。

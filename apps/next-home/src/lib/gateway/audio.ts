@@ -54,13 +54,32 @@ async function withTimeout<T>(p: (signal: AbortSignal) => Promise<T>, ms: number
 }
 
 /* ------------------------------ OpenAI 兼容 ------------------------------ */
+
+/** OpenAI 说话人标签 A/B/C… → S1/S2/…(提供了已知说话人名的原样保留) */
+function openaiSpeaker(label: unknown): string | null {
+  if (typeof label !== 'string' || !label) return null
+  return /^[A-Z]$/.test(label) ? `S${label.charCodeAt(0) - 64}` : label
+}
+
 async function transcribeOpenAI(provider: GatewayProvider, input: AudioInput): Promise<NormalizedTranscript> {
-  const model = input.model || provider.model || 'whisper-1'
   const form = new FormData()
   form.set('file', new Blob([input.bytes as unknown as BlobPart], { type: input.contentType }), input.filename)
-  form.set('model', model)
-  form.set('response_format', 'verbose_json')
   if (input.language) form.set('language', input.language)
+
+  const diarize = !!input.diarize
+  // 分离要用专用模型 gpt-4o-transcribe-diarize;普通转写用配置的模型
+  const model = diarize
+    ? /diarize/i.test(input.model || '')
+      ? (input.model as string)
+      : 'gpt-4o-transcribe-diarize'
+    : input.model || provider.model || 'whisper-1'
+  form.set('model', model)
+  if (diarize) {
+    form.set('response_format', 'diarized_json')
+    form.set('chunking_strategy', 'auto') // >30s 需分块
+  } else {
+    form.set('response_format', 'verbose_json')
+  }
 
   const res = await withTimeout(
     (signal) =>
@@ -81,7 +100,7 @@ async function transcribeOpenAI(provider: GatewayProvider, input: AudioInput): P
   const segments: AudioSegment[] = segs.map((s) => ({
     start: num(s.start),
     end: num(s.end),
-    speaker: null,
+    speaker: diarize ? openaiSpeaker(s.speaker) : null,
     text: typeof s.text === 'string' ? s.text : '',
   }))
   const text = typeof j.text === 'string' ? j.text : segments.map((s) => s.text).join('')
