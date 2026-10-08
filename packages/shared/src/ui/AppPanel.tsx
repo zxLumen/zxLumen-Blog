@@ -384,7 +384,7 @@ function AppPanel({
            * `origin` 只透出 origin(不含路径与查询串),够用又不泄漏具体页面。
            */
           referrerPolicy="origin"
-          allow="clipboard-write; fullscreen"
+          allow="clipboard-write; fullscreen; microphone"
         />
       </div>
 
