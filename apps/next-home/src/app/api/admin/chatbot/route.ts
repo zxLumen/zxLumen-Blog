@@ -54,6 +54,7 @@ export async function POST(req: Request) {
         model: '',
         dailyLimit: 0,
         totalLimit: 0,
+        audioLimit: 0,
         note: '博客自身(聊天/问候/蒸馏/RAG)',
       }
       gw.apps.push(app)

@@ -61,6 +61,11 @@ export function openDb(path: string): Db {
 
   db.exec(SCHEMA_SQL)
 
+  // 迁移:ai_usage 增加 audio_seconds 列(音频类请求时长;老库补列)
+  const aiCols = (db.prepare('PRAGMA table_info(ai_usage)').all() as { name: string }[]).map((c) => c.name)
+  if (aiCols.length > 0 && !aiCols.includes('audio_seconds'))
+    db.exec('ALTER TABLE ai_usage ADD COLUMN audio_seconds INTEGER NOT NULL DEFAULT 0')
+
   // 迁移:老库补列
   const cols = new Set(
     (db.prepare('PRAGMA table_info(comments)').all() as { name: string }[]).map((c) => c.name),

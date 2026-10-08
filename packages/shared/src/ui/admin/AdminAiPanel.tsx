@@ -28,7 +28,8 @@ interface ProviderVM {
   model: string
   models: string[]
   enabled: boolean
-  role: 'chat' | 'embed' | 'both'
+  role: 'chat' | 'embed' | 'both' | 'audio'
+  api?: 'openai' | 'deepgram' | 'assemblyai'
 }
 
 interface AppVM {
@@ -40,14 +41,16 @@ interface AppVM {
   model: string
   dailyLimit: number
   totalLimit: number
+  audioLimit: number
   note: string
-  usage?: { today: number; total: number }
+  usage?: { today: number; total: number; audioToday: number; audioTotal: number }
 }
 
 interface ConfigVM {
   version: number
   chatProviderId: string
   embedProviderId: string
+  audioProviderId: string
   providers: ProviderVM[]
   apps: AppVM[]
 }
@@ -74,6 +77,14 @@ const ROLE_OPTIONS = [
   { value: 'chat', label: '对话' },
   { value: 'embed', label: '向量' },
   { value: 'both', label: '通用' },
+  { value: 'audio', label: '音频' },
+]
+
+/** 音频 provider 的上游接口形状 */
+const API_OPTIONS = [
+  { value: 'openai', label: 'OpenAI 兼容' },
+  { value: 'deepgram', label: 'Deepgram(分离)' },
+  { value: 'assemblyai', label: 'AssemblyAI(分离)' },
 ]
 
 /** 常见供应商的 OpenAI 兼容端点:选中即自动填 baseUrl */
@@ -87,6 +98,8 @@ const PROVIDER_PRESETS = [
   { value: 'https://api.moonshot.cn/v1', label: 'Moonshot / Kimi' },
   { value: 'https://api.siliconflow.cn/v1', label: '硅基流动' },
   { value: 'https://openrouter.ai/api/v1', label: 'OpenRouter' },
+  { value: 'https://api.deepgram.com', label: 'Deepgram' },
+  { value: 'https://api.assemblyai.com', label: 'AssemblyAI' },
   { value: 'http://localhost:11434/v1', label: 'Ollama(OpenAI 兼容)' },
 ]
 
@@ -153,7 +166,7 @@ export function AdminAiPanel({
             ...c,
             providers: [
               ...c.providers,
-              { id: newId('provider'), name: '新密钥', baseUrl: '', apiKey: '', model: '', models: [], enabled: true, role: 'chat' },
+              { id: newId('provider'), name: '新密钥', baseUrl: '', apiKey: '', model: '', models: [], enabled: true, role: 'chat', api: 'openai' },
             ],
           }
         : c,
@@ -175,8 +188,9 @@ export function AdminAiPanel({
                 model: '',
                 dailyLimit: 0,
                 totalLimit: 0,
+                audioLimit: 0,
                 note: '',
-                usage: { today: 0, total: 0 },
+                usage: { today: 0, total: 0, audioToday: 0, audioTotal: 0 },
               },
             ],
           }
@@ -286,6 +300,9 @@ export function AdminAiPanel({
                         <TextInput size="xs" w={130} value={p.id} placeholder="id" onChange={(e) => updProvider(i, { id: e.currentTarget.value })} />
                         <TextInput size="xs" w={150} value={p.name} placeholder="名称" onChange={(e) => updProvider(i, { name: e.currentTarget.value })} />
                         <Select size="xs" w={110} data={ROLE_OPTIONS} value={p.role} onChange={(v) => updProvider(i, { role: (v as ProviderVM['role']) || 'chat' })} />
+                        {p.role === 'audio' && (
+                          <Select size="xs" w={150} data={API_OPTIONS} value={p.api || 'openai'} onChange={(v) => updProvider(i, { api: (v as ProviderVM['api']) || 'openai' })} />
+                        )}
                         <Checkbox size="xs" label="启用" checked={p.enabled} onChange={(e) => updProvider(i, { enabled: e.currentTarget.checked })} />
                         <Button size="compact-xs" variant="subtle" color="red" ml="auto" onClick={() => setConfig((c) => (c ? { ...c, providers: c.providers.filter((_, j) => j !== i) } : c))}>
                           删除
@@ -350,6 +367,15 @@ export function AdminAiPanel({
                         >
                           {config.embedProviderId === p.id ? '● 默认向量' : '设为默认向量'}
                         </Button>
+                        {p.role === 'audio' && (
+                          <Button
+                            size="compact-xs"
+                            variant={config.audioProviderId === p.id ? 'filled' : 'default'}
+                            onClick={() => setConfig({ ...config, audioProviderId: config.audioProviderId === p.id ? '' : p.id })}
+                          >
+                            {config.audioProviderId === p.id ? '● 默认音频' : '设为默认音频'}
+                          </Button>
+                        )}
                       </Group>
                     </Stack>
                   </Paper>
@@ -375,6 +401,9 @@ export function AdminAiPanel({
                         <Checkbox size="xs" label="启用" checked={a.enabled} onChange={(e) => updApp(i, { enabled: e.currentTarget.checked })} />
                         <Text component="span" c="dimmed" fz="xs" ff="var(--font-mono)" ml="auto">
                           今日 {a.usage?.today ?? 0} / 累计 {a.usage?.total ?? 0} tokens
+                          {(a.usage?.audioTotal ?? 0) > 0
+                            ? ` · 音频 ${Math.round((a.usage?.audioTotal ?? 0) / 60)} 分钟`
+                            : ''}
                         </Text>
                         <Button size="compact-xs" variant="subtle" onClick={() => void resetUsage(a.id)}>重置用量</Button>
                         <Button size="compact-xs" variant="subtle" color="red" onClick={() => setConfig((c) => (c ? { ...c, apps: c.apps.filter((_, j) => j !== i) } : c))}>
@@ -434,6 +463,13 @@ export function AdminAiPanel({
                           value={a.totalLimit ? String(a.totalLimit) : ''}
                           placeholder="总量 token 上限"
                           onChange={(e) => updApp(i, { totalLimit: Number(e.currentTarget.value.replace(/[^0-9]/g, '')) || 0 })}
+                        />
+                        <TextInput
+                          size="xs"
+                          w={130}
+                          value={a.audioLimit ? String(a.audioLimit) : ''}
+                          placeholder="音频分钟上限"
+                          onChange={(e) => updApp(i, { audioLimit: Number(e.currentTarget.value.replace(/[^0-9]/g, '')) || 0 })}
                         />
                         <TextInput size="xs" w={180} value={a.note} placeholder="备注" onChange={(e) => updApp(i, { note: e.currentTarget.value })} />
                       </Group>

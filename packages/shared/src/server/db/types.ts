@@ -53,6 +53,8 @@ export interface NewAiUsageInput {
   inputTokens?: number
   outputTokens?: number
   cacheHitTokens?: number
+  /** 音频类请求时长(秒) */
+  audioSeconds?: number
 }
 
 export interface NewFeedbackInput {

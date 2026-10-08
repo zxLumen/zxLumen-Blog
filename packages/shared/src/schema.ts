@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   input_tokens    INTEGER NOT NULL DEFAULT 0,
   output_tokens   INTEGER NOT NULL DEFAULT 0,
   cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
+  audio_seconds   INTEGER NOT NULL DEFAULT 0,    -- 音频类请求时长(秒);文本请求恒为 0
   PRIMARY KEY (day, hour, app_id, provider_id, model)
 );
 
@@ -208,6 +209,8 @@ export interface UsageRow {
   serviceAccount?: string
   requests?: number
   cost?: number
+  /** 音频类请求时长(秒);仅 AI 网关音频请求有值 */
+  audioSeconds?: number
 }
 
 /** AI 网关用量行(按 北京日 × 北京时 × 应用 × 密钥池 × 模型 聚合) */
@@ -221,6 +224,8 @@ export interface AiUsageRow {
   inputTokens: number
   outputTokens: number
   cacheHitTokens: number
+  /** 音频类请求时长(秒);文本请求恒为 0 */
+  audioSeconds: number
 }
 
 export type Visibility = 'public' | 'private'

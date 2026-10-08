@@ -15,6 +15,7 @@ OpenAI 兼容,透传到上游:
 | `POST /api/ai/v1/chat/completions` | 对话补全(支持流式 SSE) |
 | `POST /api/ai/v1/embeddings` | 向量 |
 | `GET /api/ai/v1/models` | 模型列表 |
+| `POST /api/ai/v1/audio/transcriptions` | 语音转写(可含说话人分离;`multipart/form-data`) |
 
 地址:
 - 公网:`https://${DOMAIN}/api/ai/v1`
@@ -51,17 +52,46 @@ x-zx-app-token: zxai_xxxxxxxx...
 上游 `baseUrl` 由密钥决定,子应用只发 `model`(或完全不发)。
 OpenCode Go 端点(`opencode.ai/zen/go`)要求 `x-opencode-session` 头,网关会自动补上,子应用无需处理。
 
+## 音频转写与说话人分离
+
+`POST /api/ai/v1/audio/transcriptions`(`multipart/form-data`,鉴权同上):
+
+| 字段 | 说明 |
+| --- | --- |
+| `file` | 音频文件(建议先压成 16k 单声道 opus/mp3;上限 25MB) |
+| `language` | 可选,如 `zh` |
+| `diarize` | 可选,`true`/`1` 时做**说话人分离**(需音频密钥形状支持) |
+| `model` | 可选,覆盖密钥默认模型 |
+
+网关按**音频密钥**的「接口形状」分派并**归一化**返回:
+
+```json
+{ "text": "…", "language": "zh",
+  "segments": [ { "start": 0, "end": 2.4, "speaker": "S1", "text": "…" } ],
+  "seconds": 123.4 }
+```
+
+- `speaker=null` 表示未做分离(单人转写)。
+- 形状(在 admin「AI 密钥」页的音频密钥上选择):
+  - **OpenAI 兼容**:转发到 `{baseUrl}/audio/transcriptions`(`response_format=verbose_json`),
+    **不带分离**(OpenAI Whisper、硅基流动 SenseVoice 等属此类)。
+  - **Deepgram**:`{baseUrl}/v1/listen` + `diarize_model=latest`,一次请求即含分离。
+  - **AssemblyAI**:上传 → 建任务(`speaker_labels`)→ 轮询,返回 utterances。
+- 说话人仅在 `diarize=true` 且上游形状支持时出现。
+- 音频密钥与对话/向量密钥**分开**管理,并各有「默认音频」密钥。
+
 ## 额度限流
 
 每个令牌可设 **每日 token 上限** 与 **总量 token 上限**(0 = 不限)。
 网关按上游返回的 `usage` 累计(prompt/completion/cached),北京时间日切;
 流式请求网关会自动补 `stream_options.include_usage` 以拿到 usage。超限直接 `429`。
-面板可查看今日 / 累计用量并「重置用量」。
+音频请求另设 **音频分钟上限**(0 = 不限),按音频时长累计;超限同样 `429`。
+面板可查看今日 / 累计用量(含音频分钟)并「重置用量」。
 
 ## 用量统计
 
 每次请求按 **北京日 × 北京时 × 应用令牌 × 密钥池(provider) × 模型** 累加进 SQLite 表 `ai_usage`
-(`requests` / `input_tokens` / `output_tokens` / `cache_hit_tokens`)。
+(`requests` / `input_tokens` / `output_tokens` / `cache_hit_tokens` / `audio_seconds`)。
 首页「Token用量」新增 **AI 网关** 数据源(供应商 tab),按所选区间展示:
 
 - 总览(请求数 / 总 token / 输入 / 输出 / 缓存);

@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **AI 网关支持语音转写 + 说话人分离**。新增 `POST /api/ai/v1/audio/transcriptions`
+  (`multipart`,鉴权与配额同对话接口):按音频密钥的「接口形状」分派上游并**归一化**返回
+  `{ text, language, segments[{start,end,speaker,text}], seconds }`。三种形状:
+  **OpenAI 兼容**(OpenAI / 硅基流动 SenseVoice,无分离)、**Deepgram**(`diarize_model`,
+  一次请求含分离)、**AssemblyAI**(上传→轮询,含分离)。`diarize=true` 且上游支持时返回
+  `speaker`,否则 `speaker=null`。
+- **网关新增「音频」密钥角色与「默认音频」**;admin「AI 密钥」页可为音频密钥选择接口形状。
+- **音频分钟额度**:`ai_usage` 增 `audio_seconds` 列(老库自动补列),应用令牌可设
+  **音频分钟上限**(0=不限),超限 `429`;面板显示音频分钟用量。
+
 ### 修复
 
 - **手机上「访客统计」「服务器状态」两个右上角悬浮件:第二次点击不收起、滚动页面也不收起**。

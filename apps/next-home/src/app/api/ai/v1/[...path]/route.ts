@@ -7,10 +7,14 @@ import {
   type GatewayApp,
   type GatewayProvider,
 } from '@/lib/ai-gateway'
+import { transcribeAudio } from '@/lib/gateway/audio'
 
 export const dynamic = 'force-dynamic'
 
-const ALLOWED = new Set(['chat/completions', 'embeddings', 'models', 'completions'])
+const ALLOWED = new Set(['chat/completions', 'embeddings', 'models', 'completions', 'audio/transcriptions'])
+
+/** 音频上传上限(压缩后的语音;约 25MB ≈ 很多分钟 16k 单声道) */
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -136,6 +140,65 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
   const quota = checkQuota(app)
   if (quota) {
     return Response.json({ error: { message: quota } }, { status: 429, headers: CORS })
+  }
+
+  if (route === 'audio/transcriptions') {
+    let form: FormData
+    try {
+      form = await req.formData()
+    } catch {
+      return Response.json(
+        { error: { message: '音频请求需为 multipart/form-data' } },
+        { status: 400, headers: CORS },
+      )
+    }
+    const file = form.get('file')
+    if (!(file instanceof Blob)) {
+      return Response.json({ error: { message: '缺少 file' } }, { status: 400, headers: CORS })
+    }
+    if (file.size > MAX_AUDIO_BYTES) {
+      return Response.json(
+        { error: { message: `音频过大(上限 ${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)}MB)` } },
+        { status: 413, headers: CORS },
+      )
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const reqModel = typeof form.get('model') === 'string' ? String(form.get('model')) : ''
+    const language = typeof form.get('language') === 'string' ? String(form.get('language')) : undefined
+    const diarize = form.get('diarize') === 'true' || form.get('diarize') === '1'
+    const provider = resolveProvider('audio', app, app.model || reqModel)
+    if (!provider) {
+      return Response.json(
+        { error: { message: '未配置可用的音频上游密钥' } },
+        { status: 503, headers: CORS },
+      )
+    }
+    try {
+      const transcript = await transcribeAudio(provider, {
+        bytes,
+        filename: file instanceof File ? file.name : 'audio',
+        contentType: file.type || 'audio/wav',
+        language,
+        diarize,
+        model: app.model || reqModel || undefined,
+      })
+      recordGatewayUsage({
+        appId: app.id,
+        providerId: provider.id,
+        model: app.model || provider.model || reqModel || '',
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheHitTokens: 0,
+        audioSeconds: Math.round(transcript.seconds || 0),
+        requests: 1,
+      })
+      return Response.json(transcript, { headers: CORS })
+    } catch (e) {
+      return Response.json(
+        { error: { message: `转写失败:${e instanceof Error ? e.message : 'unknown'}` } },
+        { status: 502, headers: CORS },
+      )
+    }
   }
 
   const kind: 'chat' | 'embed' = route === 'embeddings' ? 'embed' : 'chat'

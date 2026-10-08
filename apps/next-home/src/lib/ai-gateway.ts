@@ -5,7 +5,10 @@ import { granularityOf, windowOf } from './usage/range'
 
 export const GATEWAY_META_KEY = 'ai_gateway_config'
 
-export type ProviderRole = 'chat' | 'embed' | 'both'
+export type ProviderRole = 'chat' | 'embed' | 'both' | 'audio'
+
+/** provider 的上游接口形状:openai=OpenAI 兼容 /audio/transcriptions;deepgram / assemblyai=带说话人分离 */
+export type ProviderApi = 'openai' | 'deepgram' | 'assemblyai'
 
 export interface GatewayProvider {
   id: string
@@ -16,6 +19,8 @@ export interface GatewayProvider {
   models: string[]
   enabled: boolean
   role: ProviderRole
+  /** 音频 provider 的接口形状(非音频 provider 忽略) */
+  api: ProviderApi
 }
 
 export interface GatewayApp {
@@ -27,6 +32,8 @@ export interface GatewayApp {
   model: string
   dailyLimit: number
   totalLimit: number
+  /** 音频分钟额度(分钟;0=不限);与 token 额度分开计 */
+  audioLimit: number
   note: string
 }
 
@@ -34,6 +41,7 @@ export interface GatewayConfig {
   version: number
   chatProviderId: string
   embedProviderId: string
+  audioProviderId: string
   providers: GatewayProvider[]
   apps: GatewayApp[]
 }
@@ -66,7 +74,8 @@ function normalizeProvider(raw: unknown): GatewayProvider | null {
   if (!ID_RE.test(id)) return null
   const baseUrl = str(r.baseUrl).replace(/\/+$/, '')
   if (!/^https?:\/\//i.test(baseUrl)) return null
-  const role: ProviderRole = r.role === 'embed' || r.role === 'both' ? r.role : 'chat'
+  const role: ProviderRole = r.role === 'embed' || r.role === 'both' || r.role === 'audio' ? r.role : 'chat'
+  const api: ProviderApi = r.api === 'deepgram' || r.api === 'assemblyai' ? r.api : 'openai'
   return {
     id,
     name: str(r.name, id),
@@ -76,6 +85,7 @@ function normalizeProvider(raw: unknown): GatewayProvider | null {
     models: cleanList(r.models),
     enabled: r.enabled !== false,
     role,
+    api,
   }
 }
 
@@ -94,6 +104,7 @@ function normalizeApp(raw: unknown): GatewayApp | null {
     model: str(r.model),
     dailyLimit: nonNegInt(r.dailyLimit),
     totalLimit: nonNegInt(r.totalLimit),
+    audioLimit: nonNegInt(r.audioLimit),
     note: str(r.note),
   }
 }
@@ -109,7 +120,8 @@ export function normalizeGatewayConfig(input: unknown): GatewayConfig {
   const ids = new Set(providers.map((p) => p.id))
   const chatProviderId = ids.has(str(r.chatProviderId)) ? str(r.chatProviderId) : ''
   const embedProviderId = ids.has(str(r.embedProviderId)) ? str(r.embedProviderId) : ''
-  return { version: 1, chatProviderId, embedProviderId, providers, apps }
+  const audioProviderId = ids.has(str(r.audioProviderId)) ? str(r.audioProviderId) : ''
+  return { version: 1, chatProviderId, embedProviderId, audioProviderId, providers, apps }
 }
 
 function legacySeed(): GatewayConfig {
@@ -132,6 +144,7 @@ function legacySeed(): GatewayConfig {
       models: [],
       enabled: true,
       role: 'chat',
+      api: 'openai',
     })
   }
   const embedKey = db.getMeta('chatbot_embed_key') || ''
@@ -145,6 +158,7 @@ function legacySeed(): GatewayConfig {
       models: [],
       enabled: true,
       role: 'embed',
+      api: 'openai',
     })
   }
   return normalizeGatewayConfig({
@@ -184,9 +198,10 @@ export function maskKey(key: string): string {
   return `••••${k.slice(-4)}`
 }
 
-export function getDefaultProvider(kind: 'chat' | 'embed'): GatewayProvider | null {
+export function getDefaultProvider(kind: 'chat' | 'embed' | 'audio'): GatewayProvider | null {
   const cfg = getGatewayConfig()
-  const defId = kind === 'embed' ? cfg.embedProviderId : cfg.chatProviderId
+  const defId =
+    kind === 'embed' ? cfg.embedProviderId : kind === 'audio' ? cfg.audioProviderId : cfg.chatProviderId
   return cfg.providers.find((p) => p.id === defId && p.enabled) ?? null
 }
 
@@ -203,12 +218,14 @@ export function resolveAppByToken(token: string): GatewayApp | null {
 }
 
 export function resolveProvider(
-  kind: 'chat' | 'embed',
+  kind: 'chat' | 'embed' | 'audio',
   app: GatewayApp | null,
   model: string,
 ): GatewayProvider | null {
   const cfg = getGatewayConfig()
-  const pool = cfg.providers.filter((p) => p.enabled && (p.role === kind || p.role === 'both'))
+  const pool = cfg.providers.filter(
+    (p) => p.enabled && (kind === 'audio' ? p.role === 'audio' : p.role === kind || p.role === 'both'),
+  )
   if (app?.providerId) {
     const bound = pool.find((p) => p.id === app.providerId)
     if (bound) return bound
@@ -219,7 +236,8 @@ export function resolveProvider(
     const byModel = pool.find((p) => p.models.includes(model))
     if (byModel) return byModel
   }
-  const defId = kind === 'embed' ? cfg.embedProviderId : cfg.chatProviderId
+  const defId =
+    kind === 'embed' ? cfg.embedProviderId : kind === 'audio' ? cfg.audioProviderId : cfg.chatProviderId
   return pool.find((p) => p.id === defId) ?? pool[0] ?? null
 }
 
@@ -232,18 +250,27 @@ export const bjHour = () => new Date(Date.now() + 8 * 3600_000).getUTCHours()
 /** 一行算作多少 tokens(input/output/cache 相加;cache 为 prompt 的子集,入库时已从 input 扣除) */
 const tokensOfAi = (r: AiUsageRow) => r.inputTokens + r.outputTokens + r.cacheHitTokens
 
-/** 某应用的今日 / 累计 token 用量(额度检查用) */
-export function getAppUsage(appId: string): { today: number; total: number } {
+/** 某应用的用量(额度检查用):token 的今日/累计 + 音频秒数的今日/累计 */
+export function getAppUsage(appId: string): {
+  today: number
+  total: number
+  audioToday: number
+  audioTotal: number
+} {
   const day = bjToday()
   let today = 0
   let total = 0
+  let audioToday = 0
+  let audioTotal = 0
   for (const r of getDb().listAiUsage()) {
     if (r.appId !== appId) continue
     const t = tokensOfAi(r)
     total += t
     if (r.day === day) today += t
+    audioTotal += r.audioSeconds ?? 0
+    if (r.day === day) audioToday += r.audioSeconds ?? 0
   }
-  return { today, total }
+  return { today, total, audioToday, audioTotal }
 }
 
 /** 记录一次网关请求的用量(按天聚合累加) */
@@ -254,6 +281,7 @@ export function recordGatewayUsage(input: {
   inputTokens: number
   outputTokens: number
   cacheHitTokens: number
+  audioSeconds?: number
   requests?: number
 }): void {
   getDb().addAiUsage({
@@ -266,6 +294,7 @@ export function recordGatewayUsage(input: {
     inputTokens: input.inputTokens,
     outputTokens: input.outputTokens,
     cacheHitTokens: input.cacheHitTokens,
+    audioSeconds: input.audioSeconds ?? 0,
   })
 }
 
@@ -299,6 +328,7 @@ export function getGatewayUsageRows(
       cur.outputTokens += r.outputTokens
       cur.cacheHitTokens += r.cacheHitTokens
       cur.requests = (cur.requests ?? 0) + r.requests
+      cur.audioSeconds = (cur.audioSeconds ?? 0) + (r.audioSeconds ?? 0)
     } else {
       map.set(k, {
         ts,
@@ -307,6 +337,7 @@ export function getGatewayUsageRows(
         outputTokens: r.outputTokens,
         cacheHitTokens: r.cacheHitTokens,
         requests: r.requests,
+        audioSeconds: r.audioSeconds ?? 0,
         source: 'gateway',
         apiKey: app,
         serviceAccount: prov,
@@ -319,13 +350,16 @@ export function getGatewayUsageRows(
 
 /** 校验额度:已用 + 本次预估是否超限;返回错误信息或 null */
 export function checkQuota(app: GatewayApp): string | null {
-  if (!app.dailyLimit && !app.totalLimit) return null
+  if (!app.dailyLimit && !app.totalLimit && !app.audioLimit) return null
   const used = getAppUsage(app.id)
   if (app.dailyLimit && used.today >= app.dailyLimit) {
     return `今日额度已用尽(上限 ${app.dailyLimit})`
   }
   if (app.totalLimit && used.total >= app.totalLimit) {
     return `总额度已用尽(上限 ${app.totalLimit})`
+  }
+  if (app.audioLimit && used.audioTotal >= app.audioLimit * 60) {
+    return `音频额度已用尽(上限 ${app.audioLimit} 分钟)`
   }
   return null
 }
