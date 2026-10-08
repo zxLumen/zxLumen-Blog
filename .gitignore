@@ -62,3 +62,6 @@ apps/next-home/public/vlog
 apps/next-home/public/apps
 
 docs/proxy.yaml
+
+# 品牌原图(2048² 大文件,只归档备查;站点只用派生的优化图,不入库)
+assets/brand-source/

@@ -19,10 +19,27 @@ import { MOCK_COOKIE } from "@/lib/clientid";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { SITE_META } = await getRuntimeContent();
+  const domain = process.env.DOMAIN || "zxlumen.cn";
+  const ogImage = "/brand/og.png";
   return {
+    metadataBase: new URL(`https://${domain}`),
     title: SITE_META.title,
     description: SITE_META.description,
     keywords: SITE_META.keywords,
+    openGraph: {
+      type: "website",
+      url: `https://${domain}`,
+      siteName: "zxLumen",
+      title: SITE_META.title,
+      description: SITE_META.description,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: "zxLumen · zxlumen.cn" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: SITE_META.title,
+      description: SITE_META.description,
+      images: [ogImage],
+    },
   };
 }
 

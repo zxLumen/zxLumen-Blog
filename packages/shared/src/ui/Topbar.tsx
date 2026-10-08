@@ -227,6 +227,7 @@ export function Topbar({
       <header className="zx-topbar" ref={barRef}>
         <div className="zx-topbar-in">
           <Comp className="zx-logo" href="/" onClick={(e) => onNavClick(e, '/')} {...linkExtra}>
+            <img src="/brand/mark.webp" alt="" width={22} height={22} />
             <span className="z">❯</span> {shell ?? PROFILE.shell}
           </Comp>
           <nav className="zx-nav">
