@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FLOAT_MARGIN, NARROW_MAX, maxX, rightGutter, snapEdge } from './floating.js'
+import { FLOAT_MARGIN, NARROW_MAX, canHover, maxX, rightGutter, snapEdge } from './floating.js'
 import { Sparkline, type SparkPoint } from './Sparkline.js'
 
 type Metric = 'cpu' | 'mem' | 'disk' | 'load'
@@ -52,6 +52,12 @@ export function StatusWidget() {
   const [narrow, setNarrow] = useState(
     () => typeof window !== 'undefined' && window.matchMedia(`(max-width: ${NARROW_MAX}px)`).matches,
   )
+  /**
+   * 设备能否悬浮:能 → 展开/收起全交给 hover(点击不参与开关);不能(触屏)→
+   * 只认点击 toggle,并补上「滚动页面 / 点外部即收起」。见 floating.canHover()。
+   * SSR 阶段 canHover() 恒为 true(window 不存在),挂载后由 effect 同步真实能力。
+   */
+  const [hoverCap, setHoverCap] = useState(() => canHover())
   const ref = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -107,6 +113,37 @@ export function StatusWidget() {
     mq.addEventListener('change', sync)
     return () => mq.removeEventListener('change', sync)
   }, [])
+
+  // 监听「能否悬浮」:切到触屏模拟 / 拔掉鼠标时交互方式要跟着换
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: hover)')
+    const sync = () => setHoverCap(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  // 触屏专属的收起路径(桌面靠 mouseleave,触屏没有):
+  //  1) 点按钮/浮层以外的地方 → 收起(原有行为此前是靠浏览器补发的合成 mouseleave 才成立)
+  //  2) 页面一滚动 → 立刻收起(浮层无内部滚动区,滚的就是页面)
+  useEffect(() => {
+    if (!open || hoverCap) return
+    const onDown = (e: Event) => {
+      const t = e.target as Node
+      if (ref.current?.contains(t)) return
+      setOpen(false)
+    }
+    const onScroll = (e: Event) => {
+      if (ref.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+  }, [open, hoverCap])
 
   // 恢复上次拖动位置(右侧扣掉应用栏,免得老位置压住它)。
   // 窄屏不恢复:坐标改由 CSS(右上角、顶栏之下)决定,行内 left/top 会盖过样式表。
@@ -193,8 +230,8 @@ export function StatusWidget() {
       ref={ref}
       className={`zx-statuswidget${open ? ' is-open' : ''}`}
       style={style}
-      onMouseEnter={cancelClose}
-      onMouseLeave={scheduleClose}
+      onMouseEnter={hoverCap ? cancelClose : undefined}
+      onMouseLeave={hoverCap ? scheduleClose : undefined}
     >
       <button
         type="button"
@@ -208,9 +245,19 @@ export function StatusWidget() {
           const r = el.getBoundingClientRect()
           dragRef.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false }
         }}
-        onMouseEnter={() => {
+        onMouseEnter={
+          hoverCap
+            ? () => {
+                cancelClose()
+                setOpen(true)
+              }
+            : undefined
+        }
+        onClick={() => {
+          // 触屏:点按钮 = 开 / 关(第二次点击即收起);桌面:开关归 hover,点击不参与
+          if (hoverCap) return
           cancelClose()
-          setOpen(true)
+          setOpen((o) => !o)
         }}
       >
         <span className="zx-statuswidget-dot" style={{ background: up ? '#37b24d' : '#ff6b6b' }} />
@@ -223,7 +270,11 @@ export function StatusWidget() {
         )}
       </button>
       {open && (
-        <div className="zx-statuswidget-pop" onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
+        <div
+          className="zx-statuswidget-pop"
+          onMouseEnter={hoverCap ? cancelClose : undefined}
+          onMouseLeave={hoverCap ? scheduleClose : undefined}
+        >
           <div className="zx-statuswidget-head">
             <span className="zx-mono zx-muted">{ok ? '// SERVER STATUS' : '// STATUS ERROR'}</span>
             <span className="zx-mono" style={{ color: up ? '#37b24d' : '#ff6b6b' }}>

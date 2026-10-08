@@ -66,6 +66,21 @@ export function isNarrow(): boolean {
 }
 
 /**
+ * 设备**能否悬浮**(桌面鼠标 / 触屏平板手机)。
+ *
+ * 悬浮件的展开交互按这个能力分流,而不是按视口宽(`narrow` 只管定位):
+ * 能悬浮 → `mouseenter` 开 / `mouseleave` 关,点击不参与开关;
+ * 不能悬浮(触屏)→ 只认 `click` 开关(否则浏览器补发的合成 mouseenter
+ * 会先开、click 的 toggle 再关,变成「点一下打不开」),并在打开时
+ * **滚动页面 / 点外部即收起**(没有 mouseleave 这条天然的收起路径)。
+ * 与 AI 状态灯的 `canHover()` 同口径。
+ */
+export function canHover(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return true
+  return window.matchMedia('(hover: hover)').matches
+}
+
+/**
  * 窄屏时底部应用栏(底部横条)占据的高度,悬浮件要向上让开;其余情况返回 0。
  *
  * 桌面应用栏在右侧(见 rightGutter);窄屏它变成贴底的横条,占的是**底部**,
