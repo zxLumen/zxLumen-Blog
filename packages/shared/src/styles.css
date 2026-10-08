@@ -1757,6 +1757,67 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   box-shadow: none;
 }
 
+/* ---- 站长:首页项目卡直接拖拽排序 ---- */
+/* 把手放左上角(序号伪元素在右上,不打架)。卡片内有链接与可选中文字,
+   所以只在把手上发起拖动,不整卡可拖。 */
+.zx-card-grip {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.6rem;
+  z-index: 2;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--fg-muted);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  opacity: 0.35;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.zx-card:hover .zx-card-grip,
+.zx-card[data-dragging] .zx-card-grip {
+  opacity: 1;
+  color: var(--accent);
+}
+.zx-card-grip:active {
+  cursor: grabbing;
+}
+/* 给把手让位,别压住项目名 */
+.zx-card.is-admin .zx-card-head {
+  padding-left: 1.15rem;
+}
+/* 正在拖的那张淡出 */
+.zx-card[data-dragging] {
+  opacity: 0.4;
+}
+/* 落点提示:按阅读顺序落在目标卡片左/右侧(多列网格里左右比上下更直观) */
+.zx-card[data-drop='before'],
+.zx-card[data-drop='after'] {
+  border-color: var(--accent);
+}
+.zx-card[data-drop='before'] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.zx-card[data-drop='after'] {
+  box-shadow: inset -3px 0 0 var(--accent);
+}
+/* 面板提示条 */
+.zx-projects-admin {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+}
+.zx-projects-admin-status[data-kind='ok'] {
+  color: var(--accent);
+}
+.zx-projects-admin-status[data-kind='err'] {
+  color: #e03131;
+}
+
 .zx-card h3 {
   font-size: 1.1rem;
   margin-bottom: 0.35rem;

@@ -1,7 +1,7 @@
 'use client'
 
 import type { Contacts, LinkItem, Profile, Project, TechItem, TimelineEntry } from '../content.js'
-import type { CommentRow, PagedComments, StatsResult, UsageRow } from '../schema.js'
+import type { CommentRow, PagedComments, StatsResult, StoredProject, UsageRow } from '../schema.js'
 import type { VlogSeries, VlogStart } from '../schema.js'
 import type { SourceAvailability, UsageSel, DataSource } from '../usage-sel.js'
 import { Hero } from './Hero.js'
@@ -40,6 +40,10 @@ interface HomePageProps {
   timeline?: TimelineEntry[]
   /** 项目(已合并 admin 覆盖;缺省用静态 PROJECTS) */
   projects?: Project[]
+  /** 站长:含垃圾箱的全量项目(供首页直接拖拽排序后整表存回) */
+  adminStoredProjects?: StoredProject[]
+  /** 站长:项目表乐观锁版本戳(GET 时的指纹) */
+  projectsRev?: string
   /** 抖音旅行短视频系列(admin 配置) */
   vlogSeries?: VlogSeries[]
   /** 首页随机起播点(服务端随机;缺省从第一个开始) */
@@ -66,6 +70,8 @@ export function HomePage({
   tech,
   timeline,
   projects,
+  adminStoredProjects,
+  projectsRev,
   vlogSeries,
   vlogStart,
   onSubmitComment,
@@ -76,7 +82,14 @@ export function HomePage({
       <StatsWidget stats={stats} />
       <StatusWidget />
       <Hero profile={profile} vlogSeries={vlogSeries} vlogStart={vlogStart} />
-      <ProjectsSection projects={projects} clicks={stats?.events.clicksByTarget} pv={stats?.visits.pv} />
+      <ProjectsSection
+        projects={projects}
+        isAdmin={isAdmin}
+        adminStoredProjects={adminStoredProjects}
+        projectsRev={projectsRev}
+        clicks={stats?.events.clicksByTarget}
+        pv={stats?.visits.pv}
+      />
       <UsageSection
         rows={usage}
         window={usageWindow}

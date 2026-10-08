@@ -27,8 +27,11 @@ export interface DropTarget {
 export interface DragReorderOptions {
   /** 参与排序的 id 顺序(不含被禁用的项) */
   ids: string[]
-  /** 落序:'y' 竖排(桌面应用栏 / admin 列表)、'x' 横排(窄屏底部横条) */
-  axis: 'x' | 'y'
+  /**
+   * 落序:'y' 竖排(桌面应用栏 / admin 列表)、'x' 横排(窄屏底部横条)、
+   * 'grid' 多列网格(首页项目卡:指针须落在卡片内,按 X 中点定前后)
+   */
+  axis: 'x' | 'y' | 'grid'
   /**
    * 按 id 取分组名。给了就**只允许同组内排序** —— 访客端用 admin 定的分组,
    * 这样分隔线永远待在有意义的位置;admin 自己改分组,所以不传。
@@ -167,9 +170,16 @@ export function useDragReorder(opts: DragReorderOptions): DragReorder {
       if (ax === 'y') {
         if (clientY < r.top || clientY > r.bottom) continue
         hit = { targetId: id, before: clientY < r.top + r.height / 2 }
-      }
-      if (!hit) {
+      } else if (ax === 'x') {
         if (clientX < r.left || clientX > r.right) continue
+        hit = { targetId: id, before: clientX < r.left + r.width / 2 }
+      } else {
+        /**
+         * grid:多列网格里只按 X(原 'x' 分支)会命中**上面一行的同列卡片** ——
+         * 同一列的卡片左右边界完全相同,先遍历到的上排项会抢先命中。所以 X、Y 都要
+         * 落在卡片矩形内,前后则按 X 中点判定(阅读顺序:左半插前、右半插后)。
+         */
+        if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) continue
         hit = { targetId: id, before: clientX < r.left + r.width / 2 }
       }
       // 规整只在这里做一次:存进 dropRef 的既是画指示线用的、也是 endDrag 提交用的

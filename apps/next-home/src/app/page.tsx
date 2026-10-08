@@ -10,7 +10,7 @@ import { fetchSsrUsage } from "@/lib/usage/ssr-rows";
 import { getSourceAvailability } from "@/lib/usage-sources";
 import { getUsageSourceOrder, getUsageDefaultSource } from "@/lib/usage-source-order";
 import { getRuntimeContent } from "@zx/shared/server";
-import { getVisibleProjects } from "@/lib/projects-config";
+import { getVisibleProjects, getStoredProjects, getProjectsRev } from "@/lib/projects-config";
 import { getVisibleVlogSeries, pickRandomVlogStart } from "@/lib/vlog-config";
 export const dynamic = "force-dynamic";
 
@@ -82,6 +82,9 @@ export default async function Home() {
 
   // 项目(admin 后台增删/排序/软删;未配置时用运行时 content.json 的 PROJECTS)
   const projects = await getVisibleProjects();
+  // 站长:额外下发「含垃圾箱的全量 + 乐观锁版本戳」,供首页直接拖拽排序后整表存回
+  const adminStoredProjects = admin ? await getStoredProjects() : undefined;
+  const projectsRev = admin ? getProjectsRev() : undefined;
   const content = await getRuntimeContent();
 
   // 抖音旅行视频系列(admin 后台配置;未配置则 Hero 右侧回退显示主题 ASCII)
@@ -100,6 +103,8 @@ export default async function Home() {
       stats={stats}
       projects={projects}
       isAdmin={admin}
+      adminStoredProjects={adminStoredProjects}
+      projectsRev={projectsRev}
       initialAuthor={initialAuthor}
       viewerMock={viewerMock || undefined}
       contacts={await getClientContacts()}

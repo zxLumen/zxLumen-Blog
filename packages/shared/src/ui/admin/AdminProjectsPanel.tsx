@@ -19,6 +19,7 @@ import type { StoredProject } from '../../schema.js'
 import { MantineBridge } from './mantine-bridge.js'
 import { adminFetch } from './admin-fetch.js'
 import type { NotifyMsg } from './admin-types.js'
+import { mergeProjectsForSave } from '../projects-order.js'
 
 /** 覆盖面门控:项目管理在 Tab 模式下仅对应 Tab 显 */
 function gate(showTabs: boolean, tab: string): boolean {
@@ -163,8 +164,8 @@ export function AdminProjectsPanel({
   onDirtyChange?: (dirty: boolean) => void
 }) {
   const [projects, setProjects] = useState<StoredProject[]>([])
-  /** 乐观锁版本戳:GET 时的表指纹,POST 时带回;不匹配服务端返回 409 */
-  const [rev, setRev] = useState<string | undefined>(undefined)
+  /** 加载时的快照:保存时用来判断「面板自己有没有改过顺序」(见 mergeProjectsForSave) */
+  const [baseline, setBaseline] = useState<StoredProject[]>([])
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -185,20 +186,56 @@ export function AdminProjectsPanel({
 
   const notify = (kind: 'ok' | 'err', text: string) => onNotify?.({ kind, text })
 
+  const getProjects = useCallback(async () => {
+    const r = await adminFetch('/api/admin/projects', { cache: 'no-store' })
+    if (!r.ok) return null
+    const d = (await r.json()) as { projects?: StoredProject[]; rev?: string }
+    return { projects: d.projects ?? [], rev: d.rev }
+  }, [])
+
+  const postProjects = useCallback(
+    (list: StoredProject[], useRev?: string) =>
+      adminFetch('/api/admin/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projects: list, rev: useRev }),
+      }),
+    [],
+  )
+
   const load = useCallback(async () => {
     setBusy(true)
     try {
-      const r = await adminFetch('/api/admin/projects', { cache: 'no-store' })
-      const data = (await r.json()) as { projects?: StoredProject[]; rev?: string }
-      setProjects(data.projects ?? [])
-      setRev(data.rev)
+      const data = await getProjects()
+      if (!data) throw new Error('加载失败')
+      setProjects(data.projects)
+      setBaseline(data.projects)
       setDirty(false)
     } catch {
       notify('err', '项目列表加载失败')
     } finally {
       setBusy(false)
     }
-  }, [notify])
+  }, [notify, getProjects])
+
+  /**
+   * 切回这个标签页时(且没有未保存编辑)重新拉一次,好让「站长在首页拖拽调整的顺序」
+   * 及时反映到面板里 —— 否则面板还停在旧顺序,心里没底。有 dirty 就不打扰。
+   */
+  useEffect(() => {
+    if (!gated || !active) return
+    const onFocus = () => {
+      if (document.visibilityState !== 'visible') return
+      if (dirty) return
+      void load()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
+  }, [gated, active, dirty, load])
 
   const mutate = (fn: (list: StoredProject[]) => StoredProject[]) => {
     setProjects((list) => fn(list))
@@ -243,31 +280,37 @@ export function AdminProjectsPanel({
   const save = async () => {
     setSaving(true)
     try {
-      const r = await adminFetch('/api/admin/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projects, rev }),
-      })
+      /**
+       * 不再拿本地整表硬发。先读服务端最新,再按 id 把本页的内容编辑合并上去:
+       * 顺序默认沿用最新(比如站长刚在首页拖出来的),只有本面板自己按过 ↑↓
+       * 改过顺序时才应用面板顺序。这样既不会把前端的顺序冲回去,也不会因为
+       * 「顺序变了」而白白撞 409 丢掉刚改的内容。
+       */
+      let fresh = await getProjects()
+      if (!fresh) throw new Error('读取最新列表失败')
+      let merged = mergeProjectsForSave(fresh.projects, baseline, projects)
+      let r = await postProjects(merged, fresh.rev)
+      if (r.status === 409) {
+        // 极端并发:读-改-写之间又被改了一次。再读一次、重合并,重试一回。
+        fresh = await getProjects()
+        if (!fresh) throw new Error('读取最新列表失败')
+        merged = mergeProjectsForSave(fresh.projects, baseline, projects)
+        r = await postProjects(merged, fresh.rev)
+      }
       const d = (await r.json().catch(() => ({}))) as {
         error?: string
         projects?: StoredProject[]
         rev?: string
       }
-      if (!r.ok) {
-        // 409:期间有别处改动过这张表。绝不能拿本地旧列表硬覆盖,提示刷新并放弃本次编辑
-        if (r.status === 409) {
-          notify('err', d.error || '列表已被修改,请点「刷新」后重新编辑')
-          await load()
-          return
-        }
-        throw new Error(d.error || '保存失败')
-      }
-      if (d.projects) setProjects(d.projects)
-      setRev(d.rev ?? rev)
+      if (!r.ok) throw new Error(d.error || '保存失败')
+      const saved = d.projects ?? merged
+      setProjects(saved)
+      setBaseline(saved)
       setDirty(false)
       notify('ok', '项目已保存(立即生效)')
     } catch (err) {
-      notify('err', err instanceof Error ? err.message : '保存失败')
+      // 失败不丢编辑:保留本地修改,提示后重试(刷新会丢,故不自动刷新)
+      notify('err', `${err instanceof Error ? err.message : '保存失败'}(改动仍保留在本页)`)
     } finally {
       setSaving(false)
     }
@@ -284,8 +327,10 @@ const r = await adminFetch('/api/admin/projects', { method: 'DELETE' })
         rev?: string
       }
       if (!r.ok) throw new Error('恢复失败')
-      if (d.projects) setProjects(d.projects)
-      setRev(d.rev)
+      if (d.projects) {
+        setProjects(d.projects)
+        setBaseline(d.projects)
+      }
       setDirty(false)
       notify('ok', '已恢复静态默认项目')
     } catch (err) {

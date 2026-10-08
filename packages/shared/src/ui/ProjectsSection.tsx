@@ -1,9 +1,13 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { PROJECTS, normalizeUrl, isExternalUrl, type Project } from '../content.js'
+import type { StoredProject } from '../schema.js'
 import { Section } from './Section.js'
 import { trackEvent } from './track.js'
+import { useDragReorder } from './useDragReorder.js'
+import { reorderVisible } from './projects-order.js'
+import { adminFetch } from './admin/admin-fetch.js'
 
 /** 亮点字号的最小缩放比;缩到该值仍放不下时改为换行(不用省略号) */
 const HL_MIN_SCALE = 0.7
@@ -82,16 +86,32 @@ const STATUS_LABEL: Record<Project['status'], string> = {
   archived: 'ARCHIVED',
 }
 
+/** 站长在首页直接拖拽排序时,挂到每张卡上的拖拽描述 */
+interface CardDrag {
+  dragging: boolean
+  dropSide: 'before' | 'after' | null
+  register: (el: HTMLElement | null) => void
+  handle: {
+    onPointerDown: (e: React.PointerEvent) => void
+    onPointerMove: (e: React.PointerEvent) => void
+    onPointerUp: (e: React.PointerEvent) => void
+    onPointerCancel: () => void
+    onClickCapture: (e: React.MouseEvent) => void
+  }
+}
+
 function ProjectCard({
   project,
   idx,
   clicks,
   pv,
+  drag,
 }: {
   project: Project
   idx: number
   clicks?: number
   pv?: number
+  drag?: CardDrag
 }) {
   // 本站项目(「本页 · 个人主页」):只显示全站访问量(PV),不计链接点击
   const self = project.demoUrl === '/'
@@ -100,10 +120,23 @@ function ProjectCard({
   const total = self ? pv ?? 0 : clicks ?? 0
   return (
     <article
-      className={`zx-card${project.featured ? ' is-featured' : ''}${project.status === 'archived' ? ' is-archived' : ''}`}
+      ref={drag?.register}
+      className={`zx-card${project.featured ? ' is-featured' : ''}${project.status === 'archived' ? ' is-archived' : ''}${drag ? ' is-admin' : ''}`}
       data-idx={String(idx).padStart(2, '0')}
+      data-drop={drag?.dropSide ?? undefined}
+      data-dragging={drag?.dragging ? '' : undefined}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+      {drag && (
+        <span
+          className="zx-card-grip"
+          {...drag.handle}
+          title="按住拖动调整顺序(松开即自动保存)"
+          aria-label="拖动调整顺序"
+        >
+          ⠿
+        </span>
+      )}
+      <div className="zx-card-head" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
         <h3 style={{ margin: 0 }}>{project.name}</h3>
         {total > 0 && (
           <span
@@ -173,23 +206,154 @@ function ProjectCard({
 
 export function ProjectsSection({
   projects = PROJECTS,
+  isAdmin,
+  adminStoredProjects,
+  projectsRev,
   clicks,
   pv,
 }: {
   projects?: Project[]
+  /** 站长:显示 ⠿ 把手,可直接拖拽排序(松开即保存) */
+  isAdmin?: boolean
+  /** 站长:含垃圾箱的全量项目(SSR 直出);拖拽后据此整表存回 */
+  adminStoredProjects?: StoredProject[]
+  /** 站长:项目表乐观锁版本戳 */
+  projectsRev?: string
   clicks?: Record<string, number>
   pv?: number
 }) {
+  const [stored, setStored] = useState<StoredProject[] | undefined>(adminStoredProjects)
+  const [rev, setRev] = useState<string | undefined>(projectsRev)
+  const [saving, setSaving] = useState(false)
+  const [flash, setFlash] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!flash) return
+    const t = setTimeout(() => setFlash(null), 2600)
+    return () => clearTimeout(t)
+  }, [flash])
+  const showFlash = useCallback((kind: 'ok' | 'err', text: string) => setFlash({ kind, text }), [])
+
   // 分类:显式 kind 优先,缺省按本站(demoUrl='/')推断
   const kindOf = (p: Project): 'personal' | 'work' => p.kind ?? (p.demoUrl === '/' ? 'personal' : 'work')
-  const personal = projects.filter((p) => kindOf(p) === 'personal')
-  const work = projects.filter((p) => kindOf(p) === 'work')
+  // 站长用「含垃圾箱的全量」渲染(排除垃圾箱);否则用传入的可见列表
+  const items: Project[] = isAdmin && stored ? stored.filter((p) => !p.deleted) : projects
+  const personal = items.filter((p) => kindOf(p) === 'personal')
+  const work = items.filter((p) => kindOf(p) === 'work')
+
+  const getProjects = useCallback(async () => {
+    try {
+      const r = await adminFetch('/api/admin/projects', { cache: 'no-store' })
+      if (!r.ok) return null
+      const d = (await r.json()) as { projects?: StoredProject[]; rev?: string }
+      return { projects: d.projects ?? [], rev: d.rev }
+    } catch {
+      return null
+    }
+  }, [])
+  const postProjects = useCallback(
+    (list: StoredProject[], useRev?: string) =>
+      adminFetch('/api/admin/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projects: list, rev: useRev }),
+      }),
+    [],
+  )
+
+  /**
+   * 落手即存:先乐观渲染新顺序,再整表存回。
+   * 409(期间别处改过这张表)→ 拉最新列表,**只把新顺序套上去**再重试一次 ——
+   * 这样既不会用陈旧内容覆盖别处的改动,也不会因顺序变了而白白报冲突。
+   */
+  const saveOrder = useCallback(
+    async (nextVisibleIds: string[]) => {
+      const base = stored
+      if (!base) return
+      const optimistic = reorderVisible(base, nextVisibleIds)
+      setStored(optimistic)
+      setSaving(true)
+      try {
+        let payload = optimistic
+        let useRev = rev
+        let r = await postProjects(payload, useRev)
+        if (r.status === 409) {
+          const fresh = await getProjects()
+          if (!fresh) throw new Error('读取最新顺序失败')
+          payload = reorderVisible(fresh.projects, nextVisibleIds)
+          useRev = fresh.rev
+          r = await postProjects(payload, useRev)
+        }
+        const d = (await r.json().catch(() => ({}))) as {
+          error?: string
+          projects?: StoredProject[]
+          rev?: string
+        }
+        if (!r.ok) throw new Error(d.error || '保存失败')
+        setStored(d.projects ?? payload)
+        setRev(d.rev)
+        showFlash('ok', '顺序已保存')
+      } catch (e) {
+        setStored(base)
+        showFlash('err', e instanceof Error ? e.message : '保存失败')
+      } finally {
+        setSaving(false)
+      }
+    },
+    [stored, rev, postProjects, getProjects, showFlash],
+  )
+
+  const kindById = new Map(items.map((p) => [p.id, kindOf(p)]))
+  const drag = useDragReorder({
+    ids: items.map((p) => p.id),
+    axis: 'grid',
+    // 只在同组内拖:个人项目 / 历史工作成果是两个 grid,不能互串
+    groupOf: (id) => kindById.get(id) ?? '',
+    onCommit: (next) => void saveOrder(next),
+    scrollWindow: true,
+    getScrollBox: () =>
+      typeof document === 'undefined' ? null : (document.scrollingElement as HTMLElement | null),
+    disabled: !isAdmin || saving || items.length < 2,
+  })
+  const dragOf = (id: string): CardDrag | undefined =>
+    isAdmin
+      ? {
+          dragging: drag.dragId === id,
+          dropSide:
+            drag.dragId !== id && drag.drop?.targetId === id
+              ? drag.drop.before
+                ? 'before'
+                : 'after'
+              : null,
+          register: drag.registerItem(id),
+          handle: drag.handleProps(id),
+        }
+      : undefined
+
   return (
     <Section id="projects" tag="// PROJECTS" num="01" title="项目">
+      {isAdmin && (
+        <div className="zx-projects-admin">
+          <span className="zx-projects-admin-hint">拖拽卡片左上角 ⠿ 调整顺序,松开即自动保存</span>
+          {saving && <span className="zx-projects-admin-status">保存中…</span>}
+          {!saving && flash && (
+            <span className="zx-projects-admin-status" data-kind={flash.kind}>
+              {flash.text}
+            </span>
+          )}
+        </div>
+      )}
       {personal.length > 0 && (
         <div className="zx-grid">
           {personal.map((p, i) => (
-            <ProjectCard key={p.id} project={p} idx={i + 1} clicks={clicks?.[p.id]} pv={pv} />
+            <ProjectCard
+              key={p.id}
+              project={p}
+              idx={i + 1}
+              clicks={clicks?.[p.id]}
+              pv={pv}
+              drag={dragOf(p.id)}
+            />
           ))}
         </div>
       )}
@@ -198,7 +362,14 @@ export function ProjectsSection({
           {personal.length > 0 && <div className="zx-projects-sep" aria-hidden="true" />}
           <div className="zx-grid">
             {work.map((p, i) => (
-              <ProjectCard key={p.id} project={p} idx={personal.length + i + 1} clicks={clicks?.[p.id]} pv={pv} />
+              <ProjectCard
+                key={p.id}
+                project={p}
+                idx={personal.length + i + 1}
+                clicks={clicks?.[p.id]}
+                pv={pv}
+                drag={dragOf(p.id)}
+              />
             ))}
           </div>
         </>
