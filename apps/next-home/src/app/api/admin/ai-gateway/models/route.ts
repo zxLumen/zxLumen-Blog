@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { isAdmin } from '@/lib/auth'
 import { readJson } from '@/lib/db'
-import { getGatewayConfig } from '@/lib/ai-gateway'
+import { getGatewayConfig, type ProviderApi } from '@/lib/ai-gateway'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +18,29 @@ function extractIds(j: unknown): string[] {
     .sort((a, b) => a.localeCompare(b))
 }
 
+/** Deepgram /v1/models → { stt:[{ name, canonical_name }], tts:[...] } */
+function extractDeepgram(j: unknown): string[] {
+  const o = j as { stt?: unknown[] }
+  const arr = Array.isArray(o?.stt) ? o.stt : []
+  return arr
+    .map((m) => {
+      if (typeof m === 'string') return m
+      const r = m as { canonical_name?: unknown; name?: unknown }
+      return typeof r?.canonical_name === 'string'
+        ? r.canonical_name
+        : typeof r?.name === 'string'
+          ? r.name
+          : ''
+    })
+    .filter((x): x is string => !!x)
+    .sort((a, b) => a.localeCompare(b))
+}
+
+/** 无公开模型列表接口的上游:返回常用静态列表(仍可手填) */
+const STATIC_MODELS: Partial<Record<ProviderApi, string[]>> = {
+  assemblyai: ['best', 'nano', 'slam-1'],
+}
+
 export async function POST(req: Request) {
   if (!(await isAdmin())) return Response.json({ error: 'unauthorized' }, { status: 401 })
   const body = await readJson<{ providerId?: string; baseUrl?: string; apiKey?: string }>(req)
@@ -25,25 +48,34 @@ export async function POST(req: Request) {
 
   let baseUrl = (body.baseUrl ?? '').trim().replace(/\/+$/, '')
   let apiKey = (body.apiKey ?? '').trim()
+  let api: ProviderApi = 'openai'
   if (body.providerId) {
     const p = getGatewayConfig().providers.find((x) => x.id === body.providerId)
     if (!p) return Response.json({ error: '未找到该密钥' }, { status: 404 })
     if (!baseUrl) baseUrl = p.baseUrl
     if (!apiKey) apiKey = p.apiKey
+    api = p.api
   }
   if (!/^https?:\/\//i.test(baseUrl)) {
-    return Response.json({ error: 'baseUrl 非法(需 http(s):// 且含 /v1 之类前缀)' }, { status: 400 })
+    return Response.json({ error: 'baseUrl 非法(需 http(s)://)' }, { status: 400 })
   }
 
+  const staticList = STATIC_MODELS[api]
+  if (staticList) return Response.json({ models: [...staticList].sort((a, b) => a.localeCompare(b)) })
+
   const headers: Record<string, string> = {}
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+  if (apiKey) {
+    // Deepgram 用 `Token`,其余用 `Bearer`
+    headers.Authorization = api === 'deepgram' ? `Token ${apiKey}` : `Bearer ${apiKey}`
+  }
   if (/opencode\.ai\/zen\/go/.test(baseUrl)) {
     headers['x-opencode-session'] = randomUUID()
     headers['User-Agent'] = 'zx-ai-gateway/1.0'
   }
 
+  const url = api === 'deepgram' ? `${baseUrl}/v1/models` : `${baseUrl}/models`
   try {
-    const res = await fetch(`${baseUrl}/models`, { headers, signal: AbortSignal.timeout(15_000) })
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) })
     if (!res.ok) {
       const t = await res.text().catch(() => '')
       return Response.json(
@@ -51,11 +83,9 @@ export async function POST(req: Request) {
         { status: 400 },
       )
     }
-    return Response.json({ models: extractIds(await res.json()) })
+    const json = await res.json()
+    return Response.json({ models: api === 'deepgram' ? extractDeepgram(json) : extractIds(json) })
   } catch (e) {
-    return Response.json(
-      { error: e instanceof Error ? e.message : '拉取失败' },
-      { status: 400 },
-    )
+    return Response.json({ error: e instanceof Error ? e.message : '拉取失败' }, { status: 400 })
   }
 }
