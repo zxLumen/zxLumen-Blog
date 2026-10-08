@@ -166,6 +166,7 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     const reqModel = typeof form.get('model') === 'string' ? String(form.get('model')) : ''
     const language = typeof form.get('language') === 'string' ? String(form.get('language')) : undefined
     const diarize = form.get('diarize') === 'true' || form.get('diarize') === '1'
+    const speakersExpected = Number(form.get('speakers_expected')) || undefined
     const provider = resolveProvider('audio', app, app.model || reqModel)
     if (!provider) {
       return Response.json(
@@ -181,6 +182,7 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
         language,
         diarize,
         model: app.model || reqModel || undefined,
+        speakersExpected,
       })
       recordGatewayUsage({
         appId: app.id,

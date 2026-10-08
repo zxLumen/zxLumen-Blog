@@ -36,6 +36,8 @@ export interface AudioInput {
   diarize: boolean
   /** 覆盖请求的模型(可选) */
   model?: string
+  /** 预计说话人数(AssemblyAI speakers_expected;可选) */
+  speakersExpected?: number
 }
 
 const num = (v: unknown, d = 0): number => {
@@ -200,6 +202,7 @@ async function transcribeAssemblyAI(
           audio_url: uploadUrl,
           speaker_labels: input.diarize,
           language_code: input.language || undefined,
+          ...(input.diarize && input.speakersExpected ? { speakers_expected: input.speakersExpected } : {}),
         }),
         signal,
       }),

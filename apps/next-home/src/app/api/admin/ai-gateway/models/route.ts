@@ -61,7 +61,7 @@ function extractDeepgram(j: unknown): string[] {
 
 /** 无公开模型列表接口的上游:返回常用静态列表(仍可手填) */
 const STATIC_MODELS: Partial<Record<ProviderApi, string[]>> = {
-  assemblyai: ['best', 'nano', 'slam-1'],
+  assemblyai: ['universal-3-5-pro', 'universal-2'],
 }
 
 export async function POST(req: Request) {
