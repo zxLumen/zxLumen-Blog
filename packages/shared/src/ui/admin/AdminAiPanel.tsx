@@ -73,6 +73,11 @@ function newId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** 去重(某些上游会返回重复的模型名 → Mantine Select 不允许重复 value) */
+function uniqModels(arr?: string[]): string[] {
+  return arr ? Array.from(new Set(arr)) : []
+}
+
 const ROLE_OPTIONS = [
   { value: 'chat', label: '对话' },
   { value: 'embed', label: '向量' },
@@ -242,7 +247,7 @@ export function AdminAiPanel({
       })
       const d = (await r.json().catch(() => ({}))) as { models?: string[]; error?: string }
       if (!r.ok) throw new Error(d.error || '拉取失败')
-      const models = d.models ?? []
+      const models = Array.from(new Set(d.models ?? []))
       if (providerId) setProviderModels((m) => ({ ...m, [providerId]: models }))
       notify('ok', `拉到 ${models.length} 个模型`)
       return models
@@ -335,7 +340,7 @@ export function AdminAiPanel({
                           searchable
                           clearable
                           placeholder="默认模型(可空)"
-                          data={providerModels[p.id] ?? p.models}
+                          data={uniqModels(providerModels[p.id] ?? p.models)}
                           value={p.model || null}
                           onChange={(v) => updProvider(i, { model: v || '' })}
                         />
@@ -431,7 +436,7 @@ export function AdminAiPanel({
                           searchable
                           clearable
                           placeholder="固定模型(可空=应用自选)"
-                          data={providerModels[a.providerId] ?? (config.providers.find((x) => x.id === a.providerId)?.models ?? [])}
+                          data={uniqModels(providerModels[a.providerId] ?? config.providers.find((x) => x.id === a.providerId)?.models ?? [])}
                           value={a.model || null}
                           onChange={(v) => updApp(i, { model: v || '' })}
                         />

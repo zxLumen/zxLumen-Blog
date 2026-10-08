@@ -8,21 +8,36 @@ export const dynamic = 'force-dynamic'
 function extractIds(j: unknown): string[] {
   const o = j as { data?: unknown[]; models?: unknown[] }
   const arr = Array.isArray(o?.data) ? o.data : Array.isArray(o?.models) ? o.models : []
-  return arr
+  const ids = arr
     .map((m) => {
       if (typeof m === 'string') return m
       const r = m as { id?: unknown; name?: unknown }
       return typeof r?.id === 'string' ? r.id : typeof r?.name === 'string' ? r.name : ''
     })
     .filter((x): x is string => !!x)
-    .sort((a, b) => a.localeCompare(b))
+  return Array.from(new Set(ids)).sort((a, b) => a.localeCompare(b))
 }
 
-/** Deepgram /v1/models → { stt:[{ name, canonical_name }], tts:[...] } */
+/** Deepgram 常用 STT 模型(优先展示;命不中就回退全量去重) */
+const DEEPGRAM_PREFERRED = [
+  'nova-3',
+  'nova-3-general',
+  'nova-2',
+  'nova-2-general',
+  'enhanced',
+  'base',
+  'whisper-large',
+  'whisper-medium',
+  'whisper-small',
+  'whisper-base',
+  'whisper-tiny',
+]
+
+/** Deepgram /v1/models → { stt:[{ name, canonical_name }], tts:[...] }(多条可共用同一 canonical_name → 去重) */
 function extractDeepgram(j: unknown): string[] {
   const o = j as { stt?: unknown[] }
   const arr = Array.isArray(o?.stt) ? o.stt : []
-  return arr
+  const ids = arr
     .map((m) => {
       if (typeof m === 'string') return m
       const r = m as { canonical_name?: unknown; name?: unknown }
@@ -33,7 +48,9 @@ function extractDeepgram(j: unknown): string[] {
           : ''
     })
     .filter((x): x is string => !!x)
-    .sort((a, b) => a.localeCompare(b))
+  const uniq = Array.from(new Set(ids))
+  const hit = DEEPGRAM_PREFERRED.filter((m) => uniq.includes(m))
+  return hit.length ? hit : uniq.sort((a, b) => a.localeCompare(b))
 }
 
 /** 无公开模型列表接口的上游:返回常用静态列表(仍可手填) */
