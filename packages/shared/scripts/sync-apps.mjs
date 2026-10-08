@@ -26,6 +26,7 @@
 //   npm run sync:apps                          # 把本地缺的都补上
 //   npm run sync:apps -- stock                 # 只同步这一个
 //   npm run sync:apps -- stock --after yijing  # 插到 yijing 后面
+//   npm run sync:apps -- csdn --before github  # 插到 github 前面(置顶)
 //   npm run sync:apps -- stock --update        # 连线上已有的也按本地覆盖
 //   npm run sync:apps -- stock --allow-localhost  # 放行 localhost 地址(默认拒绝)
 
@@ -55,7 +56,7 @@ loadEnvLocal()
 
 // ---------------------------------------------------------------- 参数
 const argv = process.argv.slice(2)
-const { dryRun, update, after, onlyIds } = parseArgs(argv)
+const { dryRun, update, after, before, onlyIds } = parseArgs(argv)
 const allowLocalhost = argv.includes('--allow-localhost')
 
 const SITE = (process.env.ZX_SITE || 'https://zxlumen.cn').replace(/\/+$/, '')
@@ -125,12 +126,14 @@ const remote = (await got.json()).apps ?? []
 log(`线上 ${remote.length} 个,本地候选 ${wanted.length} 个`)
 
 // ---------------------------------------------------------------- 合并(只加不减)
-const { merged, added, changed, skipped, remoteOnly, afterMiss, blocked } = mergeApps(remote, wanted, {
+const { merged, added, changed, skipped, remoteOnly, afterMiss, beforeMiss, blocked } = mergeApps(remote, wanted, {
   update,
   after,
+  before,
   allowLocalhost,
 })
 if (afterMiss) log(`注意:线上没有 --after 指定的 ${after},改为追加到末尾`)
+if (beforeMiss) log(`注意:线上没有 --before 指定的 ${before},改为置顶`)
 
 // ---------------------------------------------------------------- 报告
 for (const a of added) log(`  + ${a.id}  ${a.name}  ${a.url}`)

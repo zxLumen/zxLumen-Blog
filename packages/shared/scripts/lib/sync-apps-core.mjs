@@ -34,10 +34,11 @@ export function isLocalhostUrl(url) {
 /**
  * @param {Array<Record<string, unknown>>} remote 线上现有(顺序=展示顺序)
  * @param {Array<Record<string, unknown>>} wanted 本地想同步的(来自本地 dev 库的 apps_config)
- * @param {{ update?: boolean, after?: string, allowLocalhost?: boolean }} opts
- *   update=连线上已有的也覆盖;after=新条目插到哪个 id 之后;allowLocalhost=放行 localhost 地址
+ * @param {{ update?: boolean, after?: string, before?: string, allowLocalhost?: boolean }} opts
+ *   update=连线上已有的也覆盖;after=新条目插到哪个 id 之后;before=插到哪个 id 之前;
+ *   allowLocalhost=放行 localhost 地址
  */
-export function mergeApps(remote, wanted, { update = false, after = '', allowLocalhost = false } = {}) {
+export function mergeApps(remote, wanted, { update = false, after = '', before = '', allowLocalhost = false } = {}) {
   const merged = remote.map((a) => ({ ...a }))
   const added = []
   const changed = []
@@ -52,9 +53,17 @@ export function mergeApps(remote, wanted, { update = false, after = '', allowLoc
         blocked.push(src)
         continue
       }
-      const at = after ? merged.findIndex((a) => a.id === after) : -1
-      // --after 找不到就退回追加到末尾,不因为一个笔误就整体失败
-      merged.splice(at >= 0 ? at + 1 : merged.length, 0, { ...src })
+      // 落点:--before 优先(插到某 id 之前,用于置顶),其次 --after,都没有则追加末尾。
+      // 两个锚点都找不到就退回「追加末尾 / 置顶」,不因为一个笔误就整体失败。
+      let at = merged.length
+      if (before) {
+        const bi = merged.findIndex((a) => a.id === before)
+        at = bi >= 0 ? bi : 0
+      } else if (after) {
+        const ai = merged.findIndex((a) => a.id === after)
+        at = ai >= 0 ? ai + 1 : merged.length
+      }
+      merged.splice(at, 0, { ...src })
       added.push(src)
     } else if (update) {
       if (bad) {
@@ -69,7 +78,8 @@ export function mergeApps(remote, wanted, { update = false, after = '', allowLoc
   }
 
   const afterMiss = !!after && !remote.some((a) => a.id === after)
+  const beforeMiss = !!before && !remote.some((a) => a.id === before)
   const remoteOnly = remote.filter((a) => !wanted.some((w) => w.id === a.id))
 
-  return { merged, added, changed, skipped, remoteOnly, afterMiss, blocked }
+  return { merged, added, changed, skipped, remoteOnly, afterMiss, beforeMiss, blocked }
 }

@@ -9,15 +9,24 @@
  * 位置参数 = 只同步这些 id;不传 = 全部。
  */
 export function parseArgs(argv) {
-  const afterIdx = argv.indexOf('--after')
-  const after = afterIdx >= 0 ? (argv[afterIdx + 1] ?? '') : ''
-  // 只跳过「--after 的值」那一个位置,不能一杆子把 argv[0] 也排除掉
-  const flagValueIdx = afterIdx >= 0 ? afterIdx + 1 : -1
+  const valOf = (flag) => {
+    const i = argv.indexOf(flag)
+    return i >= 0 ? (argv[i + 1] ?? '') : ''
+  }
+  const after = valOf('--after')
+  const before = valOf('--before')
+  // 跳过各 flag 的「值」那一格,不能一杆子把 argv[0] 也排除掉
+  const skip = new Set()
+  for (const f of ['--after', '--before']) {
+    const i = argv.indexOf(f)
+    if (i >= 0) skip.add(i + 1)
+  }
   return {
     dryRun: argv.includes('--dry-run'),
     update: argv.includes('--update'),
     after,
-    onlyIds: argv.filter((a, i) => !a.startsWith('--') && i !== flagValueIdx),
+    before,
+    onlyIds: argv.filter((a, i) => !a.startsWith('--') && !skip.has(i)),
   }
 }
 

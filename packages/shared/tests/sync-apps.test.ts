@@ -71,6 +71,16 @@ test('--after 插到指定 id 之后;找不到则追加并标记 afterMiss', () 
   assert.equal(b.afterMiss, true)
 })
 
+test('--before 插到指定 id 之前(置顶);找不到则置顶并标记 beforeMiss', () => {
+  const a = mergeApps([app('a'), app('b')], [app('new')], { before: 'a' })
+  assert.deepEqual(a.merged.map((x) => x.id), ['new', 'a', 'b'])
+  assert.equal(a.beforeMiss, false)
+
+  const b = mergeApps([app('a')], [app('new')], { before: '不存在' })
+  assert.deepEqual(b.merged.map((x) => x.id), ['new', 'a'])
+  assert.equal(b.beforeMiss, true)
+})
+
 test('localhost 地址默认被挡,不写线上', () => {
   const { merged, added, blocked } = mergeApps([app('a')], [app('stock', 'http://localhost:8789/')])
   assert.deepEqual(merged.map((x) => x.id), ['a'], '不能把 localhost 写进去')
