@@ -21,6 +21,12 @@
 
 ### 修复
 
+- **音频转写的中文被按 token 塞了空格**(如「很 闪闪 晶。」):上游(尤其 AssemblyAI 的
+  `utterances[].text`、Deepgram 词级)会逐 token 加空格,而网关适配器直接用该文本组
+  `segments`。现在三类形状(openai/deepgram/assemblyai)统一经 `tidyCjk` 清洗:只消去
+  **CJK 之间**的空格,保留拉丁词/中英之间的空格(如 `一百零八 W`)。前端转写展示与喂给
+  大模型的文本均受益。
+
 - **手机上「访客统计」「服务器状态」两个右上角悬浮件:第二次点击不收起、滚动页面也不收起**。
   两者此前是纯 hover 交互(`mouseenter` 开 / `mouseleave` 关),触屏打开全靠浏览器补发的合成
   `mouseenter`,再点一次按钮只会又发一次 `mouseenter`,于是**必须点页面别处**才能靠合成

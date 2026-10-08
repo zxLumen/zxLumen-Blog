@@ -58,6 +58,17 @@ const num = (v: unknown, d = 0): number => {
   return Number.isFinite(n) ? n : d
 }
 
+// 上游(尤其 AssemblyAI 的 utterances / Deepgram 词级)会给中文按 token 塞空格,
+// 如「很 闪闪 晶。」。这里只消去「CJK 之间」的空格,保留拉丁词/中英之间的空格。
+const CJK = '\\u3000-\\u303f\\u3400-\\u9fff\\uf900-\\ufaff\\uff00-\\uffef'
+const CJK_BETWEEN = new RegExp(`([${CJK}])\\s+([${CJK}])`, 'g')
+function tidyCjk(s: string): string {
+  if (!s) return s
+  let out = s
+  for (let i = 0; i < 4; i++) out = out.replace(CJK_BETWEEN, '$1$2')
+  return out.replace(/[ \t]{2,}/g, ' ').trim()
+}
+
 async function withTimeout<T>(p: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), ms)
@@ -110,9 +121,9 @@ async function transcribeOpenAI(provider: GatewayProvider, input: AudioInput): P
     start: num(s.start),
     end: num(s.end),
     speaker: diarize ? speakerLabel(s.speaker) : null,
-    text: typeof s.text === 'string' ? s.text : '',
+    text: tidyCjk(typeof s.text === 'string' ? s.text : ''),
   }))
-  const text = typeof j.text === 'string' ? j.text : segments.map((s) => s.text).join('')
+  const text = tidyCjk(typeof j.text === 'string' ? j.text : segments.map((s) => s.text).join(''))
   const seconds = num(j.duration) || segments.reduce((a, s) => Math.max(a, s.end), 0)
   return { text, language: typeof j.language === 'string' ? j.language : input.language, segments, seconds }
 }
@@ -162,7 +173,7 @@ async function transcribeDeepgram(provider: GatewayProvider, input: AudioInput):
       start: num(u.start),
       end: num(u.end),
       speaker: input.diarize && u.speaker != null ? `S${u.speaker + 1}` : null,
-      text: u.transcript || '',
+      text: tidyCjk(u.transcript || ''),
     }))
   } else {
     const alt = j.results?.channels?.[0]?.alternatives?.[0]
@@ -174,8 +185,9 @@ async function transcribeDeepgram(provider: GatewayProvider, input: AudioInput):
       text: (w.punctuated_word || w.word || '') + ' ',
     }))
   }
-  const text =
-    j.results?.channels?.[0]?.alternatives?.[0]?.transcript || segments.map((s) => s.text).join('').trim()
+  const text = tidyCjk(
+    j.results?.channels?.[0]?.alternatives?.[0]?.transcript || segments.map((s) => s.text).join('').trim(),
+  )
   const seconds = num(j.metadata?.duration) || segments.reduce((a, s) => Math.max(a, s.end), 0)
   return { text, language: input.language, segments, seconds }
 }
@@ -256,10 +268,10 @@ async function transcribeAssemblyAI(
       start: num(u.start) / 1000,
       end: num(u.end) / 1000,
       speaker: input.diarize && u.speaker ? speakerLabel(u.speaker) : null,
-      text: u.text || '',
+      text: tidyCjk(u.text || ''),
     }))
     return {
-      text: j.text || segments.map((s) => s.text).join(' '),
+      text: tidyCjk(j.text || segments.map((s) => s.text).join(' ')),
       language: j.language_code,
       segments,
       seconds: num(j.audio_duration),
