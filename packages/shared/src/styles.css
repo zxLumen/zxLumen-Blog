@@ -668,11 +668,6 @@ pre {
   flex-shrink: 0;
 }
 
-.zx-logo .z {
-  color: var(--accent);
-  text-shadow: 0 0 12px var(--glow);
-}
-
 .zx-topbar .zx-nav {
   display: flex;
   gap: 0.2rem;
