@@ -336,7 +336,10 @@ export function applySavedOrder<T extends { id: string }>(list: T[], saved: read
         break
       }
     }
-    const at = prev ? out.findIndex((x) => x.id === prev!.id) + 1 : out.length
+    // prev 为空只可能是 i === 0(前面的条目必定已进 out),即「admin 列表的首位」:
+    // 这时插到最前,而不是追加到末尾 —— 否则 admin 新加的头条(如 CSDN)对存过档的
+    // 访客会掉到栏尾,和 admin 的默认顺序对不上。
+    const at = prev ? out.findIndex((x) => x.id === prev!.id) + 1 : 0
     out.splice(at, 0, item)
     used.add(item.id)
   }

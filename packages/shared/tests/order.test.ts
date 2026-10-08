@@ -95,6 +95,14 @@ test('applySavedOrder:剔除 admin 已删的 id', () => {
   assert.deepEqual(ids(applySavedOrder(list, ['c', 'x', 'a'])), ['c', 'a', 'b'])
 })
 
+test('applySavedOrder:admin 列表**首位**的新增项插到最前,不追加到栏尾', () => {
+  const list: App[] = [{ id: 'csdn' }, { id: 'a' }, { id: 'b' }]
+  // 访客存档里没有 csdn(admin 刚加的头条),且访客自己排过序
+  assert.deepEqual(ids(applySavedOrder(list, ['b', 'a'])), ['csdn', 'b', 'a'])
+  // 无存档时不受影响
+  assert.deepEqual(ids(applySavedOrder(list, null)), ['csdn', 'a', 'b'])
+})
+
 test('snapDropToGroup:拖到别的组中间时落到组边界,不落中间', () => {
   const list: App[] = [
     { id: 'github', group: 'info' },

@@ -366,6 +366,7 @@
   - **「配置成空数组」= 真的零应用**:未配置过才回退出厂默认;一旦保存过就以配置为准(含空),所以能整体撤掉应用栏。
   - 部署:`docker-compose.yml` 加 `./site-content/apps:/srv/site/apps` 可写子挂载;**首次上线**需在服务器 `sudo chown -R 10001:10001 ~/zxLumen-Blog/docker/site-content/apps`(之后换图不需要)。本地点 `apps/next-home/public/apps` 软链以对齐线上。
   - **点击埋点**:每条应用可设「绑定埋点」——绑定到**项目**(选项目,存其 id 如 `proj-8f58rlh81`)的点击并入该项目卡「N 次点击」;绑定到 GitHub / 微信 / 邮件 / 电话 / 留言 / 简历的并入对应按钮计数;未绑定的记独立 `app_click`,admin「统计」新增「应用点击」表(显示应用名)。只对真点击计数,拖动后浏览器补发的那次 click 不计。
+  - **CSDN 入口**:应用栏最上方(与 GitHub / 简历同组)新增 **CSDN**(`blog.csdn.net/ChallengerRumble`,站外新标签打开),图标为官方字标(白字 + 品牌橙 `#FC5531`,与其它图标同规格 256×256 / 圆角 45 / 字形自动居中)。未绑定埋点,点击计入「应用点击」。**顺带修**:admin 列表**首位**新增的条目,对本地存过拖拽顺序的访客此前会掉到栏尾 —— 现插到最前(`applySavedOrder` 的 `prev` 为空即 admin 首位的分支由「追加末尾」改为「插到最前」),与 admin 默认顺序一致。
 
 - **token用量「数据源顺序」可调**:admin「Token用量」新增「数据源顺序」面板,可 ↑/↓ 调整 **DeepSeek / OpenCode / 智谱** 的展示顺序并保存;首页 Token用量 的供应商 tab 按该顺序渲染(未设置时保持出厂默认序 DeepSeek→OpenCode→智谱)。顺序存 `meta.usage_source_order`,保存即生效、无需重建。
 - **token用量「默认数据源」可设**:同面板每行新增「设为默认」——指定新访客(无 `zx_usage` 存档)默认打开哪个源,存独立 `meta.usage_default_source`(与展示顺序解耦,缺省 DeepSeek)。SSR 首帧按该源预取 30 天用量(此前写死只预取 DeepSeek),默认源为 OpenCode/智谱时首屏同样直接有数据、不再空白;访客自己的选择(cookie)仍优先。当前源被隐藏时回落到默认源(再退回展示顺序首项)。保存即生效、无需重建。
