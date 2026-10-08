@@ -229,8 +229,8 @@ export function resolveProvider(
   if (app?.providerId) {
     const bound = pool.find((p) => p.id === app.providerId)
     if (bound) return bound
-    const anyBound = cfg.providers.find((p) => p.id === app.providerId && p.enabled)
-    if (anyBound) return anyBound
+    // 绑定的密钥角色与本次请求类型不符(如令牌绑到音频密钥却发对话) → 忽略绑定,
+    // 继续按 model / 默认回落,避免把请求发到不匹配的上游(会 404)。
   }
   if (model) {
     const byModel = pool.find((p) => p.models.includes(model))
