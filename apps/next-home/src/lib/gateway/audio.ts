@@ -36,8 +36,21 @@ export interface AudioInput {
   diarize: boolean
   /** 覆盖请求的模型(可选) */
   model?: string
-  /** 预计说话人数(AssemblyAI speakers_expected;可选) */
+  /** 确切说话人数(AssemblyAI speakers_expected;可选) */
   speakersExpected?: number
+  /** 说话人数范围下界(AssemblyAI speaker_options;可选) */
+  minSpeakers?: number
+  /** 说话人数范围上界(AssemblyAI speaker_options;可选) */
+  maxSpeakers?: number
+}
+
+/** 上游说话人标签 A/B/C… → S1/S2/…(数字或已是 S 前缀的原样归一) */
+function speakerLabel(label: unknown): string | null {
+  if (typeof label !== 'string' || !label) return null
+  if (/^[A-Z]$/.test(label)) return `S${label.charCodeAt(0) - 64}`
+  if (/^\d+$/.test(label)) return `S${Number(label) + 1}`
+  if (/^S\d+$/i.test(label)) return label.toUpperCase()
+  return label
 }
 
 const num = (v: unknown, d = 0): number => {
@@ -56,12 +69,6 @@ async function withTimeout<T>(p: (signal: AbortSignal) => Promise<T>, ms: number
 }
 
 /* ------------------------------ OpenAI 兼容 ------------------------------ */
-
-/** OpenAI 说话人标签 A/B/C… → S1/S2/…(提供了已知说话人名的原样保留) */
-function openaiSpeaker(label: unknown): string | null {
-  if (typeof label !== 'string' || !label) return null
-  return /^[A-Z]$/.test(label) ? `S${label.charCodeAt(0) - 64}` : label
-}
 
 async function transcribeOpenAI(provider: GatewayProvider, input: AudioInput): Promise<NormalizedTranscript> {
   const form = new FormData()
@@ -102,7 +109,7 @@ async function transcribeOpenAI(provider: GatewayProvider, input: AudioInput): P
   const segments: AudioSegment[] = segs.map((s) => ({
     start: num(s.start),
     end: num(s.end),
-    speaker: diarize ? openaiSpeaker(s.speaker) : null,
+    speaker: diarize ? speakerLabel(s.speaker) : null,
     text: typeof s.text === 'string' ? s.text : '',
   }))
   const text = typeof j.text === 'string' ? j.text : segments.map((s) => s.text).join('')
@@ -193,6 +200,12 @@ async function transcribeAssemblyAI(
   const uploadUrl = ((await uploadRes.json()) as { upload_url?: string }).upload_url
   if (!uploadUrl) throw new Error('assemblyai 未返回 upload_url')
 
+  // 选模型:请求模型 → 密钥默认模型 → universal-3-5-pro(new 参数 speech_models)
+  const ASSEMBLY_MODELS = ['universal-3-5-pro', 'universal-2', 'best', 'nano', 'universal']
+  const speechModel =
+    [input.model, provider.model].find((m): m is string => !!m && ASSEMBLY_MODELS.includes(m)) ||
+    'universal-3-5-pro'
+
   const createRes = await withTimeout(
     (signal) =>
       fetch(`${base}/v2/transcript`, {
@@ -200,9 +213,19 @@ async function transcribeAssemblyAI(
         headers: { authorization: provider.apiKey, 'content-type': 'application/json' },
         body: JSON.stringify({
           audio_url: uploadUrl,
+          speech_models: [speechModel],
           speaker_labels: input.diarize,
           language_code: input.language || undefined,
-          ...(input.diarize && input.speakersExpected ? { speakers_expected: input.speakersExpected } : {}),
+          ...(input.diarize && input.speakersExpected
+            ? { speakers_expected: input.speakersExpected }
+            : input.diarize && (input.minSpeakers || input.maxSpeakers)
+              ? {
+                  speaker_options: {
+                    ...(input.minSpeakers ? { min_speakers_expected: input.minSpeakers } : {}),
+                    ...(input.maxSpeakers ? { max_speakers_expected: input.maxSpeakers } : {}),
+                  },
+                }
+              : {}),
         }),
         signal,
       }),
@@ -232,7 +255,7 @@ async function transcribeAssemblyAI(
     const segments: AudioSegment[] = utts.map((u) => ({
       start: num(u.start) / 1000,
       end: num(u.end) / 1000,
-      speaker: input.diarize && u.speaker ? `S${u.speaker}` : null,
+      speaker: input.diarize && u.speaker ? speakerLabel(u.speaker) : null,
       text: u.text || '',
     }))
     return {

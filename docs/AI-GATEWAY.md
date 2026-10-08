@@ -79,9 +79,10 @@ OpenCode Go 端点(`opencode.ai/zen/go`)要求 `x-opencode-session` 头,网关�
     硅基流动 SenseVoice 等也走此形状(但无分离,`diarize=true` 时无 speaker)。
   - **Deepgram**:`{baseUrl}/v1/listen` + `diarize_model=latest`,一次请求即含分离。
   - **AssemblyAI**:上传 → 建任务(`speaker_labels:true`)→ 轮询,返回 utterances。
-    模型用 `universal-3-5-pro`(分离更准)或 `universal-2`(更便宜);可传 `speakers_expected`
-    (预计人数,1–20,能提升准确度)。**无公开模型列表接口**,面板「拉取模型」返回内置清单
-    (`universal-3-5-pro` / `universal-2`)。
+    模型经 **`speech_models:[模型]`** 指定(`universal-3-5-pro` 更准 / `universal-2` 覆盖 99 语),
+    可由密钥默认模型或请求 `model` 决定。**人数提示**对分离很关键:可传 `speakers_expected`
+    (确切人数)或 `speaker_options{min_speakers_expected/max_speakers_expected}`(范围);
+    不传时相近嗓音易被并成一人。**无公开模型列表接口**,面板「拉取模型」返回内置清单。
 - 说话人仅在 `diarize=true` 且上游形状支持时出现。
 - 音频密钥与对话/向量密钥**分开**管理,并各有「默认音频」密钥。
 
