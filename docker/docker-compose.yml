@@ -145,6 +145,24 @@ services:
     networks:
       - web
 
+  # 无恙(独立服务:从对话音频觉察身心状态;同套模式:iframe 嵌应用栏 + 站长 SSO)。
+  # 大模型与语音转写都经博客 AI 网关(令牌在 admin「AI 密钥」页生成,音频密钥需 Deepgram/AssemblyAI 才可分离)。
+  attune:
+    image: ghcr.io/zxlumen/attune-web:${ATTUNE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 8792
+      ATTUNE_DATA_DIR: /data
+      ZX_AI_GATEWAY_URL: http://app:3000/api/ai/v1
+      ZX_AI_APP_TOKEN: ${ATTUNE_AI_TOKEN:-}
+    volumes:
+      - attune-data:/data
+    expose:
+      - "8792"
+    networks:
+      - web
+
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -279,6 +297,7 @@ volumes:
   yijing-data:
   stock-data:
   luminari-data:
+  attune-data:
 
 networks:
   web:

@@ -6,6 +6,9 @@
 
 ### 新增
 
+- **新应用「无恙」**(`attune.zxlumen.cn`,panel 嵌入):从个人/家庭的一段对话音频觉察身心状态
+  (情绪/压力/精力/睡眠相关/表达流畅/声音与身体弱提示;家庭模式做说话人分离并评估互动)。
+  全程经 AI 网关(转写 + 综合),只存派生指标、不留音频与全文;非诊断。应用栏新增「无恙」入口。
 - **AI 网关支持语音转写 + 说话人分离**。新增 `POST /api/ai/v1/audio/transcriptions`
   (`multipart`,鉴权与配额同对话接口):按音频密钥的「接口形状」分派上游并**归一化**返回
   `{ text, language, segments[{start,end,speaker,text}], seconds }`。三种形状:

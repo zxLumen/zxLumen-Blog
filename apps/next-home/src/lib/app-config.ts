@@ -16,6 +16,7 @@ const DEFAULT_APPS: AppItem[] = [
   { id: 'resume', name: '简历', url: '/resume.pdf', bind: 'resume' },
   { id: 'luminari', name: '生灵', url: 'luminari.zxlumen.cn', icon: '/apps/luminari.png', openIn: 'panel', bind: 'luminari' },
   { id: 'mbti', name: '心语', url: 'https://mbti.zxlumen.cn', icon: '/apps/mbti.png', openIn: 'panel', bind: 'mbti' },
+  { id: 'attune', name: '无恙', url: 'attune.zxlumen.cn', icon: '/apps/attune.png', openIn: 'panel', bind: 'attune' },
 ]
 
 /** 规范化单条(过滤非法值,兜底字段);无 id 则丢弃 */
