@@ -75,39 +75,53 @@ export async function POST(req: Request) {
   let streamedText = ''
   const ac = new AbortController()
   req.signal.addEventListener('abort', () => ac.abort(), { once: true })
-  const timeout = setTimeout(() => ac.abort(), 90_000)
+  const timeout = setTimeout(() => ac.abort(), 150_000)
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(rcc) {
+      let last: Awaited<ReturnType<typeof streamChat>> | null = null
       try {
-        const r = await streamChat(
-          {
-            protocol: chatProtocol(),
-            baseUrl: cfg.chatBaseUrl,
-            apiKey: getChatApiKey(),
-            model: cfg.chatModel,
-            messages,
-            temperature: cfg.temperature,
-            maxTokens: cfg.maxTokens,
-            signal: ac.signal,
-            provider: cfg.chatProvider,
-            sessionId,
-          },
-          (d) => {
-            streamedText += d
-            try {
-              rcc.enqueue(encoder.encode(d))
-            } catch {
-              /* 客户端断开 */
-            }
-          },
-        )
-        if (!streamedText.trim()) {
+        // 生成:空正文(只吐了思维链 / 被截断)时**放大预算重试一次**。
+        // 只有"一个字都没吐给前端"才重试 —— 已经吐过正文就不能重来。
+        const base = cfg.maxTokens > 0 ? cfg.maxTokens : 4096
+        const budgets = [base, Math.max(base * 2, base + 2048)]
+        for (let i = 0; i < budgets.length; i++) {
+          streamedText = ''
+          last = await streamChat(
+            {
+              protocol: chatProtocol(),
+              baseUrl: cfg.chatBaseUrl,
+              apiKey: getChatApiKey(),
+              model: cfg.chatModel,
+              messages,
+              temperature: cfg.temperature,
+              maxTokens: budgets[i],
+              signal: ac.signal,
+              provider: cfg.chatProvider,
+              sessionId,
+            },
+            (d) => {
+              streamedText += d
+              try {
+                rcc.enqueue(encoder.encode(d))
+              } catch {
+                /* 客户端断开 */
+              }
+            },
+          )
+          if (streamedText.trim()) break
+          if (i < budgets.length - 1) {
+            console.warn(
+              `[chat] 空正文,放大预算重试: attempt=${i + 1} budget=${budgets[i]} finish=${last.finishReason ?? '-'} reasoning=${last.reasoningLen ?? 0} out=${last.outTokens ?? 0}`,
+            )
+          }
+        }
+        if (!last || !streamedText.trim()) {
           const hint =
-            r.finishReason === 'length'
+            last?.finishReason === 'length'
               ? '模型输出被 max_tokens 截断(推理模型会先消耗思维链),请在 admin 把「最大输出」调大(建议 4096+)'
-              : r.reasoningLen
+              : last?.reasoningLen
                 ? '模型只返回了思考、没有正式回答(推理模型),请重试或换用非推理模型'
                 : '模型没有返回任何内容,请重试'
           throw new Error(hint)
@@ -119,24 +133,30 @@ export async function POST(req: Request) {
           content: streamedText,
           provider: cfg.chatProvider,
           model: cfg.chatModel,
-          in_tokens: r.inTokens ?? 0,
-          out_tokens: r.outTokens ?? 0,
+          in_tokens: last.inTokens ?? 0,
+          out_tokens: last.outTokens ?? 0,
           latency_ms: Date.now() - started,
         })
         setLastError('')
         rcc.close()
       } catch (e) {
         const msg = String(e).slice(0, 300)
-        setLastError(msg)
+        // 诊断:记下最后一次尝试的 finishReason / 思维链长度 / 输出 token,便于判断
+        // 到底是"被 max_tokens 截断"还是"真的只出思维链"(失败行原先全记 0,查不出来)
+        const diag = last
+          ? ` · finish=${last.finishReason ?? '-'} reasoning=${last.reasoningLen ?? 0} out=${last.outTokens ?? 0}`
+          : ''
+        console.warn(`[chat] 失败: ${msg}${diag}`)
+        setLastError((msg + diag).slice(0, 2000))
         db.addChatLog({
           session_id: sessionId,
           cid,
           role: 'assistant',
-          content: streamedText || `[模型出错了] ${msg}`,
+          content: streamedText || `[模型出错了] ${msg}${diag}`,
           provider: cfg.chatProvider,
           model: cfg.chatModel,
-          in_tokens: 0,
-          out_tokens: 0,
+          in_tokens: last?.inTokens ?? 0,
+          out_tokens: last?.outTokens ?? 0,
           latency_ms: Date.now() - started,
         })
         try {

@@ -32,6 +32,8 @@
 
 ### 修复
 
+- **访客聊天偶发「模型只返回了思考、没有正式回答」**:推理模型(`deepseek-v4.1-flash`)偶发只吐思维链、不给正文,访客聊天路径原先直接报错。现在流结束发现**空正文**时**自动放大预算重试一次**(`maxTokens` → `max(2×, +2048)`;只对"一个字都没吐"的情况重试,已吐过正文不重来),仍不行才报错;客户端超时同步放宽到 180s。另:失败行原先把 `in_tokens/out_tokens` 全记 0、`finishReason/reasoningLen` 也不落库,**查不出是被截断还是真只出思维链** —— 现失败行写入真实 token,并把 `finish/reasoning/out` 附在内容与 `lastError` 里。
+
 - **音频转写的中文被按 token 塞了空格**(如「很 闪闪 晶。」):上游(尤其 AssemblyAI 的
   `utterances[].text`、Deepgram 词级)会逐 token 加空格,而网关适配器直接用该文本组
   `segments`。现在三类形状(openai/deepgram/assemblyai)统一经 `tidyCjk` 清洗:只消去

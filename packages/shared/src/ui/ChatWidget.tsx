@@ -392,7 +392,7 @@ export function ChatWidget() {
     reportAi('thinking')
     // 客户端超时:连接建立后卡住时,避免界面永久停在「正在输入…」
     const ac = new AbortController()
-    const timeout = setTimeout(() => ac.abort(), 120_000)
+    const timeout = setTimeout(() => ac.abort(), 180_000)
     try {
       const history = messages.slice(-8).map((m) => ({ role: m.role, content: m.content }))
       const res = await fetch('/api/chat', {
