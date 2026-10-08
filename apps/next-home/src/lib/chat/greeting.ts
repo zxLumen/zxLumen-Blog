@@ -258,6 +258,7 @@ async function auditTime(
         temperature: 0.2,
         maxTokens: budget,
         provider: cfg.chatProvider,
+        reasoningEffort: cfg.reasoningEffort,
         signal: AbortSignal.timeout(120_000),
         // 会话头必须是 ASCII:对唯一 key(时段+日期)取哈希
         sessionId: `greet-audit:${crypto.createHash('sha1').update(facts).digest('hex').slice(0, 16)}`,
@@ -356,6 +357,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
         temperature: 0.85,
         maxTokens: budget,
         provider: cfg.chatProvider,
+        reasoningEffort: cfg.reasoningEffort,
         // 大预算 + 推理模型可能远超默认 60s,单独放宽
         signal: AbortSignal.timeout(180_000),
         // 会话头必须是 ASCII:对含中文的 key 取哈希

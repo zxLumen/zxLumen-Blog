@@ -97,6 +97,7 @@ export async function POST(req: Request) {
               messages,
               temperature: cfg.temperature,
               maxTokens: budgets[i],
+              reasoningEffort: cfg.reasoningEffort,
               signal: ac.signal,
               provider: cfg.chatProvider,
               sessionId,

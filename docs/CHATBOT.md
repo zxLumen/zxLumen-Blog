@@ -96,6 +96,8 @@ docker compose 已为 `app` 服务配置:
 - **推理模型与「最大输出」**:`deepseek-v4.1-flash` 等推理模型会把思维链计入输出预算(`reasoning_content`);
   `max_tokens` 太小会先被思维链吃满 → 空回答。默认 `maxTokens=4096`;推理模型建议 ≥4096,非推理模型(如 `glm-5.3-flash`)1024 即可。
   空回答/被截断时前台会显示明确报错(不再静默空白),并写入 `chatbot_last_error`;成功一次会自动清空该错误。
+  另:访客聊天**空正文会自动放大预算重试一次**(`maxTokens` → `max(2×,+2048)`),失败行会记真实 token 与 `finish/reasoning/out`。
+- **思考强度**(`reasoningEffort`):admin「机器人 → 对话配置」可选 `自动/关闭/低/中/高`,转发为上游 `reasoning_effort`(聊天/问候/蒸馏都生效);`自动` 不发送该字段。仅对支持该参数的上游有效(经网关透传)。
 - embedding 未配置时检索退化为 FTS5 关键词,不影响问答。
 - embedding 维度按已知模型表自动填(如 bge-m3=1024、text-embedding-3-small=1536),未知模型手填维数。
 

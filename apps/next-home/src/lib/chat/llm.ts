@@ -23,6 +23,8 @@ export interface StreamChatOpts {
   provider?: string
   /** 会话 id:OpenCode Go 需 `x-opencode-session` 做路由与 prompt 缓存 */
   sessionId?: string
+  /** 思考强度(转发为上游 `reasoning_effort`;'auto' 或空 = 不发送该字段) */
+  reasoningEffort?: string
   /** 出站脱敏:发送前把每条消息里的敏感信息掩码(仅蒸馏等管理侧开启,访客问答不加开销) */
   sanitize?: boolean
 }
@@ -58,17 +60,22 @@ async function streamOpenAi(opts: StreamChatOpts, onToken: (d: string) => void):
     headers['x-opencode-session'] = opts.sessionId || randomUUID()
     headers['User-Agent'] = UA
   }
+  const payload: Record<string, unknown> = {
+    model: opts.model,
+    messages: opts.messages,
+    stream: true,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 1024,
+    stream_options: { include_usage: true },
+  }
+  // 思考强度:仅当显式设置(非 auto)时下发;不支持该字段的上游由网关/模型自行忽略或报错
+  if (opts.reasoningEffort && opts.reasoningEffort !== 'auto') {
+    payload.reasoning_effort = opts.reasoningEffort
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      model: opts.model,
-      messages: opts.messages,
-      stream: true,
-      temperature: opts.temperature ?? 0.7,
-      max_tokens: opts.maxTokens ?? 1024,
-      stream_options: { include_usage: true },
-    }),
+    body: JSON.stringify(payload),
     signal: opts.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT),
   })
   if (!res.ok) {

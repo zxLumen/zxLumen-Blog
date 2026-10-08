@@ -77,6 +77,7 @@ export async function classifyText(cfg: ChatBotConfig, name: string, text: strin
       temperature: 0,
       maxTokens,
       provider: cfg.chatProvider,
+      reasoningEffort: cfg.reasoningEffort,
       sessionId: `distill:classify:${encodeURIComponent(name)}`,
       sanitize: true,
     })
@@ -377,6 +378,7 @@ async function classifyBatch(
     temperature: 0,
     maxTokens,
     provider: cfg.chatProvider,
+    reasoningEffort: cfg.reasoningEffort,
     sessionId: 'distill:classify:batch',
     sanitize: true,
   })
@@ -822,6 +824,7 @@ export async function generatePersona(status?: PersonaStatus): Promise<{ persona
       temperature: 0.7,
       maxTokens: 3000,
       provider: cfg.chatProvider,
+      reasoningEffort: cfg.reasoningEffort,
       sessionId: 'distill:persona',
       sanitize: true,
     }),
@@ -834,6 +837,7 @@ export async function generatePersona(status?: PersonaStatus): Promise<{ persona
       temperature: 0.3,
       maxTokens: 1200,
       provider: cfg.chatProvider,
+      reasoningEffort: cfg.reasoningEffort,
       sessionId: 'distill:faq',
       sanitize: true,
     }),

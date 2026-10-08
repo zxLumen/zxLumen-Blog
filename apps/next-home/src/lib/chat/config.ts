@@ -16,6 +16,10 @@ const K_CHAT_KEY = 'chatbot_chat_key'
 const K_EMBED_KEY = 'chatbot_embed_key'
 const K_ERR = 'chatbot_last_error'
 
+/** 思考强度:转发为上游 `reasoning_effort`;auto=不发送该字段 */
+export type ReasoningEffort = 'auto' | 'none' | 'low' | 'medium' | 'high'
+export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'none', 'low', 'medium', 'high']
+
 export interface ChatBotConfig {
   enabled: boolean
   name: string
@@ -36,6 +40,8 @@ export interface ChatBotConfig {
   chatModel: string
   temperature: number
   maxTokens: number
+  /** 推理模型的思考强度(转发为上游 `reasoning_effort`;auto=不干预,交给模型/上游默认) */
+  reasoningEffort: ReasoningEffort
   /** embedding provider 预设 id;留空 = 仅关键词检索 */
   embedProvider: string
   embedBaseUrl: string
@@ -74,6 +80,7 @@ export const DEFAULT_CONFIG: ChatBotConfig = {
   temperature: 0.7,
   /** 单次回复上限(含推理模型思维链);推理模型建议 ≥4096 */
   maxTokens: 4096,
+  reasoningEffort: 'auto',
   embedProvider: 'zhipuai',
   embedBaseUrl: '',
   embedModel: 'embedding-3',
@@ -104,6 +111,9 @@ function normalize(cfg: ChatBotConfig): ChatBotConfig {
     autoOpen: typeof cfg.autoOpen === 'boolean' ? cfg.autoOpen : DEFAULT_CONFIG.autoOpen,
     smartGreeting: typeof cfg.smartGreeting === 'boolean' ? cfg.smartGreeting : DEFAULT_CONFIG.smartGreeting,
     greetBirthday: typeof cfg.greetBirthday === 'string' ? cfg.greetBirthday : '',
+    reasoningEffort: (REASONING_EFFORTS as readonly string[]).includes(cfg.reasoningEffort)
+      ? cfg.reasoningEffort
+      : DEFAULT_CONFIG.reasoningEffort,
   }
 }
 

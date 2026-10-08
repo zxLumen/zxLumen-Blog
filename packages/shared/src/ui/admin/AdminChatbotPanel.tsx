@@ -31,6 +31,7 @@ interface BotConfig {
   chatModel: string
   temperature: number
   maxTokens: number
+  reasoningEffort: string
   embedProvider: string
   embedBaseUrl: string
   embedModel: string
@@ -1155,6 +1156,16 @@ const clearLogs = async () => {
           <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="单次回复最大长度(tokens,含推理模型思维链)。推理模型建议 ≥4096,否则思维链可能吃满导致空回答。">
             最大输出
             <input className="zx-input" style={{ maxWidth: 100 }} type="number" value={cfg.maxTokens} onChange={(e) => set('maxTokens', num(e.target.value, 1024))} />
+          </label>
+          <label className="zx-muted zx-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.66rem' }} title="推理模型的思考强度,转发为上游 reasoning_effort。auto=不发送该字段(交给模型默认);仅对支持 reasoning_effort 的上游生效。">
+            思考强度
+            <select className="zx-input" style={{ maxWidth: 110 }} value={cfg.reasoningEffort || 'auto'} onChange={(e) => set('reasoningEffort', e.target.value)}>
+              <option value="auto">自动</option>
+              <option value="none">关闭</option>
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+            </select>
           </label>
         </div>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
