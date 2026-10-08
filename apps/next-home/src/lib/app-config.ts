@@ -15,7 +15,7 @@ const DEFAULT_APPS: AppItem[] = [
   { id: 'github', name: 'GitHub', url: 'https://github.com/zxlumen', bind: 'github' },
   { id: 'resume', name: '简历', url: '/resume.pdf', bind: 'resume' },
   { id: 'luminari', name: '生灵', url: 'luminari.zxlumen.cn', icon: '/apps/luminari.png', openIn: 'panel', bind: 'luminari' },
-  { id: 'mbti', name: 'MBTI 对话测评', url: 'https://mbti.zxlumen.cn', icon: '/apps/mbti.png', openIn: 'panel', bind: 'mbti' },
+  { id: 'mbti', name: '心语', url: 'https://mbti.zxlumen.cn', icon: '/apps/mbti.png', openIn: 'panel', bind: 'mbti' },
 ]
 
 /** 规范化单条(过滤非法值,兜底字段);无 id 则丢弃 */
