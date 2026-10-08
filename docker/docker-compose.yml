@@ -287,6 +287,25 @@ services:
     networks:
       - web
 
+  # 心语(对话式 MBTI 测评;独立镜像 + 子域 + iframe 嵌应用栏 + 站长 SSO)
+  mbti:
+    image: ghcr.io/zxlumen/mbti-web:${MBTI_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 8787
+      # 大模型经博客 AI 网关(令牌在 admin「AI 密钥」页生成后填 docker/.env)
+      ZX_AI_GATEWAY_URL: http://app:3000/api/ai/v1
+      ZX_AI_APP_TOKEN: ${MBTI_AI_TOKEN:-}
+      # SESSION_SECRET 由 env_file 带入(与博客同一个):已登录博客即视为站长
+    volumes:
+      - mbti-data:/app/data
+      - ./site-content/mascots:/app/mascots
+    expose:
+      - "8787"
+    networks:
+      - web
+
 volumes:
   zx-data:
   caddy-data:
@@ -298,6 +317,7 @@ volumes:
   stock-data:
   luminari-data:
   attune-data:
+  mbti-data:
 
 networks:
   web:

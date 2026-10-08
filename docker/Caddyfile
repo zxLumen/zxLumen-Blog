@@ -179,6 +179,21 @@ luminari.{$DOMAIN} {
 	reverse_proxy luminari:8790
 }
 
+# 心语(独立容器:对话式 MBTI 测评;见 mbti-web 仓库)
+mbti.{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		# 会被主站用 iframe 嵌进应用栏 → 只放行主站(与自身)内嵌
+		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy mbti:8787
+}
+
 # 无恙(独立容器:从对话音频觉察身心状态;见 attune 仓库)
 attune.{$DOMAIN} {
 	encode zstd gzip
