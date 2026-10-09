@@ -135,14 +135,17 @@ function wmoText(code: number): string {
 
 let wcache: { at: number; data: { text: string; temp: number; code: number } | null } | null = null
 
-/** 北京实时天气(Open-Meteo,免 key);成功缓存 40 分钟,失败只缓存 60 秒(避免瞬时失败让整档没天气) */
-async function beijingWeather(): Promise<{ text: string; temp: number; code: number } | null> {
+/** 北京实时天气(Open-Meteo,免 key);成功缓存 40 分钟,失败只缓存 20 秒。
+ *  force=true 时忽略缓存重新请求 —— 供生成重试真正重试(否则会被失败缓存挡住)。 */
+async function beijingWeather(force = false): Promise<{ text: string; temp: number; code: number } | null> {
   const now = Date.now()
-  const failTtl = wcache?.data ? 40 * 60_000 : 60_000
-  if (wcache && now - wcache.at < failTtl) return wcache.data
+  if (!force && wcache) {
+    const ttl = wcache.data ? 40 * 60_000 : 20_000
+    if (now - wcache.at < ttl) return wcache.data
+  }
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,weather_code&timezone=Asia%2FShanghai`
-    const res = await fetch(url, { signal: AbortSignal.timeout(3500), cache: 'no-store' })
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000), cache: 'no-store' })
     if (!res.ok) throw new Error(String(res.status))
     const j = (await res.json()) as { current?: { temperature_2m?: number; weather_code?: number } }
     const temp = Math.round(j.current?.temperature_2m ?? NaN)
@@ -170,20 +173,20 @@ interface Ctx {
   isBirthday: boolean
 }
 
-let cache: { key: string; lines: string[] } | null = null
+let cache: { key: string; lines: string[]; wx?: boolean } | null = null
 let inflightKey: string | null = null
 
 const GREET_META = 'chatbot_greet_cache'
 
 /** 从 DB meta 载入上次生成结果(重启/部署后不再露兜底) */
-function loadPersisted(): { key: string; lines: string[] } | null {
+function loadPersisted(): { key: string; lines: string[]; wx?: boolean } | null {
   try {
     const raw = getDb().getMeta(GREET_META)
     if (!raw) return null
-    const j = JSON.parse(raw) as { key?: unknown; lines?: unknown }
+    const j = JSON.parse(raw) as { key?: unknown; lines?: unknown; wx?: unknown }
     if (typeof j.key === 'string' && Array.isArray(j.lines)) {
       const lines = j.lines.filter((s): s is string => typeof s === 'string')
-      if (lines.length) return { key: j.key, lines }
+      if (lines.length) return { key: j.key, lines, wx: j.wx === true }
     }
   } catch {
     /* ignore */
@@ -191,9 +194,9 @@ function loadPersisted(): { key: string; lines: string[] } | null {
   return null
 }
 
-function persist(c: { key: string; lines: string[] }): void {
+function persist(c: { key: string; lines: string[]; wx?: boolean }): void {
   try {
-    getDb().setMeta(GREET_META, JSON.stringify({ key: c.key, lines: c.lines, at: Date.now() }))
+    getDb().setMeta(GREET_META, JSON.stringify({ key: c.key, lines: c.lines, wx: !!c.wx, at: Date.now() }))
   } catch {
     /* ignore */
   }
@@ -309,15 +312,17 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       /* ignore */
     }
 
-    // 天气只在生成时取(读路径不再碰网络);瞬时失败轻量重试,最多 3 次
+    // 天气只在生成时取(读路径不再碰网络);瞬时失败重试至多 4 次,
+    // 第 2 次起 force=true 绕开失败缓存,确保每次都是真·重新请求。
     if (!ctx.wx) {
-      for (let i = 0; i < 3 && !ctx.wx; i++) {
+      const tries = 4
+      for (let i = 0; i < tries && !ctx.wx; i++) {
         try {
-          ctx.wx = await beijingWeather()
+          ctx.wx = await beijingWeather(i > 0)
         } catch {
           /* ignore */
         }
-        if (!ctx.wx && i < 2) await new Promise((r) => setTimeout(r, 1000 * (i + 1)))
+        if (!ctx.wx && i < tries - 1) await new Promise((r) => setTimeout(r, 1000 * (i + 1)))
       }
     }
 
@@ -340,7 +345,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       `- ${bucketHint(ctx.bucket)}。`,
       '- 所有时间性表述必须与「事实」里的当前时段一致:不得使用与该时段矛盾的词,也不得引入事实之外的时间点(如白天不要出现“前夜/晚安/还没睡”这类词);拿不准就不写时间。',
       '- 必须自然点出今天的日期与星期:星期与问候语连读(如"周五下午好"),不要用"周五愿你…"这种周和正文黏连的写法;单独用时间词起句时后面要加逗号;日期可写成"今天是10月9日";今天有节日时,用节日替代日期(如"今天是世界邮政日"),并顺带一句应景的祝福。',
-      '- 有天气时:必须自然带出天气与温度(如"北京这会儿晴、26°C"),不要干巴巴地报告。',
+      '- 事实里给出了天气时:必须自然带出天气与温度(如"北京这会儿晴、26°C"),哪怕只是"阴"也要带上,不要干巴巴地报告。',
       '- 节日祝福只允许:事实里给出的节日,或你百分百确认是真实的节日;拿不准的一律不提。',
       '- 结尾自然地带一句轻邀请(例如问问对方想了解站主的什么)。',
       '- 温度一律写成"19°C"这种形式(° 与 C 连写),不要用 ℃ 单字形或"19度"。',
@@ -407,7 +412,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       }
     }
     if (lines.length) {
-      cache = { key: ctx.key, lines }
+      cache = { key: ctx.key, lines, wx: !!ctx.wx }
       persist(cache)
       console.log(`[greeting] generated ${lines.length} 条 @ ${ctx.key}`)
     } else {
@@ -473,7 +478,13 @@ export async function refreshGreetings(now: Date = new Date()): Promise<boolean>
   const samples = (cfg.greetings ?? []).map((s) => s.trim()).filter(Boolean)
   const ctx = buildCtx(now, cfg.greetBirthday)
   adoptPersisted(ctx.key)
-  if (cache && cache.key === ctx.key && cache.lines.length) return false
+  if (cache && cache.key === ctx.key && cache.lines.length) {
+    if (cache.wx) return false // 已生成且带天气,无需重来
+    // 上次生成时没取到天气:若此刻能取到,就重生成以补上温度(瞬时失败自愈);否则保持现状,等下一个 tick
+    const wx = await beijingWeather()
+    if (!wx) return false
+    ctx.wx = wx
+  }
   const before = cache
   await generate(ctx, samples)
   return cache !== before
