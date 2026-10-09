@@ -3950,10 +3950,13 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   flex: 0 0 auto;
   white-space: nowrap;
   text-transform: none;
+  transition: transform 0.18s ease, color 0.18s ease;
+  transform-origin: center;
 }
 
 .zx-tabs.is-inline .zx-tab:hover {
   color: var(--fg);
+  transform: scale(1.12);
 }
 
 .zx-tabs.is-inline .zx-tab.is-active {
