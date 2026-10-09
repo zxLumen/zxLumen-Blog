@@ -25,6 +25,8 @@ import {
 import { GatewayApps, GoQuotaPanel, MinimaxQuotaPanel, ZhipuQuotaPanel } from './usage/QuotaPanels.js'
 import { RecentTable, UsageCharts } from './usage/UsageCharts.js'
 import { Pagination } from './Pagination.js'
+import { useSectionHeader } from './Section.js'
+import type { SectionHeader } from './site-edit-types.js'
 
 export function UsageSection({
   rows,
@@ -32,6 +34,8 @@ export function UsageSection({
   usageSource,
   initialSel,
   availableSources,
+  sectionHeader,
+  isAdmin,
 }: {
   rows?: UsageRow[]
   window?: { start?: string; end?: string }
@@ -40,7 +44,10 @@ export function UsageSection({
   initialSel?: UsageSel
   /** SSR 计算的数据源可用性;未提供则客户端探测 */
   availableSources?: SourceAvailability
+  sectionHeader?: SectionHeader
+  isAdmin?: boolean
 }) {
+  const header = useSectionHeader('usage', { tag: '// TOKEN USAGE', title: 'Token用量' }, sectionHeader)
   const ssrSrc = usageSource ?? 'deepseek'
   const [dataSrc, setDataSrc] = useState<DataSource>(
     initialSel?.dataSrc ?? availableSources?.defaultSource ?? DEFAULT_SEL.dataSrc,
@@ -501,7 +508,13 @@ export function UsageSection({
   })()
 
   return (
-    <Section id="usage" tag="// TOKEN USAGE" num="02" title="Token用量">
+    <Section
+      id="usage"
+      tag={sectionHeader?.tag ?? "// TOKEN USAGE"}
+      num="02"
+      title={sectionHeader?.title ?? "Token用量"}
+      edit={isAdmin ? header : undefined}
+    >
       {sources.length > 1 && (
         <div className="zx-seg" role="group" aria-label="数据源">
           {sources.map((s) => (

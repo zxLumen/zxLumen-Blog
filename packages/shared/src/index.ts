@@ -46,6 +46,10 @@ export type {
   Contacts,
 } from './content.js'
 
+// 站点内容 DB 覆盖(meta.site_content):叠加在 content.json 之上
+export { mergeSiteContent } from './site-content-merge.js'
+export type { SiteContentOverride, SectionHeader, SiteSections } from './site-content-merge.js'
+
 // 项目数据(整表覆盖:admin 可增删/排序/软删,存 meta 键 projects_config)
 export type { StoredProject } from './schema.js'
 

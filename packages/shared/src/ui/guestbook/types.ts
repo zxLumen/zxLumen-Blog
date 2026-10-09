@@ -8,6 +8,8 @@ export interface NewComment {
   parent_id?: number | null
 }
 
+import type { SectionHeader } from '../site-edit-types.js'
+
 export interface GuestbookProps {
   /** 初始分页数据(服务端渲染第 1 页) */
   page?: PagedComments
@@ -21,4 +23,5 @@ export interface GuestbookProps {
   initialAuthor?: string
   /** 当前模拟访客身份:昵称按身份分键(等价于一台独立设备) */
   viewerMock?: string
+  sectionHeader?: SectionHeader
 }

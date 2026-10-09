@@ -4,6 +4,7 @@ import type { Contacts, LinkItem, Profile, Project, TechItem, TimelineEntry } fr
 import type { CommentRow, PagedComments, StatsResult, StoredProject, UsageRow } from '../schema.js'
 import type { VlogSeries, VlogStart } from '../schema.js'
 import type { SourceAvailability, UsageSel, DataSource } from '../usage-sel.js'
+import type { SiteSections } from './site-edit-types.js'
 import { Hero } from './Hero.js'
 import { ProjectsSection } from './ProjectsSection.js'
 import { UsageSection } from './UsageSection.js'
@@ -12,6 +13,7 @@ import { StatusWidget } from './StatusWidget.js'
 import { TrackBeacon } from './TrackBeacon.js'
 import { AboutSection } from './AboutSection.js'
 import { GuestbookSection, type NewComment } from './GuestbookSection.js'
+import { SiteContentSaverProvider } from './SiteContentSaver.js'
 
 interface HomePageProps {
   /** 留言分页数据(第 1 页) */
@@ -33,11 +35,18 @@ interface HomePageProps {
   /** 首页统计聚合(SSR 计算) */
   stats?: StatsResult
   contacts?: Contacts
+  /** 站长:明文联系方式(含电话),供首页就地编辑;访客不下发 */
+  adminContacts?: { email?: string; wechat?: string; phone?: string }
   /** 个人资料 / 站点导航链接 / 技能 / 时间线(服务端注入运行时内容) */
   profile?: Profile
   links?: LinkItem[]
   tech?: TechItem[]
   timeline?: TimelineEntry[]
+  sections?: SiteSections
+  /** 站点的 SEO meta(title/description/keywords) */
+  siteMeta?: { title?: string; description?: string; keywords?: string[] }
+  /** 站点内容的乐观锁版本戳(仅站长) */
+  siteContentRev?: string
   /** 项目(已合并 admin 覆盖;缺省用静态 PROJECTS) */
   projects?: Project[]
   /** 站长:含垃圾箱的全量项目(供首页直接拖拽排序后整表存回) */
@@ -65,10 +74,14 @@ export function HomePage({
   viewerMock,
   stats,
   contacts,
+  adminContacts,
   profile,
   links,
   tech,
   timeline,
+  sections,
+  siteMeta,
+  siteContentRev,
   projects,
   adminStoredProjects,
   projectsRev,
@@ -77,11 +90,17 @@ export function HomePage({
   onSubmitComment,
 }: HomePageProps) {
   return (
-    <>
+    <SiteContentSaverProvider initialRev={siteContentRev} apiBase={apiBase ?? '/api'}>
       <TrackBeacon path="/" />
       <StatsWidget stats={stats} />
       <StatusWidget />
-      <Hero profile={profile} vlogSeries={vlogSeries} vlogStart={vlogStart} />
+      <Hero
+        profile={profile}
+        siteMeta={siteMeta}
+        isAdmin={isAdmin}
+        vlogSeries={vlogSeries}
+        vlogStart={vlogStart}
+      />
       <ProjectsSection
         projects={projects}
         isAdmin={isAdmin}
@@ -89,6 +108,7 @@ export function HomePage({
         projectsRev={projectsRev}
         clicks={stats?.events.clicksByTarget}
         pv={stats?.visits.pv}
+        sectionHeader={sections?.projects}
       />
       <UsageSection
         rows={usage}
@@ -96,8 +116,19 @@ export function HomePage({
         usageSource={usageSource}
         initialSel={initialSel}
         availableSources={availableSources}
+        sectionHeader={sections?.usage}
+        isAdmin={isAdmin}
       />
-      <AboutSection contacts={contacts} profile={profile} links={links} tech={tech} timeline={timeline} />
+      <AboutSection
+        contacts={contacts}
+        adminContacts={adminContacts}
+        profile={profile}
+        links={links}
+        tech={tech}
+        timeline={timeline}
+        sectionHeader={sections?.about}
+        isAdmin={isAdmin}
+      />
       <GuestbookSection
         page={commentsPage}
         submit={onSubmitComment}
@@ -105,7 +136,8 @@ export function HomePage({
         apiBase={apiBase}
         initialAuthor={initialAuthor}
         viewerMock={viewerMock}
+        sectionHeader={sections?.guestbook}
       />
-    </>
+    </SiteContentSaverProvider>
   )
 }

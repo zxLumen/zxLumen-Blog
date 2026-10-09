@@ -5,13 +5,13 @@ import { HomePage } from "@zx/shared/ui";
 import { getDb } from "@/lib/db";
 import { isAdmin } from "@/lib/auth";
 import { effectiveCid, isMockActive, MOCK_COOKIE } from "@/lib/clientid";
-import { getAdminNick, getClientContacts } from "@/lib/settings";
+import { getAdminNick, getClientContacts, getContactSettings } from "@/lib/settings";
 import { fetchSsrUsage } from "@/lib/usage/ssr-rows";
 import { getSourceAvailability } from "@/lib/usage-sources";
 import { getUsageSourceOrder, getUsageDefaultSource } from "@/lib/usage-source-order";
-import { getRuntimeContent } from "@zx/shared/server";
 import { getVisibleProjects, getStoredProjects, getProjectsRev } from "@/lib/projects-config";
 import { getVisibleVlogSeries, pickRandomVlogStart } from "@/lib/vlog-config";
+import { getSiteContent, getSiteContentRev } from "@/lib/site-content";
 export const dynamic = "force-dynamic";
 
 /** 昵称 cookie 键:模拟访客时按身份分键(与 shared nickKey 规则一致) */
@@ -85,7 +85,7 @@ export default async function Home() {
   // 站长:额外下发「含垃圾箱的全量 + 乐观锁版本戳」,供首页直接拖拽排序后整表存回
   const adminStoredProjects = admin ? await getStoredProjects() : undefined;
   const projectsRev = admin ? getProjectsRev() : undefined;
-  const content = await getRuntimeContent();
+  const content = await getSiteContent();
 
   // 抖音旅行视频系列(admin 后台配置;未配置则 Hero 右侧回退显示主题 ASCII)
   const vlogSeries = getVisibleVlogSeries();
@@ -108,10 +108,14 @@ export default async function Home() {
       initialAuthor={initialAuthor}
       viewerMock={viewerMock || undefined}
       contacts={await getClientContacts()}
+      adminContacts={admin ? await getContactSettings() : undefined}
       profile={content.PROFILE}
       links={content.LINKS}
       tech={content.TECH}
       timeline={content.TIMELINE}
+      sections={content.SECTIONS}
+      siteMeta={content.SITE_META}
+      siteContentRev={admin ? await getSiteContentRev() : undefined}
       vlogSeries={vlogSeries}
       vlogStart={vlogStart}
     />

@@ -7,7 +7,6 @@ import {
   NAV_INIT_SCRIPT,
   themeInitScript,
 } from "@zx/shared";
-import { getRuntimeContent } from "@zx/shared/server";
 import { isAdmin } from "@/lib/auth";
 import { getClientContacts } from "@/lib/settings";
 import { getAppearance } from "@/lib/theme-config";
@@ -16,9 +15,10 @@ import { LuminariFloatsClient } from "@/components/LuminariFloatsClient";
 import { MockUserSwitch } from "@/components/MockUserSwitch";
 import { AppShell } from "@/components/AppShell";
 import { MOCK_COOKIE } from "@/lib/clientid";
+import { getSiteContent } from "@/lib/site-content";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { SITE_META } = await getRuntimeContent();
+  const { SITE_META } = await getSiteContent();
   const domain = process.env.DOMAIN || "zxlumen.cn";
   const ogImage = "/brand/og.png";
   return {
@@ -60,7 +60,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const admin = await isAdmin();
   const contacts = await getClientContacts();
-  const { PROFILE } = await getRuntimeContent();
+  const { PROFILE } = await getSiteContent();
 
   const nav = admin
     ? [...NAV, { label: "admin", href: "/admin" }]

@@ -55,19 +55,35 @@ export async function setContactSettings(c: { email?: string; wechat?: string; p
 export async function getClientContacts(): Promise<Contacts> {
   const { email, wechat, phone } = await getContactSettings()
   const qr = await getWechatQr()
-  const { CONTACTS } = await getRuntimeContent()
+  let contactsBase: Awaited<ReturnType<typeof getRuntimeContent>>['CONTACTS']
+  try {
+    const { getSiteContent } = await import('./site-content')
+    const sc = await getSiteContent()
+    contactsBase = sc.CONTACTS
+  } catch {
+    const { CONTACTS } = await getRuntimeContent()
+    contactsBase = CONTACTS
+  }
   return {
     email,
     wechat: wechat || undefined,
-    wechatQr: qr ? `/api/contact/wechat-qr?v=${qr.ver}` : CONTACTS.wechatQr,
+    wechatQr: qr ? `/api/contact/wechat-qr?v=${qr.ver}` : contactsBase.wechatQr,
     hasPhone: !!phone,
   }
 }
 
 /** 站长昵称(存当前库 meta,默认取运行时 content 的 PROFILE.name) */
 export async function getAdminNick(): Promise<string> {
-  const { PROFILE } = await getRuntimeContent()
-  return (await getDb()).getMeta(ADMIN_NICK_KEY) || PROFILE.name
+  let profileName = ''
+  try {
+    const { getSiteContent } = await import('./site-content')
+    const sc = await getSiteContent()
+    profileName = sc.PROFILE?.name || ''
+  } catch {
+    const { PROFILE } = await getRuntimeContent()
+    profileName = PROFILE.name
+  }
+  return (await getDb()).getMeta(ADMIN_NICK_KEY) || profileName || ''
 }
 
 export async function setAdminNick(nick: string) {

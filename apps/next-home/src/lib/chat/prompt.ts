@@ -20,16 +20,22 @@ export interface BuildPromptArgs {
 const MAX_HISTORY = 8 // 带进上下文的最近轮次(截断避免超长)
 
 async function renderSiteFacts(): Promise<string> {
-  const c = await getRuntimeContent()
+  let c: Awaited<ReturnType<typeof import('../site-content').getSiteContent>> | Awaited<ReturnType<typeof getRuntimeContent>>
+  try {
+    const { getSiteContent } = await import('../site-content')
+    c = await getSiteContent()
+  } catch {
+    c = await getRuntimeContent()
+  }
   const lines: string[] = []
   if (c.PROFILE) {
     const p = c.PROFILE
-    lines.push(
-      `- 个人:${p.name}(${p.handle}),${p.title},位于 ${p.location}`,
-      `- 简介:${(p.bioLines ?? []).map((b) => b.replace(/^[#\-*\s]+/, '')).filter(Boolean).join(';')}`,
-      `- 状态:${p.statusLine}`,
-      p.email ? `- 邮箱:${p.email}` : '',
-    )
+      lines.push(
+        `- 个人:${p.name}(${p.handle}),${p.title},位于 ${p.location}`,
+        `- 简介:${(p.bioLines ?? []).map((b: string) => b.replace(/^[#\-*\s]+/, '')).filter(Boolean).join(';')}`,
+        `- 状态:${p.statusLine}`,
+        p.email ? `- 邮箱:${p.email}` : '',
+      )
   }
   if (c.TIMELINE?.length) {
     lines.push('- 经历:')

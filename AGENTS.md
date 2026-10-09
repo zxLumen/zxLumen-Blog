@@ -304,6 +304,12 @@ npm run test:load -- quick   # L6 压测冒烟(需 k6:brew install k6)
 
    需要 `packages/shared/.env.local` 里配 `ZX_ADMIN_PASSWORD`(线上站长的 admin 密码)。
 
+8. **站点文字内容**(`meta.site_content`)也是 admin 覆盖值 —— 站长可在**首页底部「编辑」**
+   就地改个人资料 / 关于区 / 区块小标题 / SEO(仅站长可见),保存进库。这些覆盖**叠加在只读的
+   `content.json` 之上**,所以**再改 `content.local.ts` / 重跑 `export:content` 也盖不掉已编辑过的
+   字段**(与项目卡、应用栏、联系方式一致:库为准)。要回退成源码值,线上清掉 `meta.site_content`
+   (或 `DELETE /api/admin/site-content`)。项目卡文字仍存 `projects_config`,联系方式仍存 `meta`。
+
 > `docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` / `docker/ci-run.sh` /
 > `docker/observability/` **无需手动传**:服务器 `ci-run.sh` 会在部署前从公开仓库自动 `git fetch` 同步(见上)。
 >

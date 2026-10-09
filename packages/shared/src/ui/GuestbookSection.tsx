@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CommentRow, PagedComments } from '../schema.js'
 import { fmtDateTime } from '../format.js'
-import { Section } from './Section.js'
+import { Section, useSectionHeader } from './Section.js'
 import { Pagination } from './Pagination.js'
 import { nickKey } from './identity.js'
 import type { GuestbookProps, NewComment } from './guestbook/types.js'
@@ -19,8 +19,10 @@ export function GuestbookSection({
   apiBase: apiBaseProp = '/api',
   initialAuthor = '',
   viewerMock = '',
+  sectionHeader,
 }: GuestbookProps) {
   const apiBase = apiBaseProp.replace(/\/$/, '')
+  const header = useSectionHeader('guestbook', { tag: '// GUESTBOOK', title: '留言板' }, sectionHeader)
   const nickStorageKey = nickKey(viewerMock)
   // 访客删除自己的留言(单环境:放行)
   const canSelfDelete = true
@@ -284,7 +286,13 @@ export function GuestbookSection({
   }
 
   return (
-    <Section id="guestbook" tag="// GUESTBOOK" num="04" title="留言板">
+    <Section
+      id="guestbook"
+      tag={sectionHeader?.tag ?? '// GUESTBOOK'}
+      num="04"
+      title={sectionHeader?.title ?? '留言板'}
+      edit={isAdmin ? header : undefined}
+    >
       <div className="zx-guestbook-grid">
         <form className="zx-form" onSubmit={onSubmitTop} noValidate>
           <div className="zx-row">

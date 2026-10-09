@@ -1823,53 +1823,281 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   color: #e03131;
 }
 
-/* ── 首页就地编辑(仅站长) ───────────────────────────── */
-.zx-editbar {
-  position: fixed;
-  bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 395;
+/* ── 首页就地编辑(仅站长;各区块独立编辑/保存) ───────────── */
+
+/* 低调的铅笔入口 */
+.zx-edit-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.18s ease, color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.zx-edit-btn:hover {
+  opacity: 1;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* 编辑态操作条 */
+.zx-edit-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.zx-edit-actions.is-start {
+  justify-content: flex-start;
+}
+.zx-edit-error {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: #ff8a8a;
+  margin-right: 0.2rem;
+}
+.zx-edit-chip {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.36rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+.zx-edit-chip:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.zx-edit-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.zx-edit-chip.is-primary {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.zx-edit-chip.is-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  color: var(--bg);
+}
+
+/* 小 × 与 + */
+.zx-edit-x {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.zx-edit-x:hover {
+  color: #ff8a8a;
+  background: color-mix(in srgb, #ff8a8a 12%, transparent);
+}
+.zx-edit-add {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+.zx-edit-add:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.zx-edit-add.is-chip {
+  vertical-align: middle;
+}
+.zx-edit-select {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 0.18rem 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  color: var(--fg);
+  cursor: pointer;
+}
+.zx-edit-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+}
+
+/* 无缝就地输入:平时就是普通文本,编辑时只显一条强调线 */
+.zx-inline {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  padding: 0 2px;
+  margin: 0;
+  width: 100%;
+  min-width: 3ch;
+  outline: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.zx-inline:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-bottom-color: var(--accent);
+}
+.zx-inline:focus {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-bottom-style: solid;
+  border-bottom-color: var(--accent);
+}
+.zx-inline::placeholder {
+  color: var(--fg-dim);
+  opacity: 0.7;
+}
+.zx-inline-area {
+  display: block;
+  resize: none;
+  overflow: hidden;
+}
+.zx-inline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+}
+.zx-inline-sep {
+  opacity: 0.5;
+}
+.zx-inline-w-sm {
+  max-width: 8rem;
+}
+.zx-inline-w-xs {
+  max-width: 6rem;
+}
+.zx-inline-hero {
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+.zx-inline-card-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* 控件落位 */
+.zx-hero {
+  position: relative;
+}
+.zx-hero-edit {
+  position: absolute;
+  top: 1rem;
+  right: 1.4rem;
+  z-index: 5;
+}
+.zx-sec-edit {
+  margin-left: auto;
+  align-self: center;
+}
+.zx-block-edit {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.3rem;
+}
+.zx-card-edit {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 3;
+}
+.zx-card.is-editing {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.zx-card-meta {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-}
-.zx-editbar.is-active {
-  max-width: 92vw;
-}
-.zx-editpanel {
-  position: fixed;
-  bottom: 62px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 396;
-  width: min(380px, 92vw);
-  display: grid;
   gap: 0.6rem;
-  padding: 0.9rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  flex-wrap: wrap;
 }
-.zx-input-xs {
+.zx-card-edit-fields {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.zx-highlights-edit {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+.zx-about-meta {
+  font-size: 0.8rem;
+}
+.zx-contact-edit {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.7rem 0;
+}
+.zx-contact-edit > label,
+.zx-seo-fields > label {
+  display: grid;
+  gap: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+}
+.zx-seo-block {
+  margin-top: 1.1rem;
+  font-family: var(--font-mono);
   font-size: 0.72rem;
-  padding: 0.2rem 0.4rem;
-  height: auto;
 }
-.zx-hero .zx-input,
-.zx-bio .zx-input,
-.zx-timeline .zx-input,
-.zx-editpanel .zx-input,
-.zx-card .zx-input {
-  width: 100%;
+.zx-seo-fields {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  max-width: 34rem;
+}
+.zx-tl-edit {
+  display: grid;
+  gap: 0.35rem;
+}
+.zx-links-edit {
+  margin-top: 1.4rem;
+  display: grid;
+  gap: 0.4rem;
+}
+.zx-subhead {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  margin-bottom: 0.7rem;
+}
+.zx-timeline > .zx-subhead {
+  margin-bottom: 1.2rem;
 }
 
 .zx-card h3 {
