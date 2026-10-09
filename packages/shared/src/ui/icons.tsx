@@ -32,7 +32,7 @@ function Svg({
       aria-hidden={title ? undefined : true}
       role={title ? 'img' : undefined}
       focusable="false"
-      style={{ verticalAlign: '-0.14em', display: 'inline-block' }}
+      style={{ width: dim, height: dim, verticalAlign: '-0.14em', display: 'inline-block' }}
     >
       {title ? <title>{title}</title> : null}
       {children}
