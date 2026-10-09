@@ -28,6 +28,7 @@ const EXTRA_SOLAR: Record<string, string> = {
   '06-01': '儿童节',
   '08-01': '建军节',
   '09-10': '教师节',
+  '10-09': '世界邮政日',
   '10-24': '程序员节',
   '11-11': '双十一',
   '11-21': '世界问候日',
@@ -134,10 +135,11 @@ function wmoText(code: number): string {
 
 let wcache: { at: number; data: { text: string; temp: number; code: number } | null } | null = null
 
-/** 北京实时天气(Open-Meteo,免 key);缓存 40 分钟;失败静默返回 null */
+/** 北京实时天气(Open-Meteo,免 key);成功缓存 40 分钟,失败只缓存 60 秒(避免瞬时失败让整档没天气) */
 async function beijingWeather(): Promise<{ text: string; temp: number; code: number } | null> {
   const now = Date.now()
-  if (wcache && now - wcache.at < 40 * 60_000) return wcache.data
+  const failTtl = wcache?.data ? 40 * 60_000 : 60_000
+  if (wcache && now - wcache.at < failTtl) return wcache.data
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,weather_code&timezone=Asia%2FShanghai`
     const res = await fetch(url, { signal: AbortSignal.timeout(3500), cache: 'no-store' })
@@ -237,12 +239,13 @@ async function auditTime(
   key: string,
 ): Promise<string[]> {
   try {
-    const prompt = [
-      '你是文案校对。下面是个人网站“访客一进来看到的分身问候语”候选。',
+const prompt = [
+      '你是文案校对。下面是个人网站"访客一进来看到的分身问候语"候选。',
       `事实:${facts}`,
-      '逐条检查每句里的时间性表述(如“前夜/晚安/还没睡/昨晚/明早/早安/下午好”等)是否与「事实」中的当前时段一致:',
+      '逐条检查每句里的时间性表述(如"前夜/晚安/还没睡/昨晚/明早/早安/下午好"等)是否与「事实」中的当前时段一致,并核对提到的节日是否属实:',
       '- 与当前时段矛盾的时间表述:改写成与当前时段一致的表达,或直接删掉该句;',
-      '- 时间中性、与事实不冲突的:原样保留;',
+      '- 若某句提到节日/祝福语(如"世界邮政日"),核对公历日期是否真的是这个节日;属实则保留,不属实或拿不准的更改写/删除;',
+      '- 时间中性、与事实不冲突且节日属实的:原样保留;',
       '- 不要新增句子,不要编号,不要任何解释。',
       '输出修正后的问候语列表,每行一条:',
       ...lines,
@@ -299,12 +302,15 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       /* ignore */
     }
 
-    // 天气只在生成时取(读路径不再碰网络)
+    // 天气只在生成时取(读路径不再碰网络);瞬时失败轻量重试,最多 3 次
     if (!ctx.wx) {
-      try {
-        ctx.wx = await beijingWeather()
-      } catch {
-        /* ignore */
+      for (let i = 0; i < 3 && !ctx.wx; i++) {
+        try {
+          ctx.wx = await beijingWeather()
+        } catch {
+          /* ignore */
+        }
+        if (!ctx.wx && i < 2) await new Promise((r) => setTimeout(r, 1000 * (i + 1)))
       }
     }
 
@@ -326,10 +332,12 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
       '- 中文口语,自然、克制、偶尔一点俏皮;每条 1~2 句,30~70 字。',
       `- ${bucketHint(ctx.bucket)}。`,
       '- 所有时间性表述必须与「事实」里的当前时段一致:不得使用与该时段矛盾的词,也不得引入事实之外的时间点(如白天不要出现“前夜/晚安/还没睡”这类词);拿不准就不写时间。',
-      '- 有节日:必须先给一句应景的祝福;有天气:顺带贴合地提一句。',
+      '- 必须自然点出今天的日期与星期(如"今天是10月9日、周五");今天有节日时,用节日替代日期(如"今天是世界邮政日"),并顺带一句应景的祝福。',
+      '- 有天气时:必须自然带出天气与温度(如"北京这会儿晴、26°C"),不要干巴巴地报告。',
+      '- 节日祝福只允许:事实里给出的节日,或你百分百确认是真实的节日;拿不准的一律不提。',
       '- 结尾自然地带一句轻邀请(例如问问对方想了解站主的什么)。',
       '- 温度一律写成"19°C"这种形式(° 与 C 连写),不要用 ℃ 单字形或"19度"。',
-      '- 绝不出现"AI / 模型 / 机器人 / prompt / 助手 / 系统"等词;不要生硬罗列时间地点。',
+      '- 绝不出现"AI / 模型 / 机器人 / prompt / 助手 / 系统"等词;日期、天气这些要点要说成人话,别堆成报告腔。',
       '- emoji 极少(0~1 个,多数不带)。',
       '- 不要照抄下面的示例句子,只模仿它们的口吻。',
       '',
