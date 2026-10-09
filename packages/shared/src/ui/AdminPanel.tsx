@@ -1736,8 +1736,12 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
                       const label = vlogLabel(vid)
                       return (
                         <tr key={vid}>
-                          {/* 集标题可能很长:单元格省略号截断(title 悬停看全名) */}
-                          <td title={label}>{label}</td>
+                          {/* 集标题可能很长:单行省略号截断,不占满整列(title 悬停看全名) */}
+                          <td title={label}>
+                            <span className="zx-cell-ellipsis" style={{ maxWidth: '16rem' }}>
+                              {label}
+                            </span>
+                          </td>
                           <td className="num">{fmtInt(count)}</td>
                         </tr>
                       )

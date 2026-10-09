@@ -136,7 +136,17 @@ export function VisitorDetailRow({
           ) : (
             <>
               <div>
-                {v.alias ? <span className="zx-alias-tag">{v.alias}</span> : displayName}
+                {v.alias ? (
+                  <span
+                    className="zx-alias-tag zx-cell-ellipsis"
+                    style={{ maxWidth: '10rem' }}
+                    title={v.alias}
+                  >
+                    {v.alias}
+                  </span>
+                ) : (
+                  displayName
+                )}
                 {v.alias && v.nickname ? (
                   <span className="zx-muted" style={{ fontSize: '0.7rem' }}>
                     {' '}
@@ -174,7 +184,17 @@ export function VisitorDetailRow({
         <td className="num">{fmtInt(v.commentCount)}</td>
         <td className="num">{fmtInt(v.resumeDownloads)}</td>
         <td>
-          {proj ? <span className="zx-mono zx-muted zx-proj-chips">{proj}</span> : <span className="zx-muted">—</span>}
+          {proj ? (
+            <span
+              className="zx-mono zx-muted zx-proj-chips zx-cell-ellipsis"
+              style={{ maxWidth: '12rem' }}
+              title={proj}
+            >
+              {proj}
+            </span>
+          ) : (
+            <span className="zx-muted">—</span>
+          )}
         </td>
         <td className="zx-mono zx-muted">{v.lastSeen}</td>
       </tr>

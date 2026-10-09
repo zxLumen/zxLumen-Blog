@@ -2234,6 +2234,17 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   width: 5rem;
 }
 
+/* 表格单元格内单行省略:内容过长时截断,配合 title 悬停看全。
+   max-width 由使用处按列指定(不同列可容忍的长度不同)。 */
+.zx-cell-ellipsis {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
 /* ---------- 表单 ---------- */
 
 .zx-form {
