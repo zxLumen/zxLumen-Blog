@@ -117,6 +117,13 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
       }
     },
     getScrollBox: () => navRef.current,
+    /**
+     * 触屏:横扫应滚动、长按才拖动。条目要 touch-action:none 才能「按住就拖」,
+     * 那会关掉原生滚动 —— 用 touchScroll 自管(见 useDragReorder),横扫仍能滚,只是没惯性。
+     * 鼠标/桌面不受影响(这两项只对 pointerType==='touch' 生效)。
+     */
+    longPressMs: 400,
+    touchScroll: true,
     disabled: list.length < 2,
   })
 

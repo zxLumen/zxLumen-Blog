@@ -5476,6 +5476,8 @@ tr:hover .zx-alias-btn {
   touch-action: none;
   user-select: none;
   -webkit-user-drag: none;
+  /* 触屏长按排序:压掉 iOS 长按链接的预览/菜单,否则会和「长按进入拖动」打架 */
+  -webkit-touch-callout: none;
 }
 
 .zx-appdock-item[data-dragging] {

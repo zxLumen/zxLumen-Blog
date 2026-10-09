@@ -32,6 +32,7 @@
 - [x] admin「应用」面板:整表增删改 / 拖拽排序 / 分组 / 垃圾箱 / 恢复默认,存 `meta.apps_config` — 优先级:中
 - [x] 图标上传:浏览器端压到长边 256px,落 `docker/site-content/apps/`,Caddy 经 `/apps/*` 供图 — 优先级:中
 - [x] 访客自定义应用顺序:按住图标拖动改自己的顺序,存 `localStorage`(MOCK 身份带后缀隔离),刷新保留、只在自己分组内挪、跨组拒绝,admin 增删自动对账,栏尾 ↺ 恢复默认;admin 与访客共用同一套 Pointer 拖拽 hook — 优先级:中
+  - 触屏分工(窄屏底栏):横向手势 = 滚动应用栏,长按约 400ms = 进入拖动(仅触屏;鼠标仍是越阈值立即拖)。`useDragReorder` 的 `longPressMs`/`touchScroll`,e2e `tests-suite/e2e/appdock-gesture.spec.ts` — 优先级:中
 - [x] **分组连续性两侧强制**:访客存档按分组归拢(`groupContiguous`,修「分组前存的交错顺序」导致同组被拆、多出分隔线);admin 跨组拖拽由 `snapDropToGroup` 夹到组边界(落点提示与提交共用同一结果),从源头保证提交不出交错顺序 — 优先级:中
 - [x] **站内静态文件按「打开方式」处理**:`isSpaRoute` 区分「站内页面路由」(走 `next/link`)与「站内静态文件」(`/resume.pdf` 等,按设置决定 `target`)—— 修此前 `/resume.pdf` 选「新标签页」仍只在当前页打开;admin 面板该选项补了说明 — 优先级:中
 - [x] 纯函数入库测试:`packages/shared/tests/`(node --test,零新依赖),覆盖 `groupContiguous` / `snapDropToGroup` / `applySavedOrder` / `isSpaRoute`;`npm test` 先 build 再跑 dist — 优先级:中

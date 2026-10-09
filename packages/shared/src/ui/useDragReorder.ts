@@ -55,6 +55,17 @@ export interface DragReorderOptions {
   scrollWindow?: boolean
   /** 位移阈值(px),超过才算拖拽。触屏手指按下有 3~5px 抖动,别设太小 */
   threshold?: number
+  /**
+   * 触屏「长按进入拖动」的时长(ms)。0(缺省)= 关闭,触屏仍按 threshold 立即拖动(原行为)。
+   * 仅对 pointerType==='touch' 生效,鼠标不受影响。给 AppDock 用:横扫应滚动、长按才拖动。
+   */
+  longPressMs?: number
+  /**
+   * 触屏长按到点前若先移动,改由本 hook 接管滚动(自管、1:1 跟手)。
+   * 条目要 touch-action:none 才能「按住就拖」,而那会关掉原生滚动 —— 开了这个开关,
+   * 横扫仍是滚动(只是没有惯性)。仅配合 longPressMs>0 使用。
+   */
+  touchScroll?: boolean
   /** 整体禁用(少于两项、加载中、保存中) */
   disabled?: boolean
 }
@@ -79,6 +90,8 @@ export interface DragReorder {
 
 /** 拖到离边缘多近开始自动滚动(px) */
 const EDGE = 44
+/** 长按拖动模式下,手指移动超过多少 px 就判定为「用户在滚动」而非「按住」 */
+const LONG_PRESS_SLOP = 10
 
 export function useDragReorder(opts: DragReorderOptions): DragReorder {
   const { ids, axis, groupOf, onCommit, getScrollBox, scrollWindow, disabled } = opts
@@ -88,11 +101,48 @@ export function useDragReorder(opts: DragReorderOptions): DragReorder {
    * 配置存一份 ref 当唯一真相。拖拽期间读的是「按下去那一刻」的顺序和回调,
    * 不受中途重渲染影响 —— 这正是 HTML5 那版翻车的地方。
    */
-  const cfg = useRef({ ids, groupOf, onCommit, axis, getScrollBox, scrollWindow, adjustDrop: opts.adjustDrop })
-  cfg.current = { ids, groupOf, onCommit, axis, getScrollBox, scrollWindow, adjustDrop: opts.adjustDrop }
+  const cfg = useRef({
+    ids,
+    groupOf,
+    onCommit,
+    axis,
+    getScrollBox,
+    scrollWindow,
+    adjustDrop: opts.adjustDrop,
+    longPressMs: opts.longPressMs ?? 0,
+    touchScroll: opts.touchScroll ?? false,
+  })
+  cfg.current = {
+    ids,
+    groupOf,
+    onCommit,
+    axis,
+    getScrollBox,
+    scrollWindow,
+    adjustDrop: opts.adjustDrop,
+    longPressMs: opts.longPressMs ?? 0,
+    touchScroll: opts.touchScroll ?? false,
+  }
 
-  /** 被拖动的 id / 起点 / 是否已越过阈值 —— 同上,ref 同步可读 */
-  const drag = useRef<{ id: string; pointerId: number; sx: number; sy: number; moved: boolean } | null>(null)
+  /**
+   * 当前手势状态,同上 ref 同步可读。除「被拖 id / 起点 / 是否越过阈值」外还记:
+   *  - pointerType:区分鼠标与触屏(长按拖动只对触屏生效)
+   *  - scrolling:已判定为「滚动」手势(移动先于长按到点),此后不再起拖
+   *  - timer:长按计时器句柄(到点才真正进入拖动)
+   *  - scrollLeft/scrollTop:手势起点时的滚动位置(自管滚动用,按位移 1:1 跟手)
+   */
+  const drag = useRef<{
+    id: string
+    pointerId: number
+    pointerType: string
+    sx: number
+    sy: number
+    moved: boolean
+    scrolling: boolean
+    timer: number | null
+    scrollLeft: number
+    scrollTop: number
+  } | null>(null)
   /** 吞掉落手后浏览器补发的那次 click */
   const suppressClick = useRef(false)
   const els = useRef(new Map<string, HTMLElement>())
@@ -122,6 +172,7 @@ export function useDragReorder(opts: DragReorderOptions): DragReorder {
        * 跟之前 HTML5 那版"在 dragover 里读还没提交的 state"是同一类错。
        */
       const at = dropRef.current
+      if (d?.timer != null) clearTimeout(d.timer)
       drag.current = null
       stopAutoScroll()
       lastPt.current = null
@@ -243,12 +294,48 @@ export function useDragReorder(opts: DragReorderOptions): DragReorder {
       if (disabled) return
       // 只认主键 / 单指
       if (e.pointerType === 'mouse' && e.button !== 0) return
-      drag.current = { id, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false }
+      const { longPressMs } = cfg.current
+      const isTouch = e.pointerType === 'touch'
+      const box = isTouch && longPressMs > 0 ? cfg.current.getScrollBox?.() : null
+      drag.current = {
+        id,
+        pointerId: e.pointerId,
+        pointerType: e.pointerType,
+        sx: e.clientX,
+        sy: e.clientY,
+        moved: false,
+        scrolling: false,
+        timer: null,
+        scrollLeft: box?.scrollLeft ?? 0,
+        scrollTop: box?.scrollTop ?? 0,
+      }
       lastPt.current = { x: e.clientX, y: e.clientY }
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId)
-      } catch {
-        /* 某些浏览器对已释放的指针会抛,忽略 */
+      if (isTouch && longPressMs > 0) {
+        /**
+         * 触屏「长按进入拖动」:先不捕获指针、也不 preventDefault —— 让手指在长按到点
+         * 之前仍能当滚动用(见 onPointerMove 的滚动分支)。到点仍未移出阈值才真正起拖。
+         * el 必须当场取好:计时器回调里合成事件的 currentTarget 已失效。
+         */
+        const el = e.currentTarget as HTMLElement
+        drag.current.timer = window.setTimeout(() => {
+          const d = drag.current
+          if (!d || d.id !== id || d.moved || d.scrolling) return
+          d.moved = true
+          try {
+            el.setPointerCapture(d.pointerId)
+          } catch {
+            /* 指针可能已释放,忽略 */
+          }
+          // 轻震一下提示「可以拖了」(Android/支持者才有;iOS 无)
+          if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(8)
+          setDragId(id)
+        }, longPressMs)
+      } else {
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId)
+        } catch {
+          /* 某些浏览器对已释放的指针会抛,忽略 */
+        }
       }
     },
     [disabled],
@@ -260,6 +347,29 @@ export function useDragReorder(opts: DragReorderOptions): DragReorder {
       if (!d || d.id !== id || d.pointerId !== e.pointerId) return
       lastPt.current = { x: e.clientX, y: e.clientY }
       if (!d.moved) {
+        const { longPressMs, touchScroll, axis: ax, getScrollBox: boxOf } = cfg.current
+        // 触屏 + 长按模式:移动先于长按到点 → 判定为滚动,此后不再起拖
+        if (d.pointerType === 'touch' && longPressMs > 0) {
+          if (d.scrolling || Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > LONG_PRESS_SLOP) {
+            if (!d.scrolling) {
+              if (d.timer != null) clearTimeout(d.timer)
+              d.timer = null
+              d.scrolling = true
+            }
+            if (touchScroll) {
+              const box = boxOf?.()
+              if (box) {
+                // 1:1 跟手:手指左/上移 → 内容往右/下滚
+                if (ax === 'y') box.scrollTop = d.scrollTop - (e.clientY - d.sy)
+                else box.scrollLeft = d.scrollLeft - (e.clientX - d.sx)
+              }
+            }
+            if (e.cancelable) e.preventDefault()
+            return
+          }
+          // 没到长按时间、也没移出阈值:按兵不动(既不滚也不拖)
+          return
+        }
         if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < threshold) return
         d.moved = true
         setDragId(id)
