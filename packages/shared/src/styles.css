@@ -1823,6 +1823,55 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   color: #e03131;
 }
 
+/* ── 首页就地编辑(仅站长) ───────────────────────────── */
+.zx-editbar {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 395;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+.zx-editbar.is-active {
+  max-width: 92vw;
+}
+.zx-editpanel {
+  position: fixed;
+  bottom: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 396;
+  width: min(380px, 92vw);
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+.zx-input-xs {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.4rem;
+  height: auto;
+}
+.zx-hero .zx-input,
+.zx-bio .zx-input,
+.zx-timeline .zx-input,
+.zx-editpanel .zx-input,
+.zx-card .zx-input {
+  width: 100%;
+}
+
 .zx-card h3 {
   font-size: 1.1rem;
   margin-bottom: 0.35rem;
@@ -3931,14 +3980,19 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   /* Tab 多了就整行换行,而不是把每个按钮压窄到逐字断行 */
   flex-wrap: wrap;
   row-gap: 0.25rem;
+  /* 基础字号(放大态按它算倍数)。放这里,子项用 calc 继承 */
+  --tab-fs: clamp(0.8rem, 0.95vw, 0.95rem);
+  /* 固定行高:放大态字号变大也不改头部高度、不推挤下方内容 */
+  align-items: center;
+  min-height: 2.8rem;
 }
 
 /* admin 头部内联 Tab:紧凑的纯文字导航(不跟大标题同号 —— Tab 一多会撑爆) */
 .zx-tabs.is-inline .zx-tab {
-  font-family: var(--font-body);
-  font-size: clamp(0.8rem, 0.95vw, 0.95rem);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: var(--tab-fs);
+  font-weight: 500;
+  letter-spacing: -0.02em;
   line-height: 1.4;
   color: var(--fg-muted);
   background: transparent;
@@ -3950,13 +4004,7 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   flex: 0 0 auto;
   white-space: nowrap;
   text-transform: none;
-  transition: transform 0.18s ease, color 0.18s ease;
-  transform-origin: center;
-}
-
-.zx-tabs.is-inline .zx-tab:hover {
-  color: var(--fg);
-  transform: scale(1.12);
+  transition: font-size 0.22s ease, color 0.18s ease;
 }
 
 .zx-tabs.is-inline .zx-tab.is-active {
@@ -3964,6 +4012,31 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
   border: none;
   background: transparent;
   box-shadow: none;
+}
+
+/* admin 头部 Tab 悬停放大:只把右侧平滑推开(左侧与「退出登录」不动)。
+   用原生 font-size 放大 —— 布局会按该 Tab 实际增量把右侧推走,间距均匀、字也清晰;
+   配 flex:1 防止换行、固定行高防止纵向跳动。
+   只在「支持 hover 且够宽」时启用:≤1080px 时 Tab 行到「退出登录」的余量放不下放大,
+   会换行/顶到按钮,故退回普通紧凑导航。 */
+@media (hover: hover) and (min-width: 1080px) {
+  .zx-tabs.is-inline {
+    flex: 1 1 auto;
+  }
+  .zx-tabs.is-inline .zx-tab:hover {
+    color: var(--fg);
+    font-size: calc(var(--tab-fs) * 2);
+  }
+  /* 右侧紧邻 + 次邻递减,做出柔和的波浪 */
+  .zx-tabs.is-inline .zx-tab:hover + .zx-tab {
+    font-size: calc(var(--tab-fs) * 1.35);
+  }
+  .zx-tabs.is-inline .zx-tab:hover + .zx-tab + .zx-tab {
+    font-size: calc(var(--tab-fs) * 1.12);
+  }
+  .zx-tabs.is-inline .zx-tab.is-active:hover {
+    color: var(--accent);
+  }
 }
 
 /* ---------- 悬浮访客统计 ---------- */
