@@ -43,6 +43,21 @@ const CONTACT_LABEL: Record<string, string> = {
   guestbook: '留言',
 }
 
+/** admin 顶部页面 Tab:数组顺序即展示顺序(新增页面只加一行) */
+const ADMIN_TABS: { key: TabKey; label: string }[] = [
+  { key: 'comments', label: '留言' },
+  { key: 'archive', label: '归档' },
+  { key: 'stats', label: '统计' },
+  { key: 'profile', label: '个人信息' },
+  { key: 'token', label: 'Token用量' },
+  { key: 'projects', label: '项目' },
+  { key: 'vlog', label: '视频' },
+  { key: 'apps', label: '应用' },
+  { key: 'themes', label: '外观' },
+  { key: 'chatbot', label: '机器人' },
+  { key: 'ai', label: 'AI 密钥' },
+]
+
 export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[]; vlogSeries?: VlogSeries[]; apps?: AppItem[] }) {
   const projList = projects ?? PROJECTS
   /** 应用 id → 名称(统计里显示应用名而非 id) */
@@ -860,34 +875,14 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
       <div className="zx-sec-head">
         <span className="zx-sec-tag">// ADMIN</span>
         <div className="zx-tabs is-inline">
-          {(['comments', 'archive', 'stats', 'profile', 'token', 'projects', 'vlog', 'apps', 'themes', 'chatbot', 'ai'] as const).map((t) => (
+          {ADMIN_TABS.map(({ key, label }) => (
             <button
-              key={t}
+              key={key}
               type="button"
-              className={`zx-tab${tab === t ? ' is-active' : ''}`}
-              onClick={() => switchTab(t)}
+              className={`zx-tab${tab === key ? ' is-active' : ''}`}
+              onClick={() => switchTab(key)}
             >
-              {t === 'comments'
-                ? '留言'
-                : t === 'archive'
-                  ? '归档'
-                  : t === 'stats'
-                    ? '统计'
-                    : t === 'profile'
-                      ? '个人信息'
-                      : t === 'projects'
-                        ? '项目'
-                        : t === 'vlog'
-                          ? '视频'
-                          : t === 'apps'
-                            ? '应用'
-                            : t === 'themes'
-                              ? '外观'
-                              : t === 'chatbot'
-                                ? '机器人'
-                                : t === 'ai'
-                                  ? 'AI 密钥'
-                                  : 'Token用量'}
+              {label}
             </button>
           ))}
         </div>
