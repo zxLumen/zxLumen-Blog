@@ -4126,6 +4126,13 @@ html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
 }
 
 /* 按钮内小图标(表情/箭头)放大 */
+/* 裸 SVG 别直接当 flex/grid 子元素:旧版 iOS Safari 算不出尺寸会塌成极小。
+   统一包一层 inline-block 的 span,让 span 当布局子元素、SVG 当普通子元素。 */
+.zx-svg-wrap {
+  display: inline-block;
+  line-height: 0;
+}
+
 .zx-ico {
   display: inline-block;
   font-size: 1.35em;

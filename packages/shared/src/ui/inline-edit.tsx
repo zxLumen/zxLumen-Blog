@@ -188,7 +188,9 @@ export function EditControls({
   if (!editing) {
     return (
       <button type="button" className="zx-edit-btn" onClick={onStart} title={label} aria-label={label}>
-        <PencilIcon />
+        <span className="zx-svg-wrap" aria-hidden="true">
+          <PencilIcon />
+        </span>
       </button>
     )
   }

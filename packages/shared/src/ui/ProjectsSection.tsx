@@ -167,9 +167,11 @@ function ProjectCard({
         )}
         {!editing && total > 0 && (
           <span className="zx-project-clicks" title={self ? '全站访问量' : '链接点击次数'}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M4 4l7 16 2.5-6.5L20 11 4 4z" />
-            </svg>
+            <span className="zx-svg-wrap" aria-hidden="true">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M4 4l7 16 2.5-6.5L20 11 4 4z" />
+              </svg>
+            </span>
             {total} 次点击
           </span>
         )}

@@ -43,7 +43,7 @@
 ### 修复
 
 - **线上智能问候偶发没带气温**:问候语每换时段只生成一次;若生成那一刻北京天气抓取瞬时失败,`beijingWeather()` 会把 `null` 缓存 60s,而生成重试正好在这 60s 内反复拿到缓存的 `null` —— **重试形同虚设**,整档问候语就没温度(线上 10-09 深夜桶即如此)。现在:① `beijingWeather(force)` 支持强制绕过缓存,重试第 2 次起 `force=true`,超时 3.5s→8s、重试 3→4 次;② 失败缓存 60s→20s;③ 落库记 `wx` 标志,`refreshGreetings` 发现"当前桶已生成但没天气"且此刻能取到天气时**自动重生成补齐**(瞬时失败会在一两个 60s tick 内自愈);④ 提示词把"有天气时"改为"事实里给出了天气时",消除歧义。
-- **iOS Safari 下浮球等内联 SVG 图标缩成一点**:图标公共实现 `Svg`(`icons.tsx`)用 `width="1.15em"` 这类**相对单位属性**定尺寸,而旧版 iOS Safari(WebKit < 26.1)不认 SVG `width/height` 属性里的相对单位 → 图标在 `display:flex` 的聊天浮球里塌成 0×0(桌面 / 安卓 / 新版 Safari 正常)。给 `Svg` 同时写**内联 CSS** `width/height`(与属性同值)。**实测旧 Safari 下 CSS `em` 仍不够**(浮球依旧极小),故浮球图标再改用**固定像素** `<MessageIcon px={24} />`(属性直接写成 `width="24px"`,`display:flex` 下也能被解析),彻底避开相对单位。其余内联 SVG(Donut / Sparkline 用 CSS 百分比、项目卡 / lab 生灵用 px)本就 Safari 安全。
+- **iOS Safari 下浮球图标缩成一点(真正原因)**:浮球图标是**裸 `<svg>` 直接当 flex 子元素**,旧版 iOS Safari 算不出这种 inline SVG 的尺寸 → 塌成极小(新版 WebKit 已修,故桌面 / 安卓 / 新版 Safari 正常)。全站其它图标没事,是因为它们都包在 `<span class="zx-ico">` 里(SVG 是普通子元素,不是 flex 子元素)。修复:浮球图标也包一层 `span.zx-svg-wrap`,并顺手把另两处同款裸 SVG(`.zx-project-clicks` 的"N 次点击"、`inline-edit` 的编辑铅笔)一并包上;新增 `.zx-svg-wrap{display:inline-block;line-height:0}`。(此前改 `px` / CSS 尺寸都无效 —— 问题不在单位,而在"SVG 本身是 flex 子元素"。)
 
 - **手机端应用栏横扫被当成拖动排序**:底部应用栏在窄屏溢出后,手指横扫会越过 8px 阈值直接进入拖动排序,右侧应用够不着。现在触屏改为**长按约 400ms 才进入拖动**,横扫则是滚动应用栏(条目上仍是 `touch-action:none`,滚动由脚本自管、1:1 跟手);轻点照常打开应用,鼠标/桌面拖动不受影响。`useDragReorder` 新增 `longPressMs` / `touchScroll` 两个选型(仅对 `pointerType==='touch'` 生效),应用栏传入 `400` / `true`。
 - **统计页两处长列挤爆布局**:「视频播放」的标题列原先占满整个面板宽、「访客明细」的「项目」列(项目名×次数一串)无上限,后者直接把表格撑到面板外(1280px 下 1307px > 面板 966px,只能横向滚)。现在两处都套单行省略号(视频列 16rem、项目列 12rem),悬停 `title` 看全;访客备注别名同样加了省略号(10rem),免得它又把首列撑宽。截断后两表均回到面板宽度内(924px)。
