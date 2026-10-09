@@ -19,8 +19,10 @@ test-results
 playwright-report
 
 # 个人 / 运行时内容:绝不进镜像(由运行时挂载 / 静态服务代替)
+# 注意:只精确排除 docker/site-content 这一个运行时目录 —— 用 `**/site-content` 会
+# 连源码目录 `apps/next-home/src/app/api/admin/site-content/` 一起排除掉,导致该 API
+# 路由在镜像里缺失(构建能过、线上却 404)。
 packages/shared/src/content.local.ts
-**/content.json
-**/site-content
+docker/site-content
 apps/next-home/public/resume.pdf
 apps/next-home/public/wechat.png
