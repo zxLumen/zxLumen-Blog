@@ -671,7 +671,7 @@ export function ChatWidget() {
         aria-label={open ? '收起聊天' : '聊天机器人'}
         title={open ? '收起' : '点开聊天 · 可拖动'}
       >
-        <MessageIcon size={1.15} />
+        <MessageIcon px={24} />
       </button>
     </>
   )
