@@ -59,6 +59,15 @@ interface Payload {
   config: ConfigVM
 }
 
+interface TestVM {
+  loading?: boolean
+  ok?: boolean
+  ms?: number
+  status?: number
+  endpoint?: string
+  error?: string
+}
+
 function gate(showTabs: boolean, tab: string): boolean {
   return showTabs && tab === 'ai'
 }
@@ -135,6 +144,8 @@ export function AdminAiPanel({
   const [loadKey, setLoadKey] = useState(0)
   const [providerModels, setProviderModels] = useState<Record<string, string[]>>({})
   const [modelsBusy, setModelsBusy] = useState('')
+  const [tests, setTests] = useState<Record<string, TestVM>>({})
+  const [testingAll, setTestingAll] = useState(false)
 
   const gated = gate(showTabs, tab)
   const notify = (kind: 'ok' | 'err', text: string) => onNotify?.({ kind, text })
@@ -259,6 +270,57 @@ export function AdminAiPanel({
     }
   }
 
+  const testOne = async (p: ProviderVM) => {
+    const key = `p-${p.id}`
+    setTests((t) => ({ ...t, [key]: { loading: true } }))
+    try {
+      const r = await adminFetch('/api/admin/ai-gateway/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: p.id, baseUrl: p.baseUrl, apiKey: p.apiKey, role: p.role, api: p.api, model: p.model }),
+      })
+      const d = (await r.json().catch(() => ({}))) as { results?: TestVM[]; error?: string }
+      const res = d.results?.[0]
+      if (!r.ok || !res) throw new Error(d.error || '检测失败')
+      setTests((t) => ({ ...t, [key]: { ...res, loading: false } }))
+    } catch (err) {
+      setTests((t) => ({ ...t, [key]: { ok: false, error: err instanceof Error ? err.message : '检测失败' } }))
+    }
+  }
+
+  const testAll = async () => {
+    if (!config) return
+    const ids = config.providers.filter((p) => p.enabled).map((p) => p.id)
+    if (!ids.length) {
+      notify('err', '没有启用的密钥')
+      return
+    }
+    setTestingAll(true)
+    setTests((t) => {
+      const n = { ...t }
+      for (const id of ids) n[`p-${id}`] = { loading: true }
+      return n
+    })
+    try {
+      const r = await adminFetch('/api/admin/ai-gateway/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const d = (await r.json().catch(() => ({}))) as { results?: (TestVM & { id: string })[]; error?: string }
+      if (!r.ok || !d.results) throw new Error(d.error || '检测失败')
+      const next: Record<string, TestVM> = {}
+      for (const x of d.results) next[`p-${x.id}`] = { ...x, loading: false }
+      setTests((t) => ({ ...t, ...next }))
+      const bad = d.results.filter((x) => !x.ok).length
+      notify(bad ? 'err' : 'ok', bad ? `${d.results.length} 个密钥中 ${bad} 个异常` : `${d.results.length} 个密钥全部正常`)
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : '检测失败')
+    } finally {
+      setTestingAll(false)
+    }
+  }
+
   const dirty = !!config && !!data && JSON.stringify(config) !== JSON.stringify(data)
   const providerOptions = config
     ? config.providers.map((p) => ({ value: p.id, label: `${p.name}(${p.id})` }))
@@ -295,7 +357,12 @@ export function AdminAiPanel({
             <Paper withBorder radius={8} p="md">
               <Group justify="space-between" mb="xs">
                 <Text fw={600} fz="sm">密钥池({config.providers.length})</Text>
-                <Button size="compact-xs" variant="light" onClick={addProvider}>+ 新增密钥</Button>
+                <Group gap="xs">
+                  <Button size="compact-xs" variant="light" loading={testingAll} onClick={() => void testAll()}>
+                    一键检测
+                  </Button>
+                  <Button size="compact-xs" variant="light" onClick={addProvider}>+ 新增密钥</Button>
+                </Group>
               </Group>
               <Stack gap="sm">
                 {config.providers.map((p, i) => (
@@ -356,7 +423,28 @@ export function AdminAiPanel({
                         >
                           拉取模型
                         </Button>
+                        <Button
+                          size="compact-xs"
+                          variant="light"
+                          loading={tests[`p-${p.id}`]?.loading}
+                          onClick={() => void testOne(p)}
+                        >
+                          检测
+                        </Button>
                       </Group>
+                      {tests[`p-${p.id}`] && !tests[`p-${p.id}`]?.loading && (
+                        <Text
+                          fz="xs"
+                          ff="var(--font-mono)"
+                          c={tests[`p-${p.id}`]?.ok ? 'teal' : 'red'}
+                          title={tests[`p-${p.id}`]?.error}
+                          lineClamp={2}
+                        >
+                          {tests[`p-${p.id}`]?.ok
+                            ? `✓ 正常 ${tests[`p-${p.id}`]?.status ?? 200} · ${tests[`p-${p.id}`]?.ms}ms · ${tests[`p-${p.id}`]?.endpoint}`
+                            : `✗ ${tests[`p-${p.id}`]?.error || '失败'}`}
+                        </Text>
+                      )}
                       <Group gap="sm" wrap="wrap" align="center">
                         <Button
                           size="compact-xs"
