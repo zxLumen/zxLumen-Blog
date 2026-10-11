@@ -7,7 +7,7 @@
   （架构、访客锁定、隔离边界、构建与部署、运维）。
 - **源码 / CI / 部署**：`Opencode-Pocket` 的 `infra/vps/sandbox/`（Dockerfile、compose、
   边缘 Caddy、`deploy.sh` / `ci-run.sh` / `auto-deploy.sh`）与 `.github/workflows/sandbox.yml`。
-- **镜像**：`ghcr.io/zxlumen/opencode-play:<sha>/latest`，由 `Opencode-Pocket` 的 CI 构建推送；
+- **镜像**：`ghcr.io/zxlumen/opencode-pocket-sandbox:<sha>/latest`，由 `Opencode-Pocket` 的 CI 构建推送；
   服务器用 cron 轮询该仓库 `main` 的 SHA 自动部署。
 
 ## 本仓库（zxLumen-Blog）还负责什么
