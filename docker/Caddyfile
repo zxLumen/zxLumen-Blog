@@ -235,88 +235,12 @@ pocket.{$DOMAIN} {
 	}
 }
 
-# 公开:访客沙盒 opencode web(独立容器 opencode-play,只接 play 内网;见 docs/PLAYGROUND.md)。
-# 无密码开放(匿名访客可玩),资源/预算/隔离都在容器与网关侧兜底。
+# 公开:访客沙盒 opencode web(code-sandbox.{$DOMAIN})。
+# 实现整体在 Opencode-Pocket 仓库(镜像 / compose / 边缘 Caddy / 部署脚本),访客锁定的
+# 全部逻辑都在那边;这里只做 TLS 与转发到沙盒自带的边缘 Caddy。
+# 详见 https://github.com/zxLumen/Opencode-Pocket/blob/main/docs/vps-sandbox.md
 code-sandbox.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	# ① 全阶段封禁(含 GET):PTY / shell / TUI 一律不可达
-	@banned path_regexp ^/(api/)?(pty|shell|tui)(/|$)
-	@bannedSub path_regexp ^/session/[^/]+/(shell|fork)(/|$)
-	handle @banned {
-		respond 403
-	}
-	handle @bannedSub {
-		respond 403
-	}
-
-	# ② 真外壳:供自建外壳 fetch(不带 text/html),取回二进制里的 index.html 原文
-	handle /__shell {
-		rewrite * /
-		reverse_proxy opencode-play:4096 {
-			flush_interval -1
-		}
-	}
-
-	# ③ HTML 文档请求:只认固定会话路径(返回自建外壳),其余一律 302 跳回固定会话
-	@htmldoc header Accept *text/html*
-	handle @htmldoc {
-		@atSession path_regexp ^/(global|server/[^/]+)/session/{$PLAYGROUND_SESSION_ID:ses_guest}(/|$)
-		handle @atSession {
-			header Content-Type "text/html; charset=utf-8"
-			respond <<HTML
-			<!doctype html>
-			<html lang="zh-CN">
-			<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>访客沙盒</title></head>
-			<body>
-			<script>
-			(function(){
-			var S=JSON.stringify(location.pathname.replace(/\/+$/,""));
-			var code="(function(){var S="+S+";"+
-			"function hide(){try{var e=document.querySelectorAll('header,aside');for(var i=0;i<e.length;i++)e[i].style.setProperty('display','none','important');}catch(err){}}"+
-			"function guard(){var p=location.pathname;if((p==='/'||p==='/global'||p==='/global/')&&S)location.replace(S);}"+
-			"new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});"+
-			"document.addEventListener('DOMContentLoaded',hide);hide();guard();setInterval(guard,800);"+
-			"document.addEventListener('keydown',function(ev){if(!(ev.metaKey||ev.ctrlKey))return;var k=(ev.key||'').toLowerCase();if(k==='k'||k==='n'||k===','||k==='p')ev.preventDefault();},true);"+
-			"})();";
-			var inject="<style>header,aside{display:none!important}</style><scr"+"ipt>"+code+"<\/scr"+"ipt>";
-			var html="";
-			try{var x=new XMLHttpRequest();x.open("GET","/__shell",false);x.send();html=x.responseText;}catch(err){}
-			if(html&&html.indexOf("</head>")>=0){document.write(html.replace("</head>",inject+"</head>"));}
-			else{document.write("<!doctype html><meta charset=utf-8><p style=\"font:14px system-ui;padding:2rem\">沙盒正在启动，请稍后刷新。</p>");}
-			})();
-			</script>
-			</body>
-			</html>
-			HTML 200
-		}
-		handle {
-			redir * /global/session/{$PLAYGROUND_SESSION_ID:ses_guest} 302
-		}
-	}
-
-	# ④ 写入白名单:非 GET/HEAD/OPTIONS 仅放行固定会话下的子路径,其余 403
-	#    (建会话 POST /session、改配置 PATCH /config、加项目 POST /project/* 等全被挡)
-	@write not method GET HEAD OPTIONS
-	@allowed path_regexp ^/session/{$PLAYGROUND_SESSION_ID:ses_guest}/
-	handle @write {
-		handle @allowed {
-			reverse_proxy opencode-play:4096 {
-				flush_interval -1
-			}
-		}
-		handle {
-			respond 403
-		}
-	}
-
-	reverse_proxy opencode-play:4096 {
+	reverse_proxy sandbox-caddy:80 {
 		# SSE(/api/event)必须关闭缓冲
 		flush_interval -1
 	}

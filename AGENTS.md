@@ -116,6 +116,15 @@ SMOKE_DOMAIN=<域名> npm run test:smoke   # 线上只读冒烟(仅 GET)
 > (与 Opentodo / yijing64 同一套子应用模式:独立容器 + 子域 `luminari.${DOMAIN}`
 > + 应用栏 `openIn:'panel'` 入口)。博客侧不再保留 creature 评分引擎与相关接口。
 
+> **访客沙盒(`code-sandbox.${DOMAIN}`,公开 opencode web)已整体迁出本仓库**。
+> 实现(镜像 / compose / 边缘 Caddy / 部署脚本 / 轮询部署)现全在
+> [`Opencode-Pocket`](https://github.com/zxLumen/Opencode-Pocket) 仓库
+> (`infra/vps/sandbox/` + `.github/workflows/sandbox.yml`),与博客解耦。
+> 博客侧只剩 `docker/Caddyfile` 的 3 行 stub(`reverse_proxy sandbox-caddy:80`);
+> 共享资源:网络 `docker_play`(app + caddy 都在上面)、卷 `docker_playground-*`
+> (沙盒栈以 `external` 引用,数据不随博客部署清掉)。详见
+> `Opencode-Pocket/docs/vps-sandbox.md`;本仓库 `docs/PLAYGROUND.md` 只是指针。
+
 ## 命令调用规范(避免卡死 / 中断)
 
 经验:工具调用「卡死 / 中断」几乎都发生在**调用过重或过多**时。务必遵守:

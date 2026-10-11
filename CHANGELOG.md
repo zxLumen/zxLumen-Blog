@@ -106,6 +106,20 @@
 
 ### 变更
 
+- **访客沙盒(`code-sandbox.${DOMAIN}`)整体迁出本仓库 → `Opencode-Pocket`**:沙盒的实现
+  (镜像 `ghcr.io/zxlumen/opencode-play`、Dockerfile / entrypoint / 种子、compose 三服务、
+  承载访客锁定的边缘 Caddy、`deploy.sh` / `ci-run.sh`)与构建 CI 全部搬到
+  [`Opencode-Pocket`](https://github.com/zxLumen/Opencode-Pocket) 的 `infra/vps/sandbox/`
+  与 `.github/workflows/sandbox.yml`;服务器改为 cron 每 3 分钟轮询该仓库 `main` 的 SHA 自动部署
+  (`auto-deploy.sh`),与博客的部署完全解耦 —— **push 博客不再重建 / 重启沙盒**。
+  博客侧只剩 `docker/Caddyfile` 的 3 行 stub(`reverse_proxy sandbox-caddy:80`,锁定逻辑
+  在沙盒自带的边缘 Caddy 里);compose 移除 `opencode-play` / `opencode-play-init` 服务与
+  `playground-*` 卷声明,`deploy.yml` / `deploy.sh` 移除沙盒构建与拉取步骤,`docker/.env.example`
+  移除 `PLAYGROUND_*`(改到 `~/Opencode-Pocket/sandbox/.env`)。
+  跨栈沿用同一网络 `docker_play`(显式 `name:`,博客侧 `app` + `caddy` 仍在上面)与同一对卷
+  `docker_playground-data` / `docker_playground-home`(沙盒栈以 `external` 引用)—— **访客会话与
+  工作区数据全部保留**。完整文档见 `Opencode-Pocket/docs/vps-sandbox.md`;本仓库 `docs/PLAYGROUND.md`
+  改为指针。
 - **admin 顶部 Tab 改回紧凑导航,不再跟大标题同号**:页面从 9 个涨到 11 个后,原先把 Tab 做成「与区块标题同尺寸的大字导航」(`clamp(1.4rem,3vw,2rem)`)已放不下 —— 一行 flex 无 `flex-shrink:0`,会把每个按钮压窄到**逐字断行**(1280px 下每个按钮高 115px、1024px 下 147px,头部被撑成一坨)。现字号收到约 0.8rem,并加 `flex:0 0 auto` + `white-space:nowrap`(永不压缩/断字):1280 与 1024 均单行,900px 起自然换到第二行;窄屏仍走既有的横向滚动。顺带把 `AdminPanel` 里映射 11 个 Tab 的**嵌套三元表达式抽成 `ADMIN_TABS` 数组**,以后加页面只改一行。
 - **admin 顶部 Tab 悬停放大(只往右让位)**:鼠标移上去该 Tab 放大到 **2×**,其**右侧** Tab 被平滑推开、左侧与「退出登录」不动;紧邻 1.35×、次邻 1.12× 递减做出柔和波浪。用**原生 `font-size`** 放大(布局按该 Tab 实际增量推开 → 间距均匀,且字清晰不糊),配 `flex:1 1 auto` 防换行、固定行高防纵向跳动;放大态字体改 **500 `--font-display`**、字距 -0.02em(原 700 太粗太笨重)。只在 `@media (hover:hover) and (min-width:1080px)` 启用 —— ≤1080px 时 Tab 行到「退出登录」余量不足、放大必顶到按钮,故退回普通紧凑导航。
 - **主页四周生灵排布收紧**:名字上移贴近本体;整体更贴屏幕四边(外留白 `6→0`,并用

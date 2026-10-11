@@ -42,21 +42,16 @@
 
 ## blog / 访客沙盒
 
-- [ ] **公开 opencode 沙盒(`code-sandbox.${DOMAIN}`,应用栏 newtab 入口)**:访客匿名可玩,
-      所有操作限制在共享 `/workspace` 内(独立 named volume),看不到目录外任何东西;
-      不禁联网检索(webfetch/websearch),**禁 bash**、白名单只放行"装在当前目录"的
-      npm/pnpm/pip 安装;模型走博客 AI 网关(admin「AI 密钥」签发专用令牌,每日 token
-      上限 + 固定便宜模型);隔离边界=容器:非 root、只读根文件系统、cap 全剥、
-      no-new-privileges、mem/cpu/pids 限额、`read_only` + tmpfs、单独 `play` 内网只接
-      app(网关)与 caddy,不接 `web`(其它子应用不可达)。镜像
-      `ghcr.io/zxlumen/opencode-play` 由本仓库 CI 构建推送,配置
-      (`docker/opencode-play/opencode.json`)烤进镜像只读区、每次启动由 entrypoint
-      覆盖回出厂值。私有 `pocket.${DOMAIN}` 段已补回仓库 Caddyfile(避免下次发版被
-      ci-run.sh 覆盖成 502)。见 `docs/PLAYGROUND.md` — 优先级:中
+- [x] **公开 opencode 沙盒(`code-sandbox.${DOMAIN}`,应用栏 newtab 入口)** — 已实现并**已迁出本仓库**。
+      实现(镜像/compose/边缘 Caddy/部署脚本)现整体在 [`Opencode-Pocket`](https://github.com/zxLumen/Opencode-Pocket)
+      仓库的 `infra/vps/sandbox/`,与博客解耦;博客侧只剩 `docker/Caddyfile` 的 3 行 stub
+      (`reverse_proxy sandbox-caddy:80`)。共享资源:网络 `docker_play`、卷
+      `docker_playground-*`(沙盒栈以 `external` 引用,数据不随博客部署清掉)。
+      详见 `Opencode-Pocket/docs/vps-sandbox.md`(本仓库 `docs/PLAYGROUND.md` 为指针)。
 
        - [x] **访客锁定(唯一会话)**:进站即落在 `PLAYGROUND_SESSION_ID`(默认 `ses_guest`)
-         唯一会话内;隐藏主页/导航、不能选/建会话或加项目改设置;Caddy 写入白名单 +
-         封禁 `pty/shell/tui`;一次性 `opencode-play-init` 容器在会话缺失时自动补建。
+         唯一会话内;隐藏主页/导航、不能选/建会话或加项目改设置;沙盒自带边缘 Caddy 做
+         写入白名单 + 封禁 `pty/shell/tui`;一次性 `opencode-play-init` 容器在会话缺失时自动补建。
 
 ## blog / 内容整理
 

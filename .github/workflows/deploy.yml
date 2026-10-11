@@ -45,8 +45,6 @@ jobs:
         run: |
           echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/zx-home" >> "$GITHUB_OUTPUT"
-          # 访客沙盒镜像(独立 GHCR 包,docker/opencode-play/)
-          echo "play=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/opencode-play" >> "$GITHUB_OUTPUT"
 
       - name: Build & push image
         uses: docker/build-push-action@v6
@@ -69,21 +67,6 @@ jobs:
             ${{ steps.img.outputs.image }}:${{ github.sha }}
             ${{ steps.img.outputs.image }}:latest
 
-      # 访客沙盒镜像(docker/opencode-play/):独立 GHCR 包,服务器按
-      # OPENCODE_PLAY_TAG pull(见 docker/deploy.sh)。配置烤进镜像(docker/opencode-play/opencode.json)。
-      - name: Build & push opencode-play image
-        uses: docker/build-push-action@v6
-        with:
-          context: docker/opencode-play
-          file: docker/opencode-play/Dockerfile
-          push: true
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: |
-            ${{ steps.img.outputs.play }}:${{ github.sha }}
-            ${{ steps.img.outputs.play }}:latest
-
       # 从 Actions 发布到公开仓库的包会继承仓库可见性 → 默认即 public。
       # /user/packages 只对包所有者解析,故用 zxLumen PAT 读回断言;
       # 若为 private 则用同一 PAT 兜底置公开(GH_TOKEN 环境变量方式避免与
@@ -93,7 +76,7 @@ jobs:
           GH_PACKAGES_PAT: ${{ secrets.GH_PACKAGES_PAT }}
         run: |
           [ -n "$GH_PACKAGES_PAT" ] || { echo "::error::缺少 GH_PACKAGES_PAT(zxLumen 的 write:packages PAT)"; exit 1; }
-          for NAME in "zx-home" "opencode-play"; do
+          for NAME in "zx-home"; do
             vis() { GH_TOKEN="$GH_PACKAGES_PAT" gh api "/user/packages/container/${NAME}" --jq .visibility 2>/dev/null || echo ""; }
             VIS=$(vis "$GH_PACKAGES_PAT")
             echo "读回(zxLumen PAT) ${NAME}: ${VIS}"
@@ -105,7 +88,7 @@ jobs:
             fi
             [ "${VIS}" = "public" ] || { echo "::error::GHCR 包 ${NAME} 未确认 public(当前 ${VIS:-未知})"; exit 1; }
           done
-          echo "GHCR 包 zx-home / opencode-play 均已是 public"
+          echo "GHCR 包 zx-home 已是 public"
 
       # 服务器侧配置(Caddyfile / compose / deploy.sh)不进镜像;服务器 repo 从不
       # `git pull`。改由服务器上的 ci-run.sh 在部署前从公开仓库 fetched 这三个文件

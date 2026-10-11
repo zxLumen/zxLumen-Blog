@@ -35,7 +35,7 @@ services:
       - "3000"
     networks:
       - web
-      # 仅访客沙盒(opencode-play)能经此内网访问 AI 网关
+      # 仅访客沙盒(沙盒栈的 opencode-play)能经此内网访问 AI 网关
       - play
 
   # 其他项目 demo:加到同一网络,在 Caddyfile 里按子域名反代
@@ -189,7 +189,7 @@ services:
       - ./site-content:/srv/site:ro
     networks:
       - web
-      # 反代访客沙盒 code-sandbox.${DOMAIN}(opencode-play 只接 play 网络)
+      # 反代访客沙盒 code-sandbox.${DOMAIN}(转发到沙盒栈的 sandbox-caddy:80)
       - play
 
   # ==========================================================================
@@ -310,72 +310,6 @@ services:
     networks:
       - web
 
-  # 访客沙盒:公开的 opencode web(code-sandbox.${DOMAIN},newtab 应用栏入口)。
-  # 隔离边界 = 容器(见 docs/PLAYGROUND.md):非 root、只读根文件系统、cap 全剥、
-  # no-new-privileges、资源限额;只挂 /workspace(共享目录)与家目录,其它宿主路径
-  # 一律不可见;只连 play 内网(仅能达 app 的 AI 网关与 Caddy),不接 web(其它子应用不可达)。
-  opencode-play:
-    image: ghcr.io/zxlumen/opencode-play:${OPENCODE_PLAY_TAG:-latest}
-    restart: unless-stopped
-    # 注意:这里**不要** env_file: .env —— 会把 ADMIN_PASSWORD / SESSION_SECRET 等
-    # 注入这个匿名可玩的容器(访客拿到代码执行即可读 /proc/self/environ 外泄)。
-    # 只传它真正需要的网关令牌,由 compose 从 docker/.env 插值 ${PLAYGROUND_AI_TOKEN}。
-    environment:
-      # 博客 AI 网关令牌(admin「AI 密钥」页签发:设每日 token 上限 + 固定便宜模型)
-      ZX_AI_APP_TOKEN: ${PLAYGROUND_AI_TOKEN:-}
-    init: true
-    user: "10001:10001"
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop: [ALL]
-    tmpfs:
-      - /tmp:rw,size=64m,mode=1777
-    mem_limit: 1g
-    cpus: 1.0
-    pids_limit: 256
-    volumes:
-      # 访客共享工作区(分区独立 named volume,可写)
-      - playground-data:/workspace
-      # 家目录(opencode 会话/状态/配置文件名);配置内容每次启动由 entrypoint 覆盖回出厂值
-      - playground-home:/home/opencode
-    expose:
-      - "4096"
-    networks:
-      - play
-
-  # 一次性初始化容器:等沙盒就绪后,确保「唯一固定会话」存在(卷被清空/首启时自动补建)。
-  # 访客侧由 Caddy 锁定:只能进这一条会话(见 docker/Caddyfile 的 code-sandbox 段)。
-  # 注意脚本里的 $ 全部写成 $$,否则会被 compose 当成变量插值。
-  opencode-play-init:
-    image: curlimages/curl:8.11.1
-    restart: "no"
-    depends_on:
-      - opencode-play
-    environment:
-      SESSION_ID: ${PLAYGROUND_SESSION_ID:-ses_guest}
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        base="http://opencode-play:4096"
-        i=0
-        until curl -fsS "$$base/global/health" >/dev/null 2>&1 || [ "$$i" -ge 60 ]; do
-          i=$$((i+1)); sleep 2
-        done
-        if curl -fsS -o /dev/null "$$base/session/$$SESSION_ID"; then
-          echo "[init] 会话 $$SESSION_ID 已存在"
-          exit 0
-        fi
-        curl -fsS -X POST "$$base/api/session" \
-          -H 'content-type: application/json' \
-          -d "{\"id\":\"$$SESSION_ID\",\"location\":{\"directory\":\"/workspace\"}}" \
-          && echo "[init] 已补建会话 $$SESSION_ID"
-        curl -fsS -X PATCH "$$base/session/$$SESSION_ID" \
-          -H 'content-type: application/json' -d '{"title":"访客沙盒"}' >/dev/null || true
-    networks:
-      - play
-
 volumes:
   zx-data:
   caddy-data:
@@ -388,12 +322,12 @@ volumes:
   luminari-data:
   attune-data:
   mbti-data:
-  playground-data:
-  playground-home:
 
 networks:
   web:
     driver: bridge
-  # 访客沙盒专用内网:只接 app(AI 网关)与 caddy(反代),其余子应用不可达
+  # 访客沙盒共享内网(现由 Opencode-Pocket 的沙盒栈使用):
+  # app(AI 网关)+ caddy(反代)都挂这里;显式 name 保持为 docker_play。
   play:
+    name: docker_play
     driver: bridge
