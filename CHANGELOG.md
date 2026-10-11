@@ -6,6 +6,15 @@
 
 ### 新增
 
+- **公开 opencode 访客沙盒**(`code-sandbox.${DOMAIN}`,应用栏 newtab 入口「代码沙盒」):
+  匿名访客可玩的共享工作区沙盒,所有操作限制在 `/workspace` 内;禁 bash、仅白名单放行
+  "装在当前目录"的 npm/pnpm/pip 安装,联网检索全放行;模型经博客 AI 网关(admin「AI 密钥」
+  签发专用令牌:每日 token 上限 + 固定便宜模型)。隔离边界=容器:非 root、只读根文件系统、
+  cap 全剥、no-new-privileges、mem/cpu/pids 限额、独立 `play` 内网(只接 app 网关与 caddy,
+  其它子应用不可达)。镜像 `ghcr.io/zxlumen/opencode-play` 由本仓库 CI 构建(独立 Dockerfile
+  `docker/opencode-play/`,配置烤进镜像、启动还原)。私有 `pocket.${DOMAIN}` 段补回仓库
+  Caddyfile(避免下次发版被覆盖丢段)。详见 `docs/PLAYGROUND.md`。
+
 - **AI 密钥池支持「一键检测」/ 单个检测**:admin「AI 密钥」页可对密钥池里每个密钥发一次真实请求,
   验证 key 是否有效、上游是否可达。对话 / 通用密钥发最小 `chat/completions`(`max_tokens:1`),
   向量密钥发 `embeddings`,音频密钥按其接口形状探测(OpenAI 兼容 `/models`、Deepgram `/v1/models`、

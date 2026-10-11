@@ -40,6 +40,20 @@
 - [x] **第三种打开方式 `panel`(页内浮层)**:`openIn` 新增 `panel`,应用在站内以可拖拽/可缩放的悬浮窗打开(iframe,复用 portal + floating 让位逻辑),窄屏全屏;第一个用户是自建 Opentodo 网页版 — 优先级:低
 - [ ] 应用栏点击埋点(哪些应用被点、点击率排序),可接进 `docs/STATS.md` 口径 — 优先级:低
 
+## blog / 访客沙盒
+
+- [ ] **公开 opencode 沙盒(`code-sandbox.${DOMAIN}`,应用栏 newtab 入口)**:访客匿名可玩,
+      所有操作限制在共享 `/workspace` 内(独立 named volume),看不到目录外任何东西;
+      不禁联网检索(webfetch/websearch),**禁 bash**、白名单只放行"装在当前目录"的
+      npm/pnpm/pip 安装;模型走博客 AI 网关(admin「AI 密钥」签发专用令牌,每日 token
+      上限 + 固定便宜模型);隔离边界=容器:非 root、只读根文件系统、cap 全剥、
+      no-new-privileges、mem/cpu/pids 限额、`read_only` + tmpfs、单独 `play` 内网只接
+      app(网关)与 caddy,不接 `web`(其它子应用不可达)。镜像
+      `ghcr.io/zxlumen/opencode-play` 由本仓库 CI 构建推送,配置
+      (`docker/opencode-play/opencode.json`)烤进镜像只读区、每次启动由 entrypoint
+      覆盖回出厂值。私有 `pocket.${DOMAIN}` 段已补回仓库 Caddyfile(避免下次发版被
+      ci-run.sh 覆盖成 502)。见 `docs/PLAYGROUND.md` — 优先级:中
+
 ## blog / 内容整理
 
 - [ ] 整理项目内容,该归档的归档(考虑折叠起来)— 优先级:中
