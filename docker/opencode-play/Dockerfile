@@ -26,6 +26,8 @@ RUN mkdir -p /srv/config-ro \
 
 # 基准配置 + 启动入口(只读区)
 COPY --chown=10001:10001 opencode.json /srv/config-ro/opencode.json
+COPY --chown=10001:10001 seed/AGENTS.md /srv/config-ro/AGENTS.md
+COPY --chown=10001:10001 seed/README.md /srv/config-ro/README.md
 COPY --chown=10001:10001 entrypoint.sh /usr/local/bin/opencode-play-entrypoint
 RUN chmod +x /usr/local/bin/opencode-play-entrypoint
 

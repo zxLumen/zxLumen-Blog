@@ -54,6 +54,10 @@
       覆盖回出厂值。私有 `pocket.${DOMAIN}` 段已补回仓库 Caddyfile(避免下次发版被
       ci-run.sh 覆盖成 502)。见 `docs/PLAYGROUND.md` — 优先级:中
 
+       - [x] **访客锁定(唯一会话)**:进站即落在 `PLAYGROUND_SESSION_ID`(默认 `ses_guest`)
+         唯一会话内;隐藏主页/导航、不能选/建会话或加项目改设置;Caddy 写入白名单 +
+         封禁 `pty/shell/tui`;一次性 `opencode-play-init` 容器在会话缺失时自动补建。
+
 ## blog / 内容整理
 
 - [ ] 整理项目内容,该归档的归档(考虑折叠起来)— 优先级:中

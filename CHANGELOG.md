@@ -15,6 +15,16 @@
   `docker/opencode-play/`,配置烤进镜像、启动还原)。私有 `pocket.${DOMAIN}` 段补回仓库
   Caddyfile(避免下次发版被覆盖丢段)。详见 `docs/PLAYGROUND.md`。
 
+- **访客沙盒改为「唯一会话 + 锁死」**:访客进站即落在唯一一条固定会话
+  (`PLAYGROUND_SESSION_ID`,默认 `ses_guest`)里——主页被隐藏、不能选/建会话、不能加项目或改设置、
+  也没有任何离开入口。全部做在 Caddy 的 `code-sandbox` 段:文档请求只认固定会话路径、其余
+  `302` 跳回;自建外壳(内联 heredoc,`fetch('/__shell')` 取二进制里真 `index.html` 后注入隐藏与
+  守卫,不硬编码资源哈希)隐藏整条导航栏并拦截快捷键;写入白名单只放行该会话下的对话操作
+  (`prompt_async`/`abort`/`permissions` 等),建会话/改配置/加项目一律 `403`;`pty`/`shell`/`tui`
+  全阶段封禁。新增一次性 `opencode-play-init` 容器:就绪后若固定会话不存在则自动补建(卷被清空
+  也能自愈)。镜像内新增 `seed/AGENTS.md`(助手人设,每次覆盖)与 `seed/README.md`
+  (`/workspace` 缺省播种)。
+
 - **AI 密钥池支持「一键检测」/ 单个检测**:admin「AI 密钥」页可对密钥池里每个密钥发一次真实请求,
   验证 key 是否有效、上游是否可达。对话 / 通用密钥发最小 `chat/completions`(`max_tokens:1`),
   向量密钥发 `embeddings`,音频密钥按其接口形状探测(OpenAI 兼容 `/models`、Deepgram `/v1/models`、

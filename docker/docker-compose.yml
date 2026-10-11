@@ -344,6 +344,38 @@ services:
     networks:
       - play
 
+  # 一次性初始化容器:等沙盒就绪后,确保「唯一固定会话」存在(卷被清空/首启时自动补建)。
+  # 访客侧由 Caddy 锁定:只能进这一条会话(见 docker/Caddyfile 的 code-sandbox 段)。
+  # 注意脚本里的 $ 全部写成 $$,否则会被 compose 当成变量插值。
+  opencode-play-init:
+    image: curlimages/curl:8.11.1
+    restart: "no"
+    depends_on:
+      - opencode-play
+    environment:
+      SESSION_ID: ${PLAYGROUND_SESSION_ID:-ses_guest}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        base="http://opencode-play:4096"
+        i=0
+        until curl -fsS "$$base/global/health" >/dev/null 2>&1 || [ "$$i" -ge 60 ]; do
+          i=$$((i+1)); sleep 2
+        done
+        if curl -fsS -o /dev/null "$$base/session/$$SESSION_ID"; then
+          echo "[init] 会话 $$SESSION_ID 已存在"
+          exit 0
+        fi
+        curl -fsS -X POST "$$base/api/session" \
+          -H 'content-type: application/json' \
+          -d "{\"id\":\"$$SESSION_ID\",\"location\":{\"directory\":\"/workspace\"}}" \
+          && echo "[init] 已补建会话 $$SESSION_ID"
+        curl -fsS -X PATCH "$$base/session/$$SESSION_ID" \
+          -H 'content-type: application/json' -d '{"title":"访客沙盒"}' >/dev/null || true
+    networks:
+      - play
+
 volumes:
   zx-data:
   caddy-data:
