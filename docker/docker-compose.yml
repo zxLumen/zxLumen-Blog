@@ -1,5 +1,6 @@
 services:
   app:
+    mem_limit: 512m
     # 本地/CI 构建产物推 GHCR(ghcr.io/zxlumen/zx-home:<tag>),服务器只 pull 不构建。
     # 本地开发仍可用 `docker compose build` 覆盖构建(zx-home:latest)。
     image: ghcr.io/zxlumen/zx-home:${IMAGE_TAG:-latest}
@@ -51,6 +52,7 @@ services:
   # 给主站 iframe 嵌进应用栏;与博客共享 admin(SSO)—— 两边配同一个 SESSION_SECRET
   # (在 docker/.env 里)。Caddy 里一对一 todo.${DOMAIN}。详见 Opentodo 仓库 web/README.md。
   opentodo:
+    mem_limit: 128m
     image: ghcr.io/zxlumen/opentodo-web:${OPENTODO_TAG:-latest}
     restart: unless-stopped
     env_file: .env
@@ -75,6 +77,7 @@ services:
   # 与 Opentodo 同一套模式:给主站 iframe 嵌进应用栏;与博客共享 admin(SSO)——
   # 两边配同一个 SESSION_SECRET(在 docker/.env 里)。详见 yijing64 仓库 web/README.md。
   yijing:
+    mem_limit: 128m
     image: ghcr.io/zxlumen/yijing64-web:${YIJING_TAG:-latest}
     restart: unless-stopped
     env_file: .env
@@ -100,6 +103,7 @@ services:
   # 与 Opentodo / 易经同一套模式:给主站 iframe 嵌进应用栏;与博客共享 admin(SSO)——
   # 两边配同一个 SESSION_SECRET(在 docker/.env 里)。详见 StockApp 仓库 README.md。
   stock:
+    mem_limit: 128m
     image: ghcr.io/zxlumen/stock-web:${STOCK_TAG:-latest}
     restart: unless-stopped
     env_file: .env
@@ -126,6 +130,7 @@ services:
   # 与 Opentodo / 易经 / StockApp 同一套模式:给主站 iframe 嵌进应用栏;与博客共享站长登录(SSO)——
   # SESSION_SECRET 由上面的 env_file 带入。详见 luminari 仓库 README。
   luminari:
+    mem_limit: 128m
     image: ghcr.io/zxlumen/luminari-web:${LUMINARI_TAG:-latest}
     restart: unless-stopped
     env_file: .env
@@ -150,6 +155,7 @@ services:
   # 无恙(独立服务:从对话音频觉察身心状态;同套模式:iframe 嵌应用栏 + 站长 SSO)。
   # 大模型与语音转写都经博客 AI 网关(令牌在 admin「AI 密钥」页生成,音频密钥需 Deepgram/AssemblyAI 才可分离)。
   attune:
+    mem_limit: 128m
     image: ghcr.io/zxlumen/attune-web:${ATTUNE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
@@ -166,6 +172,7 @@ services:
       - web
 
   caddy:
+    mem_limit: 256m
     image: caddy:2
     restart: unless-stopped
     depends_on:
@@ -200,6 +207,7 @@ services:
   # ==========================================================================
 
   node-exporter:
+    mem_limit: 128m
     image: prom/node-exporter:v1.8.2
     profiles: ["monitoring"]
     restart: unless-stopped
@@ -219,6 +227,7 @@ services:
       - web
 
   cadvisor:
+    mem_limit: 256m
     # v0.54+ 支持 Docker 29 的 containerd-snapshotter(否则容器指标为空);新镜像发布在 ghcr.io
     image: ghcr.io/google/cadvisor:v0.60.6
     profiles: ["monitoring"]
@@ -245,6 +254,7 @@ services:
       - web
 
   alloy:
+    mem_limit: 256m
     image: grafana/alloy:v1.5.1
     profiles: ["monitoring"]
     restart: unless-stopped
@@ -270,6 +280,7 @@ services:
 
   # 本地 Grafana(Web 查看,数据源指向 Grafana Cloud 的查询接口;不存数据)
   grafana:
+    mem_limit: 256m
     image: grafana/grafana-oss:11.2.2
     profiles: ["monitoring"]
     restart: unless-stopped
@@ -293,6 +304,7 @@ services:
 
   # 心语(对话式 MBTI 测评;独立镜像 + 子域 + iframe 嵌应用栏 + 站长 SSO)
   mbti:
+    mem_limit: 128m
     image: ghcr.io/zxlumen/mbti-web:${MBTI_TAG:-latest}
     restart: unless-stopped
     env_file: .env
