@@ -218,6 +218,18 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     }
   }
 
+  // DeepSeek V4「thinking 模式」硬要求:两次 user 之间若发生过 tool call,中间 assistant 的
+  // `reasoning_content` 必须原样回传,否则上游返回 400(「...must be passed back to the API」)。
+  // opencode 等客户端重放历史时会漏掉一部分 → 这里做**一致性归一**:只要有任意一条 assistant
+  // 带了 reasoning_content,就给所有 assistant 补上(缺的补空串)。DeepSeek 接受空串;
+  // 纯对话/非推理模型(历史里没有任何 reasoning_content)完全不动。
+  const msgs = Array.isArray(payload.messages) ? (payload.messages as Array<Record<string, unknown>>) : null
+  if (msgs && msgs.some((m) => m && m.role === 'assistant' && typeof m.reasoning_content === 'string')) {
+    for (const m of msgs) {
+      if (m && m.role === 'assistant' && typeof m.reasoning_content !== 'string') m.reasoning_content = ''
+    }
+  }
+
   const reqModel = typeof payload.model === 'string' ? payload.model : ''
   const provider = resolveProvider(kind, app, app.model || reqModel)
   if (!provider) {
