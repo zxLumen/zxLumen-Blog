@@ -7,6 +7,10 @@ export const GATEWAY_META_KEY = 'ai_gateway_config'
 
 export type ProviderRole = 'chat' | 'embed' | 'both' | 'audio'
 
+/** 思考强度:转发为上游 `reasoning_effort`;auto=不发送该字段 */
+export type ReasoningEffort = 'auto' | 'none' | 'low' | 'medium' | 'high'
+export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'none', 'low', 'medium', 'high']
+
 /** provider 的上游接口形状:openai=OpenAI 兼容 /audio/transcriptions;deepgram / assemblyai=带说话人分离 */
 export type ProviderApi = 'openai' | 'deepgram' | 'assemblyai'
 
@@ -34,6 +38,8 @@ export interface GatewayApp {
   totalLimit: number
   /** 音频分钟额度(分钟;0=不限);与 token 额度分开计 */
   audioLimit: number
+  /** 思考强度:转发为上游 reasoning_effort;auto=不干预,交给模型/上游默认 */
+  reasoningEffort: ReasoningEffort
   note: string
 }
 
@@ -105,6 +111,9 @@ function normalizeApp(raw: unknown): GatewayApp | null {
     dailyLimit: nonNegInt(r.dailyLimit),
     totalLimit: nonNegInt(r.totalLimit),
     audioLimit: nonNegInt(r.audioLimit),
+    reasoningEffort: (REASONING_EFFORTS as readonly string[]).includes(str(r.reasoningEffort))
+      ? (str(r.reasoningEffort) as ReasoningEffort)
+      : 'auto',
     note: str(r.note),
   }
 }

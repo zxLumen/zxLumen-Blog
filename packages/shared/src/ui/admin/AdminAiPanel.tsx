@@ -42,6 +42,7 @@ interface AppVM {
   dailyLimit: number
   totalLimit: number
   audioLimit: number
+  reasoningEffort: string
   note: string
   usage?: { today: number; total: number; audioToday: number; audioTotal: number }
 }
@@ -205,6 +206,7 @@ export function AdminAiPanel({
                 dailyLimit: 0,
                 totalLimit: 0,
                 audioLimit: 0,
+                reasoningEffort: 'auto',
                 note: '',
                 usage: { today: 0, total: 0, audioToday: 0, audioTotal: 0 },
               },
@@ -527,6 +529,20 @@ export function AdminAiPanel({
                           data={uniqModels(providerModels[a.providerId] ?? config.providers.find((x) => x.id === a.providerId)?.models ?? [])}
                           value={a.model || null}
                           onChange={(v) => updApp(i, { model: v || '' })}
+                        />
+                        <Select
+                          size="xs"
+                          w={140}
+                          placeholder="思考强度"
+                          data={[
+                            { value: 'auto', label: '思考:自动' },
+                            { value: 'none', label: '思考:关' },
+                            { value: 'low', label: '思考:低' },
+                            { value: 'medium', label: '思考:中' },
+                            { value: 'high', label: '思考:高' },
+                          ]}
+                          value={a.reasoningEffort || 'auto'}
+                          onChange={(v) => updApp(i, { reasoningEffort: v || 'auto' })}
                         />
                         <Button
                           size="compact-xs"

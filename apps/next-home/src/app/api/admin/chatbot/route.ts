@@ -55,6 +55,7 @@ export async function POST(req: Request) {
         dailyLimit: 0,
         totalLimit: 0,
         audioLimit: 0,
+        reasoningEffort: 'auto',
         note: '博客自身(聊天/问候/蒸馏/RAG)',
       }
       gw.apps.push(app)

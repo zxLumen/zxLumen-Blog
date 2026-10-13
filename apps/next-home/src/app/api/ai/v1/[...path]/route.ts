@@ -237,6 +237,10 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
   }
   const model = app.model || provider.model || reqModel
   if (model && route !== 'models') payload.model = model
+  // 按应用(密钥)配置的思考强度注入 reasoning_effort(auto=不干预,交给模型/上游默认)
+  if (route === 'chat/completions' && app.reasoningEffort && app.reasoningEffort !== 'auto') {
+    payload.reasoning_effort = app.reasoningEffort
+  }
   // 流式请求自动补 include_usage,否则上游不回 usage → 统计不到
   if (payload.stream === true) {
     const so = typeof payload.stream_options === 'object' && payload.stream_options ? payload.stream_options : {}
