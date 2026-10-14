@@ -98,6 +98,7 @@ export const AI_SOURCES: readonly AiSourceDef[] = [
   { id: 'yijing', label: '易经' },
   { id: 'stock', label: '股票速览' },
   { id: 'luminari', label: '生灵' },
+  { id: 'photo', label: '光圈' },
 ]
 
 export interface AiSource {

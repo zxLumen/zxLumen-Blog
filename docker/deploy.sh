@@ -35,6 +35,9 @@ echo "[deploy] IMAGE_TAG=${IMAGE_TAG} (工作目录: $(pwd))"
   # 心语(对话式 MBTI 测评):同上
   ${SUDO:-} env MBTI_TAG="${MBTI_TAG:-latest}" docker compose pull mbti \
     || echo "[deploy] mbti 镜像拉取失败(可能尚未推送),跳过"
+  # 光圈(AI 构图裁剪 + 自动修图):同上
+  ${SUDO:-} env PHOTO_TAG="${PHOTO_TAG:-latest}" docker compose pull photo \
+    || echo "[deploy] photo 镜像拉取失败(可能尚未推送),跳过"
   ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
 
 # 服务器侧配置(Caddyfile / compose)由 CI scp 同步过来;`up -d` 不会因挂载文件
