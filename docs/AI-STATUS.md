@@ -17,6 +17,7 @@
 | AI 分身 | `avatar` | 本仓库 `ChatWidget.tsx`(`useReportAiState('avatar')`) |
 | Opentodo | `opentodo` | Opentodo 仓库 `web/src/App.tsx` |
 | 易经六十四卦 | `yijing` | yijing64 仓库 `web/src/lib/aiStatus.ts` |
+| 光圈(构图/修图) | `photo` | photo 仓库 `web/src/embed.ts`(`reportAiStatus`) |
 
 **加一个新源**:
 

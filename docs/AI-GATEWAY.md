@@ -119,7 +119,8 @@ OpenCode Go 端点(`opencode.ai/zen/go`)要求 `x-opencode-session` 头,网关�
 | apiKey | 该应用的接入令牌(面板复制) |
 | model | 照常填写(网关按它路由;或由令牌固定) |
 
-- luminari / Opentodo / yijing64 / StockApp:`web/lib/providers.js` + `settings.js`
+- luminari / Opentodo / yijing64 / StockApp / photo(光圈):`web/lib/providers.js` + `settings.js`
+  (photo 走**多模态视觉** `chat/completions`,需令牌绑定一个支持读图的模型)
 - RAG-Knowledge-QA:`src/qa/providers.py` + `src/qa/llm_config.py`
 - 各应用均保留「直连」选项,便于本地开发(默认走网关)。
 
