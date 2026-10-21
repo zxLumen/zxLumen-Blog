@@ -10,6 +10,7 @@ import {
 import { fetchUsageZhipu } from '../zhipu'
 import { getMinimaxUsage } from '../minimax'
 import { getGatewayUsageRows } from '../ai-gateway'
+import { withTimeout } from './cache'
 
 export interface SsrUsage {
   rows: UsageRow[]
@@ -19,9 +20,24 @@ export interface SsrUsage {
 
 /**
  * SSR 首帧预取指定数据源的用量(首页 Token用量 区块)。
- * 失败 / 未配置 / 拉取异常一律返回 null,由客户端实时拉取兜底,绝不影响页面渲染。
+ * 失败 / 未配置 / 拉取异常 / 超时一律返回 null,由客户端实时拉取兜底,绝不影响页面渲染。
  */
-export async function fetchSsrUsage(src: DataSource, range: UsageRange = '30d'): Promise<SsrUsage | null> {
+export async function fetchSsrUsage(
+  src: DataSource,
+  range: UsageRange = '30d',
+  opts?: { maxWaitMs?: number },
+): Promise<SsrUsage | null> {
+  // 超时后底层请求继续跑,填充各数据源的 5 分钟缓存,不会白跑
+  const work = loadSsrUsage(src, range).catch(() => null)
+  if (!opts?.maxWaitMs) return work
+  try {
+    return await withTimeout(work, opts.maxWaitMs)
+  } catch {
+    return null
+  }
+}
+
+async function loadSsrUsage(src: DataSource, range: UsageRange): Promise<SsrUsage | null> {
   try {
     if (src === 'opencode') {
       const ws = await getWorkspaces()

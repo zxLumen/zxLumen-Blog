@@ -14,6 +14,12 @@ import { getVisibleVlogSeries, pickRandomVlogStart } from "@/lib/vlog-config";
 import { getSiteContent, getSiteContentRev } from "@/lib/site-content";
 export const dynamic = "force-dynamic";
 
+/**
+ * 首页 SSR 等待用量上游的上限。
+ * 超过就跳过首屏预取(客户端会实时拉取),避免上游抖动把整页拖到探针 3s 超时。
+ */
+const SSR_USAGE_WAIT_MS = 1200;
+
 /** 昵称 cookie 键:模拟访客时按身份分键(与 shared nickKey 规则一致) */
 const viewerNickKey = (mock: string) => `zx_nick${mock ? `.${mock}` : ""}`;
 
@@ -48,9 +54,14 @@ export default async function Home() {
   // SSR 首帧预取的数据源 = 存档选中源(否则默认源):默认源非 DeepSeek 时首屏也有数据
   const ssrSrc = initialSel.dataSrc;
 
+  // 两个上游探测并行启动 + 都有等待上限;慢的时候宁可首屏先空,也不能让整页卡住
+  const ssrRange = initialSel.per[ssrSrc]?.range ?? "30d";
+  const availPromise = getSourceAvailability();
+  const ssrPromise = fetchSsrUsage(ssrSrc, ssrRange, { maxWaitMs: SSR_USAGE_WAIT_MS });
+
   // 各数据源可用性(已配置 + 近30天有数据):SSR 决定显示哪些源,避免隐藏源闪现
   const availableSources = {
-    ...(await getSourceAvailability()),
+    ...(await availPromise),
     order: getUsageSourceOrder(),
     defaultSource,
   };
@@ -68,8 +79,7 @@ export default async function Home() {
   // 预取当前(存档/默认)数据源、访客所选区间的用量;失败回退本地 usage 表(再空则前端用 mock)
   let usage: UsageRow[] | undefined;
   let usageWindow: { start?: string; end?: string } | undefined;
-  const ssrRange = initialSel.per[ssrSrc]?.range ?? "30d";
-  const ssr = await fetchSsrUsage(ssrSrc, ssrRange);
+  const ssr = await ssrPromise;
   if (ssr) {
     usage = ssr.rows;
     usageWindow = { start: ssr.start, end: ssr.end };
