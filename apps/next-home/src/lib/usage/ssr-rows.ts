@@ -10,13 +10,16 @@ import {
 import { fetchUsageZhipu } from '../zhipu'
 import { getMinimaxUsage } from '../minimax'
 import { getGatewayUsageRows } from '../ai-gateway'
-import { withTimeout } from './cache'
+import { makeSwrCache } from './cache'
 
 export interface SsrUsage {
   rows: UsageRow[]
   start?: string
   end?: string
 }
+
+/** 首帧用量结果缓存(5 分钟,stale-while-revalidate) */
+const ssrCache = makeSwrCache<SsrUsage | null>('__ssrUsageCache', 5 * 60 * 1000)
 
 /**
  * SSR 首帧预取指定数据源的用量(首页 Token用量 区块)。
@@ -27,12 +30,14 @@ export async function fetchSsrUsage(
   range: UsageRange = '30d',
   opts?: { maxWaitMs?: number },
 ): Promise<SsrUsage | null> {
-  // 超时后底层请求继续跑,填充各数据源的 5 分钟缓存,不会白跑
-  const work = loadSsrUsage(src, range).catch(() => null)
-  if (!opts?.maxWaitMs) return work
+  // 与可用性同样的 stale-while-revalidate 策略:过期先返回上次结果、后台刷新,
+  // 避免 5 分钟缓存到期的那一次请求正好被探针撞上(每次慢 ~1.2s)。
   try {
-    return await withTimeout(work, opts.maxWaitMs)
+    return await ssrCache.get(`${src}:${range}`, () => loadSsrUsage(src, range), {
+      maxWaitMs: opts?.maxWaitMs,
+    })
   } catch {
+    // 冷启动等超时:首屏先不显示用量,客户端会实时拉取;后台刷新继续填充缓存
     return null
   }
 }
