@@ -1091,6 +1091,23 @@ export function AdminPanel({ projects, vlogSeries, apps }: { projects?: Project[
             ? ` · 上次成功 ${ds.lastData.count ?? 0} 行 @ ${new Date(ds.lastData.at).toLocaleString()}`
             : ''}
         </p>
+        <p className="zx-muted zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem' }}>
+          官方余额(API Key 鉴权,不依赖网页令牌):
+          {ds?.balance?.ok
+            ? ` ${ds.balance.currency ?? 'CNY'} ${(ds.balance.total ?? 0).toFixed(2)}`
+            : ds?.balance?.error
+              ? ` 查询失败 · ${ds.balance.error}`
+              : ' 未查询'}
+          {ds?.balance?.spentSincePrev
+            ? ` · 较 ${ds.balance.spentSincePrev.day} ${ds.balance.spentSincePrev.spent >= 0 ? '花费' : '增加'} ¥${Math.abs(ds.balance.spentSincePrev.spent).toFixed(2)}`
+            : ''}
+          {ds?.balance?.at ? ` · ${new Date(ds.balance.at).toLocaleString()} 校验` : ''}
+        </p>
+        {ds?.lastError && (
+          <p className="zx-mono" style={{ fontSize: '0.72rem', margin: '0 0 0.6rem', color: 'var(--zx-danger, #e5534b)' }}>
+            平台明细异常:{ds.lastError}
+          </p>
+        )}
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <a
             ref={dsBookmarkRef}

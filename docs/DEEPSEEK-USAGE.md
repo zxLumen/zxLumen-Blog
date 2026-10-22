@@ -65,3 +65,40 @@ DeepSeek **官方公开 API 没有用量查询**:
 - `userToken` 属**账号级敏感凭证**:仅存服务器数据库(`meta`),**绝不下发前端**、不写日志;书签同步用一次性"同步密钥"鉴权(可在 admin 轮换);
 - 走的是 **DeepSeek 网页私有接口**,可能因风控/改版失效;届时重同步或等待适配即可;
 - 请在了解上述风险的前提下使用。
+
+## 平台改版与自愈(2026-10 踩过的坑)
+
+**2026-10-17**(V4.1-Flash-1017 上线)平台把导出的 `amount-*.csv` 从
+
+```
+user_id,utc_date,model,api_key_name,api_key,type,price,amount
+```
+
+改成
+
+```
+user_id,utc_date,model,name,api_key_name,api_key,type,price,amount   ← 多了一列 name
+```
+
+旧解析**按位置**解构 → `type/price/amount` 全部右移一格 → 所有指标算成 0 → 被过滤成空行;
+而拉取本身"成功"(不报错、还清空了 `lastError`)→ 可用性判定"没数据"→ 面板整块消失、
+没有任何提示。**教训:这种"静默 0 行"比报错更难查。**
+
+现在的防线(三条,互相兜底):
+
+1. **按表头名解析**(`parseAmountCsv`,`@zx/shared`):忽略新增/多余列(如 `name`、`wallet_type`)、
+   兼容旧表头;ZIP 内文件名只要求 `amount-*.csv`。
+2. **不再静默**:找不到 CSV / 缺必需列 / 有数据行却解析出 0 行 → **抛错并写 `deepseek_last_error`**,
+   admin 页出红色「平台明细异常」;`/api/usage/sources` 在"已配置但失败"时也保留 tab。
+3. **官方余额哨兵**:每 6h 用 `GET https://api.deepseek.com/user/balance`(API Key 鉴权,
+   与网页令牌无关)采样余额;若**余额在下降但平台明细 0 行** → 直接判定接口又改版并写 lastError。
+   admin「Token 用量」页会显示:`余额 ¥xx · 较昨日花费 ¥yy · 校验时间`。
+
+> 平台改版后**不需要补数据**:导出是按整月给的,修好解析重拉一次,历史区间自动回来。
+
+## 官方 API 有没有用量接口?(2026-10 现状)
+
+**没有。** 官方 API Reference 只有:`chat/completions`、`responses`、`completions`(FIM)、
+`models`、`user/balance`、`files`、`search`/`fetch`。跟账户有关的只有 `GET /user/balance`
+(余额),**没有 usage/billing/consumption 端点** —— 所以"按天×模型×Key + 真实费用"的明细,
+目前只能走网页控制台的私有接口(即本文档上面那套 `userToken` 方案)。

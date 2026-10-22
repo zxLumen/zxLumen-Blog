@@ -94,3 +94,10 @@ export type { GoModel, GoPrice } from './go-pricing.js'
 // AI 网关配置体检(隐形模型 / 孤儿绑定;面板与服务端共用)
 export { auditGatewayConfig, modelOptions, isModelInList } from './ai-gateway-audit.js'
 export type { GatewayAuditIssue, AuditIssueKind, AuditAppLike, AuditProviderLike } from './ai-gateway-audit.js'
+
+// CSV 解析(通用)
+export { parseCsv, num } from './csv.js'
+
+// DeepSeek 平台导出 amount-*.csv 解析(按表头名,兼容平台改版)
+export { parseAmountCsv, MAX_AMOUNT_ROWS } from './deepseek-csv.js'
+export type { DeepseekAmountCsv } from './deepseek-csv.js'

@@ -1,0 +1,7 @@
+user_id,utc_date,model,name,api_key_name,api_key,type,price,amount
+user-redacted,2026-10-06,deepseek-flash,deepseek-flash,coding,sk-a5f47***e4de,output_tokens,0.000004,141135
+user-redacted,2026-10-06,deepseek-flash,deepseek-flash,coding,sk-a5f47***e4de,input_cache_hit_tokens,0.00000002,29594880
+user-redacted,2026-10-06,deepseek-flash,deepseek-flash,coding,sk-a5f47***e4de,input_cache_miss_tokens,0.000002,1000000
+user-redacted,2026-10-06,deepseek-flash,deepseek-flash,coding,sk-a5f47***e4de,request_count,,177
+user-redacted,2026-10-07,deepseek-v4-pro,deepseek-v4-pro,default,sk-111***abcd,output_tokens,0.000012,5000
+user-redacted,2026-10-07,deepseek-v4-pro,deepseek-v4-pro,default,sk-111***abcd,request_count,,10

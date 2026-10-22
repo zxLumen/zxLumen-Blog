@@ -11,7 +11,8 @@ import {
   type UsageFilter,
   type UsageRange,
 } from './usage/range'
-import { num, parseCsv } from './usage/csv'
+import { num } from './usage/csv'
+import { parseAmountCsv } from '@zx/shared'
 import { makeTtlCache } from './usage/cache'
 import { aggregateRows, isNonZeroRow } from './usage/aggregate'
 import { usageError } from './usage/errors'
@@ -122,8 +123,6 @@ async function fetchJson(path: string, token: string, qs: string): Promise<unkno
 
 /* ---------- ZIP / CSV(平台 export 接口返回) ---------- */
 
-const MAX_EXPORT_LINES = 20000
-
 /** 解析 ZIP(按中央目录,兼容 data descriptor 流式条目);return [{name, data}] */
 function unzipEntries(buf: Buffer): Array<{ name: string; data: Buffer }> {
   let eocd = -1
@@ -175,56 +174,17 @@ async function fetchExport(m: Month, token: string): Promise<{ rows: UsageRow[];
   const buf = Buffer.from(await res.arrayBuffer())
   if (buf.subarray(0, 2).toString() !== 'PK') throw new Error('平台导出非 ZIP')
   const entries = unzipEntries(buf)
-  const amountCsv = entries.find((e) => /^amount-\d{4}-\d+\.csv$/.test(e.name))
-  if (!amountCsv) return { rows: [], apiKeys: [] }
-
-  const rows = new Map<string, UsageRow>()
-  const apiKeys = new Set<string>()
-  const lines = parseCsv(amountCsv.data.toString('utf8'))
-  // 表头: user_id, utc_date, model, api_key_name, api_key, type, price, amount
-  for (const line of lines.slice(1)) {
-    if (rows.size >= MAX_EXPORT_LINES) break
-    const [, date, model, apiKeyName, , type, price, amount] = line
-    const day = String(date ?? '').slice(0, 10)
-    if (!day || !model) continue
-    const apiKey = String(apiKeyName ?? '')
-    apiKeys.add(apiKey)
-    const k = `${day}|${model}|${apiKey}`
-    const ex = rows.get(k)
-    const row =
-      ex ??
-      ({
-        ts: `${day}T00:00:00Z`,
-        model,
-        apiKey,
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheHitTokens: 0,
-        requests: 0,
-        cost: 0,
-        source: 'deepseek',
-      } as UsageRow)
-    const amt = num(amount)
-    switch (String(type)) {
-      case 'request_count':
-        row.requests = (row.requests ?? 0) + amt
-        break
-      case 'input_cache_hit_tokens':
-        row.cacheHitTokens += amt
-        row.inputTokens += amt
-        break
-      case 'input_cache_miss_tokens':
-        row.inputTokens += amt
-        break
-      case 'output_tokens':
-        row.outputTokens += amt
-        break
-    }
-    const priceV = Number(price)
-    if (Number.isFinite(priceV) && priceV > 0) row.cost = (row.cost ?? 0) + priceV * amt
-    rows.set(k, row)
+  // 文件名放宽(平台可能加日期后缀):只要求 amount 开头的 csv
+  const amountCsv = entries.find((e) => /^amount-.*\.csv$/i.test(e.name))
+  if (!amountCsv) {
+    throw new Error(`平台导出里找不到 amount-*.csv(实际:${entries.map((e) => e.name).join(',') || '空'})`)
   }
-  return { rows: [...rows.values()], apiKeys: [...apiKeys].filter(Boolean) }
+  // 按表头名解析(平台 2026-10-17 在 model 后插入了 name 列,位置解析会全部算成 0)
+  const parsed = parseAmountCsv(amountCsv.data.toString('utf8'))
+  if (parsed.dataLines > 0 && parsed.rows.length === 0) {
+    throw new Error(`平台导出格式可能已变化:有 ${parsed.dataLines} 行数据但解析出 0 行(表头:${parsed.header.join(',')})`)
+  }
+  return { rows: parsed.rows, apiKeys: parsed.apiKeys }
 }
 
 const key = (m: Month) => `m:${m.year}-${String(m.month).padStart(2, '0')}`
@@ -365,6 +325,16 @@ async function fetchPeriod(m: Month): Promise<PeriodData> {
 export { windowOf }
 
 export async function fetchUsage(range: UsageRange, filter?: UsageFilter): Promise<PlatformUsage> {
+  try {
+    return await fetchUsageInner(range, filter)
+  } catch (e) {
+    // 失败必须落库:否则面板只是"整块消失"、看不到任何原因(平台改版时尤其坑)
+    await setLastError(e instanceof Error ? e.message : String(e))
+    throw e
+  }
+}
+
+async function fetchUsageInner(range: UsageRange, filter?: UsageFilter): Promise<PlatformUsage> {
   const token = await getToken()
   if (!token) throw new Error('未配置 DeepSeek 令牌')
 

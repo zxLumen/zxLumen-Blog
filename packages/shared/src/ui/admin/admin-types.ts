@@ -43,6 +43,19 @@ export interface DsStatus {
   syncKey?: string
   lastError?: string | null
   lastData?: { at?: number; count?: number } | null
+  /** 官方余额(api.deepseek.com/user/balance,API Key 鉴权;不依赖网页令牌) */
+  balance?: {
+    ok: boolean
+    at?: number
+    currency?: string
+    total?: number
+    granted?: number
+    toppedUp?: number
+    available?: boolean
+    error?: string
+    /** 与上一次记录的余额差(正数=这段时间花了钱) */
+    spentSincePrev?: { day: string; spent: number } | null
+  } | null
 }
 
 export interface OcWsItem {

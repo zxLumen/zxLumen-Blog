@@ -84,6 +84,21 @@
 
 ### 修复
 
+- **DeepSeek 用量整块消失(平台 2026-10-17 改了导出格式)**:平台在 `amount-*.csv` 的 `model`
+  后面插入了一列 `name`(模型展示名),而解析是**按位置**解构 `[,date,model,apiKeyName,,type,price,amount]`
+  → `type/price/amount` 全部右移一格 → 所有指标算成 0,再被 `isNonZeroRow` 过滤成空;而拉取本身
+  "成功"(不抛错、还把 `lastError` 清空),于是可用性判定"该源没数据"→ 面板整块消失、也没有任何
+  报错(线上 10-16 之后就是这样)。现在:
+  - 导出解析抽成 `parseAmountCsv()`(`@zx/shared`,**按表头名取列**、忽略新增/多余列、兼容旧表头);
+  - ZIP 内文件名放宽为 `amount-*.csv`(平台可能加日期后缀);
+  - **不再静默**:找不到 CSV / 缺必需列 / 有数据行却解析出 0 行 → 抛错并写入 `deepseek_last_error`,
+    面板出红色角标;`/api/usage/sources` 在"已配置但失败"时也保留 tab(否则错误无处显示);
+  - 新增**官方余额哨兵**:每 6h 用 `GET https://api.deepseek.com/user/balance`(API Key 鉴权,
+    不需要网页会话令牌)采样余额;若"余额在下降但平台明细 0 行"→ 判定接口又改版,直接写 lastError;
+    admin「Token 用量」页显示余额、较上次的花费与校验时间;
+  - 单测 7 条(新/旧表头、列顺序打乱、缺列、空文件、缺 price、BOM/CRLF)。
+  修复后 10-17 至今的用量会自动回来(平台按整月导出,不用补数)。
+
 - **「幽灵模型」:换密钥后失效的固定模型在面板上显示成空白,却仍压着子应用发的 model**:
   网关模型优先级是 `app.model || provider.model || request.model`,而面板两个模型下拉的
   候选项**只来自当前密钥的 `models`**。换密钥(或「拉取模型」换了列表)后,旧值不在候选项里,

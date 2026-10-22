@@ -1,5 +1,6 @@
 import { isAdmin } from '@/lib/auth'
 import { readJson } from '@/lib/db'
+import { getBalance, spentSincePrev } from '@/lib/deepseek-balance'
 import {
   getToken,
   setToken,
@@ -20,6 +21,7 @@ async function status() {
   const token = await getToken()
   const exp = token ? jwtExp(token) : null
   const lastData = await getLastData()
+  const balance = await getBalance()
   return {
     configured: !!token,
     exp,
@@ -28,6 +30,8 @@ async function status() {
     syncKey: await getSyncKey(),
     lastError: (await getLastError()) || null,
     lastData: lastData ? (JSON.parse(lastData) as unknown) : null,
+    /** 官方余额(API Key 鉴权,与网页令牌无关):用来和平台明细交叉校验 */
+    balance: balance ? { ...balance, spentSincePrev: spentSincePrev(balance) } : null,
   }
 }
 

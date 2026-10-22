@@ -9,6 +9,7 @@ import {
   type SourceFailure,
 } from './opencode'
 import { ensureLogsScheduler } from './opencode-logs'
+import { ensureBalanceScheduler } from './deepseek-balance'
 import {
   getApiKey,
   fetchUsageZhipu,
@@ -71,7 +72,10 @@ async function hasDeepseekData(): Promise<boolean> {
   }
   if (getDb().listUsage(30).length > 0) return true
   // 平台拉取失败时,平台自己的快照也算数(与 /api/usage 的回退口径一致)
-  return !!(await getLastRows('30d'))
+  if (await getLastRows('30d')) return true
+  // 已配置但拉取失败:保留 tab,让错误角标可见 —— 否则整块消失,问题被静默(平台改版时踩过)
+  if (await deepseekLastError()) return true
+  return false
 }
 
 async function hasOpenCodeData(): Promise<boolean> {
@@ -174,6 +178,8 @@ export async function getSourceAvailability(): Promise<SourceAvailability> {
   ensureLogsScheduler()
   // 顺带确保 MiniMax 额度自动同步在跑(未配置订阅 Key 时为空操作)
   ensureMinimaxScheduler()
+  // 顺带确保 DeepSeek 官方余额采样在跑(余额与平台明细交叉校验,防"静默 0 行")
+  ensureBalanceScheduler()
   try {
     return await availCache.get(AVAIL_KEY, computeAvailability, { maxWaitMs: COLD_WAIT_MS })
   } catch {
