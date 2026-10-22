@@ -84,6 +84,21 @@
 
 ### 修复
 
+- **首页首帧被用量上游拖慢(线上探针偶发超时)**:首页是 `force-dynamic`,原先同步等待用量/可用性
+  上游接口,尾延迟可达 2.5s+(Grafana Synthetic 探针 3s 超时,偶发
+  `ProbeFailedExecutionsTooHigh`)。现在:① 可用性缓存与用量缓存都改为 **stale-while-revalidate**
+  (过期先返回上次结果、后台刷新,探针不会再撞上 5 分钟缓存到期那一刻);② 冷启动最多等 1.2s,
+  超时用「已配置」快速兜底;③ 用量预取加 `maxWaitMs` 上限,超时返回 `null` 交给客户端实时拉取;
+  ④ 可用性与用量**并行**预取,不再串行叠加。
+
+- **部署会覆盖服务器侧手工配置(会打挂 zuiti / brain / preview)**:`ci-run.sh` 部署前拿仓库里的
+  `docker/Caddyfile`、`docker/docker-compose.yml`、`docker/observability/*` 无条件覆盖服务器同名
+  文件,而服务器 repo 从不 `git pull`、这几个文件长期手工演进,两边早已不一致。现已把服务器现行
+  配置收回仓库:Caddyfile 补 `preview.*`(沙盒作品域名)、`brain.*`(Agent Brain 静态站)、
+  `zuiti.*`(嘴替,宿主机 3100 + 登录 basic_auth)、`code-sandbox` 的 oc-patch 本地补丁,删掉已迁
+  Purelymail 的 `mail.*` 反代;compose 补 `brain` 服务、`stock` mem_limit 128m→512m;
+  observability 的 `instance` 由 `zx-vps` 改为 `zx-vps-new`(迁机后主机名,否则 Grafana 面板查不到数据)。
+
 - **线上智能问候偶发没带气温**:问候语每换时段只生成一次;若生成那一刻北京天气抓取瞬时失败,`beijingWeather()` 会把 `null` 缓存 60s,而生成重试正好在这 60s 内反复拿到缓存的 `null` —— **重试形同虚设**,整档问候语就没温度(线上 10-09 深夜桶即如此)。现在:① `beijingWeather(force)` 支持强制绕过缓存,重试第 2 次起 `force=true`,超时 3.5s→8s、重试 3→4 次;② 失败缓存 60s→20s;③ 落库记 `wx` 标志,`refreshGreetings` 发现"当前桶已生成但没天气"且此刻能取到天气时**自动重生成补齐**(瞬时失败会在一两个 60s tick 内自愈);④ 提示词把"有天气时"改为"事实里给出了天气时",消除歧义。
 - **iOS Safari 下浮球图标缩成一点(真正原因)**:浮球图标是**裸 `<svg>` 直接当 flex 子元素**,旧版 iOS Safari 算不出这种 inline SVG 的尺寸 → 塌成极小(新版 WebKit 已修,故桌面 / 安卓 / 新版 Safari 正常)。全站其它图标没事,是因为它们都包在 `<span class="zx-ico">` 里(SVG 是普通子元素,不是 flex 子元素)。修复:浮球图标也包一层 `span.zx-svg-wrap`,并顺手把另两处同款裸 SVG(`.zx-project-clicks` 的"N 次点击"、`inline-edit` 的编辑铅笔)一并包上;新增 `.zx-svg-wrap{display:inline-block;line-height:0}`。(此前改 `px` / CSS 尺寸都无效 —— 问题不在单位,而在"SVG 本身是 flex 子元素"。)
 
