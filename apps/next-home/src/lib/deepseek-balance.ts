@@ -54,7 +54,7 @@ export function pickDeepseekApiKey(): string {
   try {
     const cfg = getGatewayConfig()
     const hit = cfg.providers.find(
-      (p) => p.enabled && p.apiKey && /(^|\.)api\.deepseek\.com/i.test(p.baseUrl),
+      (p) => p.enabled && p.apiKey && /api\.deepseek\.com/i.test(p.baseUrl),
     )
     return hit?.apiKey ?? ''
   } catch {
@@ -102,9 +102,8 @@ export async function refreshBalance(): Promise<BalanceInfo> {
   const key = pickDeepseekApiKey()
   const now = Date.now()
   if (!key) {
-    const info: BalanceInfo = { at: now, ok: false, error: '密钥池里没有 api.deepseek.com 的 API Key' }
-    getDb().setMeta(K_LAST, JSON.stringify(info))
-    return info
+    // 本地就能判断的问题,不落库(否则会按失败退避缓存住,配上 key 后还得等半小时才恢复)
+    return { at: now, ok: false, error: '密钥池里没有 api.deepseek.com 的 API Key' }
   }
   try {
     const res = await fetch(OFFICIAL, {
@@ -174,9 +173,11 @@ let inflight: Promise<BalanceInfo> | null = null
 
 export async function getBalance(): Promise<BalanceInfo | null> {
   const last = readLast()
+  // 历史版本把"没配 key"也落库了:这种不该按失败退避缓存,否则配上 key 后要等半小时
+  const staleNoKey = !!last?.error?.includes('密钥池里没有')
   const age = last ? Date.now() - last.at : Infinity
   const ttl = last && !last.ok ? FAIL_BACKOFF_MS : REFRESH_MS
-  if (last && age < ttl) return last
+  if (last && !staleNoKey && age < ttl) return last
   if (!inflight) {
     inflight = refreshBalance().finally(() => {
       inflight = null
