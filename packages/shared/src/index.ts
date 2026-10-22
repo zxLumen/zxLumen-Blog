@@ -90,3 +90,7 @@ export type { UsageSel, RangeSel, Range as UsageRange, DataSource, DataSource as
 // OpenCode Go 订阅价目(费用折算)
 export { GO_MODELS, goPriceOf, estimateGoCost, isGoModelKnown, expiredPromos } from './go-pricing.js'
 export type { GoModel, GoPrice } from './go-pricing.js'
+
+// AI 网关配置体检(隐形模型 / 孤儿绑定;面板与服务端共用)
+export { auditGatewayConfig, modelOptions, isModelInList } from './ai-gateway-audit.js'
+export type { GatewayAuditIssue, AuditIssueKind, AuditAppLike, AuditProviderLike } from './ai-gateway-audit.js'

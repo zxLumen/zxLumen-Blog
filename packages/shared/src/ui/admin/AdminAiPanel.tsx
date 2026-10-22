@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  Alert,
   Badge,
   Box,
   Button,
@@ -17,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { MantineBridge } from './mantine-bridge.js'
 import { adminFetch } from './admin-fetch.js'
 import type { NotifyMsg } from './admin-types.js'
+import { auditGatewayConfig, modelOptions } from '../../ai-gateway-audit.js'
 
 interface ProviderVM {
   id: string
@@ -86,6 +88,39 @@ function newId(prefix: string): string {
 /** 去重(某些上游会返回重复的模型名 → Mantine Select 不允许重复 value) */
 function uniqModels(arr?: string[]): string[] {
   return arr ? Array.from(new Set(arr)) : []
+}
+
+/**
+ * 失效模型提示。
+ *
+ * 为什么需要:Mantine Select 的候选项只来自"当前密钥的模型列表",已存值一旦不在
+ * 列表里,Select 找不到 label 就渲染成**空白** —— 看着像没设过,其实值还在库里、
+ * 优先级最高(见 ai-gateway-audit.ts 顶部说明)。这里把空白换成显式提示 + 一键清空。
+ */
+function StaleModelHint({
+  text,
+  onClear,
+  extra,
+}: {
+  text: string
+  onClear: () => void
+  extra?: { label: string; onClick: () => void }
+}) {
+  return (
+    <Group gap={4} wrap="wrap" data-testid="stale-model-hint">
+      <Badge size="xs" color="red" variant="light" tt="none">
+        {text}
+      </Badge>
+      <Button size="compact-xs" variant="subtle" color="red" onClick={onClear}>
+        清空
+      </Button>
+      {extra && (
+        <Button size="compact-xs" variant="subtle" onClick={extra.onClick}>
+          {extra.label}
+        </Button>
+      )}
+    </Group>
+  )
 }
 
 const ROLE_OPTIONS = [
@@ -328,6 +363,13 @@ export function AdminAiPanel({
     ? config.providers.map((p) => ({ value: p.id, label: `${p.name}(${p.id})` }))
     : []
 
+  /** 某个密钥当前可选的模型列表(「拉取模型」的临时结果优先,其次才是已存的 models) */
+  const modelsOf = (providerId: string) =>
+    uniqModels(providerModels[providerId] ?? config?.providers.find((x) => x.id === providerId)?.models)
+
+  /** 配置体检:列出"看不见但生效"的失效值(与 API 返回的 audit 同源纯函数) */
+  const audit = config ? auditGatewayConfig({ apps: config.apps, providers: config.providers }) : []
+
   return (
     <MantineBridge>
       <Stack gap="md" mb="lg">
@@ -351,6 +393,21 @@ export function AdminAiPanel({
         <Text c="dimmed" fz="xs" ff="var(--font-mono)">
           网关地址:<Text component="span" c="dimmed" fw={600}>/api/ai/v1</Text>(内网 <Text component="span" fw={600}>http://app:3000/api/ai/v1</Text>)。子应用用它作 baseUrl,key 填对应「接入令牌」。
         </Text>
+
+        {audit.length > 0 && (
+          <Alert color="red" variant="light" data-testid="gateway-audit" title={`配置体检:${audit.length} 处失效配置(仍会生效)`}>
+            <Stack gap={2}>
+              {audit.map((x, i) => (
+                <Text key={`${x.kind}-${x.subjectId}-${i}`} fz="xs">
+                  · {x.message}
+                </Text>
+              ))}
+              <Text fz="xs" c="dimmed">
+                优先级是「应用固定模型 → 密钥默认模型 → 请求 model」,所以这些值压过子应用自己发的 model;要放行就给对应的模型下拉点「清空」。
+              </Text>
+            </Stack>
+          </Alert>
+        )}
 
         {busy && <Text c="dimmed" fz="sm">加载中…</Text>}
 
@@ -409,10 +466,16 @@ export function AdminAiPanel({
                           searchable
                           clearable
                           placeholder="默认模型(可空)"
-                          data={uniqModels(providerModels[p.id] ?? p.models)}
+                          data={modelOptions(modelsOf(p.id), p.model).options}
                           value={p.model || null}
                           onChange={(v) => updProvider(i, { model: v || '' })}
                         />
+                        {modelOptions(modelsOf(p.id), p.model).stale && (
+                          <StaleModelHint
+                            text={`默认模型 ${p.model} 不在该密钥的模型列表(仍会覆盖请求)`}
+                            onClear={() => updProvider(i, { model: '' })}
+                          />
+                        )}
                         <Button
                           size="compact-xs"
                           variant="default"
@@ -518,7 +581,15 @@ export function AdminAiPanel({
                           placeholder="绑定的密钥(留空=按模型自动)"
                           data={providerOptions}
                           value={a.providerId || null}
-                          onChange={(v) => updApp(i, { providerId: v || '' })}
+                          onChange={(v) => {
+                            const pid = v || ''
+                            const next = config.providers.find((x) => x.id === pid)
+                            updApp(i, { providerId: pid })
+                            // 换密钥后固定模型可能失效(不在新列表里),当场提示 —— 别让它静默留在库里
+                            if (a.model && next && next.models.length > 0 && !next.models.includes(a.model)) {
+                              notify('err', `该应用的固定模型 ${a.model} 不在「${next.name || next.id}」的模型列表,仍会生效`)
+                            }
+                          }}
                         />
                         <Select
                           size="xs"
@@ -526,10 +597,27 @@ export function AdminAiPanel({
                           searchable
                           clearable
                           placeholder="固定模型(可空=应用自选)"
-                          data={uniqModels(providerModels[a.providerId] ?? config.providers.find((x) => x.id === a.providerId)?.models ?? [])}
+                          data={modelOptions(modelsOf(a.providerId), a.model).options}
                           value={a.model || null}
                           onChange={(v) => updApp(i, { model: v || '' })}
                         />
+                        {modelOptions(modelsOf(a.providerId), a.model).stale && (
+                          <StaleModelHint
+                            text={`固定模型 ${a.model} 不在该密钥的模型列表(仍会覆盖请求)`}
+                            onClear={() => updApp(i, { model: '' })}
+                            extra={
+                              config.providers.find((x) => x.id === a.providerId)?.model
+                                ? {
+                                    label: `改为 ${config.providers.find((x) => x.id === a.providerId)?.model}`,
+                                    onClick: () =>
+                                      updApp(i, {
+                                        model: config.providers.find((x) => x.id === a.providerId)?.model || '',
+                                      }),
+                                  }
+                                : undefined
+                            }
+                          />
+                        )}
                         <Select
                           size="xs"
                           w={140}

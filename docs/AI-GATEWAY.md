@@ -52,6 +52,16 @@ x-zx-app-token: zxai_xxxxxxxx...
 上游 `baseUrl` 由密钥决定,子应用只发 `model`(或完全不发)。
 OpenCode Go 端点(`opencode.ai/zen/go`)要求 `x-opencode-session` 头,网关会自动补上,子应用无需处理。
 
+> **换密钥后一定要看一眼应用的「固定模型」。** 面板下拉的候选项只来自**当前密钥的
+> `models` 列表**;换密钥(或「拉取模型」换了列表)后,原来的固定模型可能已不在列表里。
+> 这种值**不会被自动清掉**,仍然优先生效并覆盖子应用发来的 `model` —— 表现成"面板上
+> 看着是空的,子应用改模型却永远不生效"(线上的「幽灵模型」就是它)。
+>
+> 处理方式:面板现在会把已存值并进下拉(不再显示空白),失效值标红「不在该密钥的模型
+> 列表」并给「清空 / 改为新密钥默认模型」;顶部还有「配置体检」汇总所有失效值与孤儿绑定。
+> `GET /api/admin/ai-gateway` 也会返回 `audit` 数组(同一套纯函数 `auditGatewayConfig`),
+> 便于脚本巡检。
+
 ## 音频转写与说话人分离
 
 `POST /api/ai/v1/audio/transcriptions`(`multipart/form-data`,鉴权同上):

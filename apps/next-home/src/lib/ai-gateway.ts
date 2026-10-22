@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import type { AiUsageRow, UsageRange, UsageRow } from '@zx/shared'
+import { auditGatewayConfig, type AiUsageRow, type GatewayAuditIssue, type UsageRange, type UsageRow } from '@zx/shared'
 import { getDb } from './db'
 import { granularityOf, windowOf } from './usage/range'
 
@@ -374,6 +374,12 @@ export function checkQuota(app: GatewayApp): string | null {
 }
 
 /** admin 快照:密钥掩码 + 应用用量 */
+/** 配置体检:隐形固定模型 / 孤儿绑定。只报告,不改配置。 */
+export function getGatewayAudit(): GatewayAuditIssue[] {
+  const cfg = getGatewayConfig()
+  return auditGatewayConfig({ apps: cfg.apps, providers: cfg.providers })
+}
+
 export function getGatewayStatus() {
   const cfg = getGatewayConfig()
   return {
@@ -387,5 +393,6 @@ export function getGatewayStatus() {
       })),
       apps: cfg.apps.map((a) => ({ ...a, usage: getAppUsage(a.id) })),
     },
+    audit: auditGatewayConfig({ apps: cfg.apps, providers: cfg.providers }),
   }
 }
