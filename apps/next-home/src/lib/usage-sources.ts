@@ -18,7 +18,7 @@ import {
 import { hasMinimaxData, ensureMinimaxScheduler } from './minimax'
 import { getGatewayUsageRows } from './ai-gateway'
 import { getDb } from './db'
-import { makeTtlCache } from './usage/cache'
+import { makeSwrCache } from './usage/cache'
 import type { SourceAvailability } from '@zx/shared'
 
 /**
@@ -33,14 +33,17 @@ import type { SourceAvailability } from '@zx/shared'
  */
 export type { SourceAvailability }
 
-/** 可用性探测缓存 TTL */
+/** 可用性探测缓存 TTL(过期后仍先用旧值,后台刷新) */
 const AVAIL_TTL = 60_000
+
+/** 冷启动(进程刚起、缓存为空)最多等上游多久;超时用「已配置」快速兜底 */
+const COLD_WAIT_MS = 1_200
 
 /** 非凭证类失败的探测宽限(期间直接用快照,不重复请求) */
 const FAIL_GRACE_MS = 10 * 60_000
 
 const AVAIL_KEY = '__all'
-const availCache = makeTtlCache<SourceAvailability>('__usageAvailCache', AVAIL_TTL)
+const availCache = makeSwrCache<SourceAvailability>('__usageAvailCache', AVAIL_TTL)
 
 /** admin 改动配置(key / URL / workspace)后调用:立即失效缓存,不必等 TTL */
 export function invalidateAvailability() {
@@ -125,16 +128,8 @@ async function hasGatewayData(): Promise<boolean> {
   }
 }
 
-/** 计算各源可用性(已配置 + 近30天有数据),供面板隐藏空源;结果缓存 60s */
-export async function getSourceAvailability(): Promise<SourceAvailability> {
-  // 顺带确保自建小时采样在跑(幂等;首页有访问即可,不依赖 admin 操作)
-  ensureHourlyScheduler()
-  // 顺带确保控制台推理日志的后台自动同步在跑(未配置 Cookie 时为空操作)
-  ensureLogsScheduler()
-  // 顺带确保 MiniMax 额度自动同步在跑(未配置订阅 Key 时为空操作)
-  ensureMinimaxScheduler()
-  const hit = availCache.get(AVAIL_KEY)
-  if (hit) return hit
+/** 实时计算各源可用性(会打上游,不要在请求临界路径上直接 await) */
+async function computeAvailability(): Promise<SourceAvailability> {
   const [deepseek, opencode, zhipu, minimax, gateway, errors] = await Promise.all([
     hasDeepseekData(),
     hasOpenCodeData(),
@@ -143,7 +138,46 @@ export async function getSourceAvailability(): Promise<SourceAvailability> {
     hasGatewayData(),
     collectErrors(),
   ])
-  const result: SourceAvailability = { deepseek, opencode, zhipu, minimax, gateway, errors }
-  availCache.set(AVAIL_KEY, result)
-  return result
+  return { deepseek, opencode, zhipu, minimax, gateway, errors }
+}
+
+/**
+ * 冷启动超时的快速兜底:只看「是否已配置」,不打上游。
+ * 后台刷新仍会继续,下一轮请求即可拿到真实可用性。
+ */
+async function configuredOnly(): Promise<SourceAvailability> {
+  try {
+    const [token, ws, zhipuKey] = await Promise.all([getToken(), getWorkspaces(), getApiKey()])
+    return {
+      deepseek: !!token,
+      opencode: ws.length > 0,
+      zhipu: !!zhipuKey,
+      minimax: hasMinimaxData(),
+      gateway: getGatewayUsageRows('30d').rows.length > 0,
+      errors: {},
+    }
+  } catch {
+    return { deepseek: false, opencode: false, zhipu: false, minimax: false, gateway: false, errors: {} }
+  }
+}
+
+/**
+ * 计算各源可用性(已配置 + 近30天有数据),供面板隐藏空源。
+ *
+ * 首页速度优先:结果缓存 60s,且 **stale-while-revalidate** —— 过期后先返回旧值,
+ * 上游探测在后台跑。这样即使某个用量接口卡住 8–15s,首页也不会跟着卡。
+ */
+export async function getSourceAvailability(): Promise<SourceAvailability> {
+  // 顺带确保自建小时采样在跑(幂等;首页有访问即可,不依赖 admin 操作)
+  ensureHourlyScheduler()
+  // 顺带确保控制台推理日志的后台自动同步在跑(未配置 Cookie 时为空操作)
+  ensureLogsScheduler()
+  // 顺带确保 MiniMax 额度自动同步在跑(未配置订阅 Key 时为空操作)
+  ensureMinimaxScheduler()
+  try {
+    return await availCache.get(AVAIL_KEY, computeAvailability, { maxWaitMs: COLD_WAIT_MS })
+  } catch {
+    // 冷启动等超时:先用配置兜底,别让探针/访客等上游
+    return configuredOnly()
+  }
 }
