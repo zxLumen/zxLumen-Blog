@@ -103,7 +103,7 @@ services:
   # 与 Opentodo / 易经同一套模式:给主站 iframe 嵌进应用栏;与博客共享 admin(SSO)——
   # 两边配同一个 SESSION_SECRET(在 docker/.env 里)。详见 StockApp 仓库 README.md。
   stock:
-    mem_limit: 128m
+    mem_limit: 512m
     image: ghcr.io/zxlumen/stock-web:${STOCK_TAG:-latest}
     restart: unless-stopped
     env_file: .env
@@ -343,6 +343,29 @@ services:
       - ./site-content/mascots:/app/mascots
     expose:
       - "8787"
+    networks:
+      - web
+
+  # Agent Brain 网页端(独立容器,加入 docker_web 网络;见 agentbrain 仓库 web/)
+  # 纯静态站点:没有后端、没有环境变量、不落任何数据。镜像在服务器本地构建
+  # (docker build -f web/Dockerfile -t agentbrain-web .),建仓后改走 GHCR。
+  brain:
+    mem_limit: 160m
+    image: agentbrain-web:latest
+    restart: unless-stopped
+    environment:
+      PORT: 80
+      # 模型请求经博客 AI 网关转发;令牌只留在服务端,不下发到浏览器。
+      ZX_AI_GATEWAY_URL: http://app:3000/api/ai/v1
+      # 专用令牌(可选);没配就回落到访客沙盒的令牌,保证开箱可用。
+      AGENTBRAIN_AI_TOKEN: ${AGENTBRAIN_AI_TOKEN:-}
+      PLAYGROUND_AI_TOKEN: ${PLAYGROUND_AI_TOKEN:-}
+      # GitHub 搜索:未鉴权 10 次/分钟,配了 token 升到 30 次/分钟(需 classic token)
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # 向量检索:embeddings 走同一个网关
+      AGENTBRAIN_EMB_TOKEN: ${AGENTBRAIN_EMB_TOKEN:-}
+    expose:
+      - "80"
     networks:
       - web
 

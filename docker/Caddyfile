@@ -68,18 +68,7 @@ www.{$DOMAIN} {
 	redir https://{$DOMAIN}{uri} permanent
 }
 
-# 邮箱 Webmail / 管理后台 → Poste.io(host 网络,监听宿主机 8443)
-mail.{$DOMAIN} {
-	reverse_proxy host.docker.internal:8443 {
-		# 强制把外部 Host 传给 Poste(它按 Host 拼绝对跳转)
-		header_up Host {http.request.host}
-		header_up X-Forwarded-Host {http.request.host}
-		header_up X-Forwarded-Proto {scheme}
-		transport http {
-			tls_insecure_skip_verify
-		}
-	}
-}
+# 邮件服务已迁移到 Purelymail（2026-10-21），不再由本机反代。
 
 # Bark 推送服务(容器 bark-server,与 caddy 同在 docker_web 网络)
 bark.{$DOMAIN} {
@@ -244,6 +233,27 @@ pocket.{$DOMAIN} {
 		-Server
 	}
 
+	# WebUI 本地补丁(2026-10-21):首屏消息 40 → 20。显式传 limit 的客户端(TUI/全量加载)不受影响。
+	@msgInitial {
+		path_regexp ^/api/session/[^/]+/message$
+		query limit=40
+	}
+	rewrite @msgInitial {http.request.uri.path}?limit=20&order=desc
+
+	# WebUI 本地补丁:事件流连接超时 2s → 8s。
+	# /sw.js 换成直通 SW(清旧缓存 + 强制 runtime 走网络)，并替换 runtime 资源。
+	# opencode 升级后 asset 哈希会变，需要重新打补丁。
+	handle /sw.js {
+		root * /srv/site/oc-patch
+		file_server
+		header Cache-Control "no-cache"
+	}
+	handle /_assets/runtime-BfldUWqN.js {
+		root * /srv/site/oc-patch
+		file_server
+		header Cache-Control "no-cache"
+	}
+
 	# App 图片上传中继：/pocketd/upload -> pocketd(8788)/upload
 	# 说明：pocketd 跑在宿主机(0.0.0.0:8788)，容器经 host.docker.internal 访问。
 	handle /pocketd/* {
@@ -267,4 +277,47 @@ code-sandbox.{$DOMAIN} {
 		# SSE(/api/event)必须关闭缓冲
 		flush_interval -1
 	}
+}
+
+# 观众在沙盒里做的网站(独立域名;由 Opencode-Pocket ci-run.sh 自愈补上)
+preview.{$DOMAIN} {
+	rewrite * /preview{path}
+	reverse_proxy sandbox-caddy:80
+}
+
+# Agent Brain 网页端(独立容器,加入 docker_web 网络;见 agentbrain 仓库 web/)
+# 纯静态站点:无后端、无环境变量、不收集数据。容器 agentbrain-web 监听 80。
+brain.{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		# 会被主站用 iframe 嵌进应用栏 → 不能 DENY;只放行主站(与自身)内嵌。
+		# 用 + 追加而不是覆盖:容器自己已有一条严格 CSP(脚本/连接/表单全部锁死),
+		# 这里只补 frame-ancestors。多条 CSP 头各自独立生效、取交集,正是想要的效果。
+		+Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy brain:80
+}
+
+# 嘴替(Next.js,跑在宿主机 3100)
+zuiti.{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	@owner_login path /login* /api/auth/*
+	basic_auth @owner_login {
+		admin $2a$14$ioLmRW0rx0KVzDxdlVeRxOHkOEBYBNPEan3g0XzAwLiIMrtvKCztW
+	}
+
+	reverse_proxy host.docker.internal:3100
 }
