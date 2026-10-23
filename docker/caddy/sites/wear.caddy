@@ -6,7 +6,7 @@ wear.{$DOMAIN} {
 	# 后台只给站长用；公网访问 /admin* 需要 Basic Auth
 	@admin path /admin*
 	basic_auth @admin {
-		admin $2a$14$.4cWlTiL39qfl0Ykkg9d.uaTP.K3D0HhIrW5SxxSQ5G7nDDLv.1jK
+		admin $2a$14$kecUpU9QWjXVXfPSIvzq.eXtkn7i9oq2GnVWjDH1vjQXhlbgKgsBq
 	}
 
 	reverse_proxy outfit-web:3000
