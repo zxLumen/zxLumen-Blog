@@ -1,0 +1,13 @@
+# 穿搭（独立容器，加入 docker_web 网络）
+wear.{$DOMAIN} {
+	import deny
+	import accesslog
+
+	# 后台只给站长用；公网访问 /admin* 需要 Basic Auth
+	@admin path /admin*
+	basic_auth @admin {
+		admin $2a$14$.4cWlTiL39qfl0Ykkg9d.uaTP.K3D0HhIrW5SxxSQ5G7nDDLv.1jK
+	}
+
+	reverse_proxy outfit-web:3000
+}
