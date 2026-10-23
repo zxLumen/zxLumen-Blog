@@ -3,10 +3,5 @@ zuiti.{$DOMAIN} {
 	import accesslog
 	import deny
 
-	@owner_login path /login* /api/auth/*
-	basic_auth @owner_login {
-		admin {$ZUITI_BASIC_HASH}
-	}
-
 	reverse_proxy host.docker.internal:3100
 }
