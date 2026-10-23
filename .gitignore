@@ -65,3 +65,6 @@ docs/proxy.yaml
 
 # 品牌原图(2048² 大文件,只归档备查;站点只用派生的优化图,不入库)
 assets/brand-source/
+# 服务器侧部署备份 / staging(ci-run.sh 生成,不进仓库)
+docker/.deploy-backup/
+docker/*.staged

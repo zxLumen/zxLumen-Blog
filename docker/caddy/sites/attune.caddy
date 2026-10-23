@@ -1,0 +1,6 @@
+# 无恙(独立容器:从对话音频觉察身心状态;见 attune 仓库)
+attune.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy attune:8792
+}

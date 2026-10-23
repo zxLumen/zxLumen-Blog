@@ -1,16 +1,32 @@
-# 关闭 HTTP/3,释放 UDP 443 交给 Hysteria2(伪装成 QUIC/HTTP3 流量)
+# =============================================================================
+# 站点入口:本文件只保留「全局设置 + 公共片段 + 根站」。
+#
+# 每个子域一个文件:docker/caddy/sites/<name>.caddy
+#   → 容器内被 import /etc/caddy/sites/*.caddy 引入
+#   → 新增应用 = 丢一个 .caddy 文件(不用再动这份主配置)
+#   → 这些文件由 ci-run.sh 从仓库同步,服务器上手改会被覆盖;路由一律进仓库
+#
+# 校验:`docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`
+#
+# ⚠️ 注意:全局 options 里的 `log` 是**进程运行日志**(default logger),不是访问日志;
+#    访问日志必须在站点块里用 `log`(= 下面的 (accesslog) snippet)。别把 access log 写回全局,
+#    那样 `caddy validate` 的报错会进文件、stderr 变空,排查时什么都看不到。
+# =============================================================================
 {
+	# 关闭 HTTP/3,释放 UDP 443 交给 Hysteria2(伪装成 QUIC/HTTP3 流量)
 	servers {
 		protocols h1 h2
 	}
 }
 
-# 主页根域名(需先把 A 记录指向服务器 IP)
-{$DOMAIN} {
-	encode zstd gzip
+# -----------------------------------------------------------------------------
+# 公共片段(snippet)。注意:必须定义在下面的 import 之前。
+# -----------------------------------------------------------------------------
 
-	# 访问日志:用于排查「请求是否到达 / 是否超时 / 返回码」,尤其链路卡住时。
-	# 写 caddy-data 卷(/data),容器重建不丢;不随 Alloy 外发,避免第三方留存访客 IP。
+# 访问日志(站点级 `log` = access log;全局 `log` 是运行日志,别混)
+# 写 caddy-data 卷(/data),容器重建不丢;不随 Alloy 外发,避免第三方留存访客 IP。
+# 多个站点用完全相同配置时 Caddy 会按 writer 配置共享同一个文件句柄,不会互相踩滚动。
+(accesslog) {
 	log {
 		output file /data/access.log {
 			roll_size 10MiB
@@ -18,14 +34,71 @@
 		}
 		format json
 	}
+}
 
-	# 安全响应头
+# 会被主站用 iframe 嵌进应用栏的应用:不能 X-Frame-Options DENY
+(webapp) {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
+
+# 同上,但用 + 追加 CSP 而不是覆盖:容器自己已有严格 CSP 时用
+# (多条 CSP 头各自独立生效、取交集,正是想要的效果)
+(webapp_append) {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		+Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
+
+# 不允许被 iframe 的站点(根站 / 后台类)
+(deny) {
+	encode zstd gzip
 	header {
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
 		-Server
 	}
+}
+
+# 补压缩与缺失的安全头,但**不**碰 iframe 限制(交由应用自己决定)。
+# 给 Grafana 这类用:Grafana 自己就发 `X-Frame-Options: deny` + `nosniff`
+# (allow_embedding=false),但**不做压缩**;首屏 JS/CSS 是 MB 级,压缩对首屏影响很大。
+# 不设 XFO → 将来真要 embed,只需把 grafana.ini 的 allow_embedding 打开,不用再改 Caddy。
+(secure) {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
+
+# SSE 长连接:必须关闭缓冲(reverse_proxy 内 import sse)
+(sse) {
+	flush_interval -1
+}
+
+# -----------------------------------------------------------------------------
+# 子域路由(一应用一文件,见 docker/caddy/sites/)
+# -----------------------------------------------------------------------------
+import /etc/caddy/sites/*.caddy
+
+# -----------------------------------------------------------------------------
+# 根站
+# -----------------------------------------------------------------------------
+{$DOMAIN} {
+	import deny
+	import accesslog
 
 	# 简历 PDF / 微信二维码:由 Caddy 从挂载目录直接静态服务(不入应用镜像)
 	# 新文件放 docker/site-content/ 并 scp 上传即可,无需重建/重启
@@ -61,263 +134,4 @@
 	handle {
 		reverse_proxy app:3000
 	}
-}
-
-# www → 主域 301 跳转(需 www 的 A 记录指向本机,Caddy 自动签证书)
-www.{$DOMAIN} {
-	redir https://{$DOMAIN}{uri} permanent
-}
-
-# 邮件服务已迁移到 Purelymail（2026-10-21），不再由本机反代。
-
-# Bark 推送服务(容器 bark-server,与 caddy 同在 docker_web 网络)
-bark.{$DOMAIN} {
-	reverse_proxy bark-server:8080
-}
-
-# 本地 Grafana(仅本机采集 → 云端数据源;Web 在服务器):basic_auth 保护
-grafana.{$DOMAIN} {
-	basic_auth {
-		admin {$GRAFANA_BASIC_HASH}
-	}
-	reverse_proxy grafana:3000
-}
-
-# 未来项目 demo:每个子域名一条,反代到对应容器
-# 记得把 demo 服务加入 compose 的 web 网络
-#
-# demo1.{$DOMAIN} {
-# 	reverse_proxy demo1:8080
-# }
-#
-# demo2.{$DOMAIN} {
-# 	reverse_proxy demo2:8080
-# }
-
-# RAG 知识库问答 demo(独立容器,需加入 docker_web 网络;见 RAG 仓库 deploy/)
-rag.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy rag:8000
-}
-
-# Opentodo 网页版(独立容器,加入 docker_web 网络;见 Opentodo 仓库 web/)
-todo.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 会被主站用 iframe 嵌进应用栏 → 不能 DENY;只放行主站(与自身)内嵌
-		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy opentodo:8787
-}
-
-# 易经六十四卦网页版(独立容器,加入 docker_web 网络;见 yijing64 仓库 web/)
-yijing.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 会被主站用 iframe 嵌进应用栏 → 不能 DENY;只放行主站(与自身)内嵌
-		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy yijing:8788
-}
-
-# StockApp 股票速览(独立容器,加入 docker_web 网络;见 StockApp 仓库)
-stock.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 会被主站用 iframe 嵌进应用栏 → 不能 DENY;只放行主站(与自身)内嵌
-		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy stock:8789
-}
-
-# Luminari 生灵(独立容器,加入 docker_web 网络;见 luminari 仓库)
-luminari.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 会被主站用 iframe 嵌进应用栏 → 不能 DENY;只放行主站(与自身)内嵌
-		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy luminari:8790
-}
-
-# 心语(独立容器:对话式 MBTI 测评;见 mbti-web 仓库)
-mbti.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 会被主站用 iframe 嵌进应用栏 → 只放行主站(与自身)内嵌
-		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy mbti:8787
-}
-
-# 无恙(独立容器:从对话音频觉察身心状态;见 attune 仓库)
-attune.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 会被主站用 iframe 嵌进应用栏 → 只放行主站(与自身)内嵌
-		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy attune:8792
-}
-
-# 光圈(独立容器:AI 构图裁剪 + 自动修图;见 photo 仓库)
-photo.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 会被主站用 iframe 嵌进应用栏 → 只放行主站(与自身)内嵌
-		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy photo:8791
-}
-
-# (可选)Alloy 自带 UI/调试页:仅在需要时启用,并务必加 basic_auth
-# alloy.{$DOMAIN} {
-# 	basic_auth {
-# 		admin $2a$14$REPLACE_WITH_CADDY_HASH
-# 	}
-# 	reverse_proxy alloy:12345
-# }
-
-# 私有:你 Mac 上的 opencode(经 SSH 反向隧道暴露到 host.docker.internal:4096)。
-# 仅站长用(Basic 认证由 opencode 自身提供),不进应用栏。见 Opencode-Pocket 仓库。
-pocket.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 若被主站 iframe 嵌入,只放行主站(与自身)内嵌
-		Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		-Server
-	}
-
-	# WebUI 本地补丁(2026-10-21):首屏消息 40 → 20。显式传 limit 的客户端(TUI/全量加载)不受影响。
-	@msgInitial {
-		path_regexp ^/api/session/[^/]+/message$
-		query limit=40
-	}
-	rewrite @msgInitial {http.request.uri.path}?limit=20&order=desc
-
-	# WebUI 本地补丁:事件流连接超时 2s → 8s。
-	# /sw.js 换成直通 SW(清旧缓存 + 强制 runtime 走网络)，并替换 runtime 资源。
-	# opencode 升级后 asset 哈希会变，需要重新打补丁。
-	handle /sw.js {
-		root * /srv/site/oc-patch
-		file_server
-		header Cache-Control "no-cache"
-	}
-	handle /_assets/runtime-BfldUWqN.js {
-		root * /srv/site/oc-patch
-		file_server
-		header Cache-Control "no-cache"
-	}
-
-	# App 图片上传中继：/pocketd/upload -> pocketd(8788)/upload
-	# 说明：pocketd 跑在宿主机(0.0.0.0:8788)，容器经 host.docker.internal 访问。
-	handle /pocketd/* {
-		uri strip_prefix /pocketd
-		reverse_proxy host.docker.internal:8788
-	}
-	handle {
-		reverse_proxy host.docker.internal:4096 {
-			# SSE(/api/event)必须关闭缓冲
-			flush_interval -1
-		}
-	}
-}
-
-# 公开:访客沙盒 opencode web(code-sandbox.{$DOMAIN})。
-# 实现整体在 Opencode-Pocket 仓库(镜像 / compose / 边缘 Caddy / 部署脚本),访客锁定的
-# 全部逻辑都在那边;这里只做 TLS 与转发到沙盒自带的边缘 Caddy。
-# 详见 https://github.com/zxLumen/Opencode-Pocket/blob/main/docs/vps-sandbox.md
-code-sandbox.{$DOMAIN} {
-	reverse_proxy sandbox-caddy:80 {
-		# SSE(/api/event)必须关闭缓冲
-		flush_interval -1
-	}
-}
-
-# 观众在沙盒里做的网站(独立域名;由 Opencode-Pocket ci-run.sh 自愈补上)
-preview.{$DOMAIN} {
-	rewrite * /preview{path}
-	reverse_proxy sandbox-caddy:80
-}
-
-# Agent Brain 网页端(独立容器,加入 docker_web 网络;见 agentbrain 仓库 web/)
-# 纯静态站点:无后端、无环境变量、不收集数据。容器 agentbrain-web 监听 80。
-brain.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		# 会被主站用 iframe 嵌进应用栏 → 不能 DENY;只放行主站(与自身)内嵌。
-		# 用 + 追加而不是覆盖:容器自己已有一条严格 CSP(脚本/连接/表单全部锁死),
-		# 这里只补 frame-ancestors。多条 CSP 头各自独立生效、取交集,正是想要的效果。
-		+Content-Security-Policy "frame-ancestors 'self' https://{$DOMAIN}"
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	reverse_proxy brain:80
-}
-
-# 嘴替(Next.js,跑在宿主机 3100)
-zuiti.{$DOMAIN} {
-	encode zstd gzip
-
-	header {
-		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
-		Referrer-Policy strict-origin-when-cross-origin
-		-Server
-	}
-
-	@owner_login path /login* /api/auth/*
-	basic_auth @owner_login {
-		admin $2a$14$ioLmRW0rx0KVzDxdlVeRxOHkOEBYBNPEan3g0XzAwLiIMrtvKCztW
-	}
-
-	reverse_proxy host.docker.internal:3100
 }

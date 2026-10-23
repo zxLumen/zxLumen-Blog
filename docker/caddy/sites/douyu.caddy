@@ -1,0 +1,6 @@
+# 斗鱼监控看板(宿主机 8899)
+douyu.{$DOMAIN} {
+	import accesslog
+	import deny
+	reverse_proxy host.docker.internal:8899
+}

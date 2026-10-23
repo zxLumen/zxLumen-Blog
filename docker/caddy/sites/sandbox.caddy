@@ -1,0 +1,17 @@
+# 公开:访客沙盒 opencode web(code-sandbox.{$DOMAIN})。
+# 实现整体在 Opencode-Pocket 仓库(镜像 / compose / 边缘 Caddy / 部署脚本),访客锁定的
+# 全部逻辑都在那边;这里只做 TLS 与转发到沙盒自带的边缘 Caddy。
+# 详见 https://github.com/zxLumen/Opencode-Pocket/blob/main/docs/vps-sandbox.md
+code-sandbox.{$DOMAIN} {
+	import accesslog
+	reverse_proxy sandbox-caddy:80 {
+		import sse
+	}
+}
+
+# 观众在沙盒里做的网站(独立域名;由 Opencode-Pocket ci-run.sh 自愈补上)
+preview.{$DOMAIN} {
+	import accesslog
+	rewrite * /preview{path}
+	reverse_proxy sandbox-caddy:80
+}

@@ -15,6 +15,47 @@ export IMAGE_TAG
 [[ "${EUID}" -eq 0 ]] || SUDO="sudo -n"
 echo "[deploy] IMAGE_TAG=${IMAGE_TAG} (工作目录: $(pwd))"
 
+# 冒烟脚本必须存在:它是唯一能发现"空目录 / 少文件 / 路由没了"的检查,
+# 不能因为 ci-run 同步清单漏了就静默跳过。缺失 = 同步有问题,在动任何东西之前中止。
+if [ ! -x ./caddy-smoke.sh ]; then
+  echo "[deploy] 缺少可执行的 caddy-smoke.sh(ci-run.sh 的同步清单漏了?),已中止"
+  exit 1
+fi
+
+# 把服务器侧配置(Caddyfile / compose / sites)回滚到最近一次备份。
+# 只在「预校验之后仍失败」这种极少数情况下用到,保证磁盘不会留在半套状态。
+rollback_config() {
+  local bak
+  bak="$(cat ./.deploy-backup/LAST 2>/dev/null || true)"
+  if [ -z "${bak}" ] || [ ! -d "${bak}" ]; then
+    echo "[deploy] 没有可用备份,需人工处理(见 .deploy-backup/)"
+    return 1
+  fi
+  [ -f "${bak}/Caddyfile" ] && cp -a "${bak}/Caddyfile" ./Caddyfile
+  [ -f "${bak}/docker-compose.yml" ] && cp -a "${bak}/docker-compose.yml" ./docker-compose.yml
+  if [ -d "${bak}/sites" ]; then
+    mkdir -p ./caddy/sites
+    find ./caddy/sites -mindepth 1 -delete
+    cp -a "${bak}/sites/." ./caddy/sites/
+  fi
+  echo "[deploy] 已回滚服务器侧配置 → ${bak}(容器未改动)"
+}
+
+# 先校验 Caddy 配置(ci-run.sh 已把 Caddyfile 与 caddy/sites 同步成仓库版本)。
+# 语法/重复站点等问题在**改任何东西之前**就拦下来:线上继续跑旧配置,站点不受影响。
+# (以前是 reload 失败 `|| echo` 吞掉 —— 坏配置静默上线比部署失败更糟)
+# 用一次性容器(同样的 image / env / 挂载)校验,而不是 exec 进正在跑的 caddy:
+# 旧容器可能还没挂上 caddy/sites,exec 校验会「漏看」所有子域文件。
+# `compose run` 默认不发布端口,不会和线上 80/443 打架。
+if ! ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose run --rm --no-deps -T caddy \
+    caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile > /tmp/caddy-validate.log 2>&1; then
+  echo "[deploy] Caddy 配置校验失败,已中止部署(线上仍在跑旧配置):"
+  grep -vE '"level":"info"' /tmp/caddy-validate.log | tail -n 20
+  rollback_config || true
+  exit 1
+fi
+echo "[deploy] Caddy 配置校验通过"
+
   # sudo 默认 env_reset 会清掉 IMAGE_TAG,用 env 显式传回 compose
   ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose pull app
   # Opentodo 网页版:独立镜像(自己的 CI 推 latest);拉不到不阻断(可能还没上)
@@ -40,11 +81,12 @@ echo "[deploy] IMAGE_TAG=${IMAGE_TAG} (工作目录: $(pwd))"
     || echo "[deploy] photo 镜像拉取失败(可能尚未推送),跳过"
   ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
 
-# 服务器侧配置(Caddyfile / compose)由 CI scp 同步过来;`up -d` 不会因挂载文件
-# 内容变化而重启 caddy,这里显式 reload 让它读到新的 Caddyfile(失败不阻断)。
+# 服务器侧配置(Caddyfile / caddy/sites / compose)由 ci-run.sh 从仓库同步;
+# `up -d` 不会因挂载文件内容变化而重启 caddy,这里显式 reload 让它读到新配置。
+# 前面已 validate 过,这里失败就当真失败(不再静默跳过)。
 if ${SUDO:-} docker compose ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
-  ${SUDO:-} docker compose exec -T -w /etc/caddy caddy caddy reload \
-    || echo "[deploy] caddy reload 失败(配置可能未变或语法错误),已跳过"
+  ${SUDO:-} docker compose exec -T -w /etc/caddy caddy caddy reload --config /etc/caddy/Caddyfile
+  echo "[deploy] caddy 已 reload"
 fi
 
 # 监控配置(observability/alloy.alloy 等)由 ci-run.sh 同步;alloy 以「文件」形式
@@ -61,4 +103,10 @@ fi
 ${SUDO:-} docker image prune -af --filter until=12h
 
 ${SUDO:-} docker compose ps
+
+# 部署后冒烟:validate 只证明语法对,不证明每个子域的路由真的还在。
+# 存在性已在开头检查过;这里只报告、不阻断 —— 某个子应用自己挂了(502)不该让发布失败,
+# 但 404/000 会明确标出来。
+./caddy-smoke.sh || echo "[deploy] 冒烟有失败项(见上):ROUTE=路由/TLS 坏了,APP=后端没起来"
+
 echo "[deploy] 完成"

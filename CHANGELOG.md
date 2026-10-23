@@ -4,6 +4,45 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **Caddy 子域路由改成「一应用一文件」**:主 `docker/Caddyfile` 只保留全局设置、公共片段
+  (snippet)、根站与 `import /etc/caddy/sites/*.caddy`;16 个子域块各自搬到
+  `docker/caddy/sites/<name>.caddy`(`douyu` 也一并收进仓库)。以后**新增子域只往这个目录丢
+  一个文件**,不用再动那份主配置。配套:
+  - 重复的 header 收敛成 3 个 snippet:`(webapp)`(允许主站 iframe)、`(webapp_append)`
+    (容器自带严格 CSP 时追加 frame-ancestors)、`(deny)`(禁止 iframe);SSE 用 `(sse)`;
+  - **访问日志**:新增 `(accesslog)` snippet,每个站点显式 `import accesslog`(以前只有根站有)。
+    注意全局 options 里的 `log` 是**进程运行日志**、不是访问日志 —— 第一版写错了位置,
+    结果访问日志没开、`caddy validate` 的报错还被写进了文件(stderr 为空,排查时看不到);
+  - `ci-run.sh` 同步 `docker/caddy/sites`(清空内容再复制,保留目录 inode —— `mv` 换目录会让
+    容器仍挂旧 inode,下次 reload 所有子域消失);同步前有**三道保护**:源目录存在、
+    文件数 ≥ 10、先备份(留最近 3 份);**以仓库为准全量同步**,服务器上手加的路由会被删;
+  - `deploy.sh` 在改动任何东西**之前**先 `docker compose run --rm --no-deps caddy caddy validate`,
+    校验失败即中止(线上继续跑旧配置);reload 失败也不再静默跳过;末尾跑 `caddy-smoke.sh`
+    (从 `sites/*.caddy` 抽 host 逐个 curl,**只报告不阻断**:ROUTE=路由/TLS 坏了,APP=后端没起来);
+  - **配置更新不再是非原子的**:`ci-run.sh` 先把 Caddyfile / compose / `caddy/sites` 备份到
+    `docker/.deploy-backup/<ts>/`,新 Caddyfile 先写 `.staged`,用**新配置**在一次性容器里预校验
+    (`docker run --env-file .env`),**通过才 `mv` 原子落地**;预校验失败会把 sites 原地恢复、
+    线上文件一字节不动;`deploy.sh` 的 validate 失败也会自动回滚三样。
+    以前是"先 cp Caddyfile、后校验 sites",校验失败会留下「新 Caddyfile + 空 sites」,
+    运行中的进程还活着所以当场不挂,下次重启才全站 404;
+  - `caddy-smoke.sh` 已加入 `ci-run.sh` 的同步清单(漏了会让末尾冒烟静默跳过);
+    `deploy.sh` 开头还加了存在性检查,缺失直接中止;
+  - **`.env` 引号 / `$` 的两个解析器坑**(同一个值两边规则相反):
+    compose 的 `env_file:` 对**裸值会做变量插值**(`$2a$14$Xu…` 被截成 `$2a$14`)、**加引号才原样**;
+    docker CLI 的 `--env-file` 则**剥引号、不插值**。所以 `.env` 里含 `$` 的值必须写成 `'…'`,
+    而 `ci-run.sh` 的预校验会先剥一层再交给 `docker run`,并在传之前断言
+    `DOMAIN / GRAFANA_BASIC_HASH / ZUITI_BASIC_HASH` 存在且不带引号(失败一行说清,
+    且发生在动任何文件之前);`docker/.env.example` 已注明「含 `$` 必须加单引号」;
+  - `grafana` 用新增的 `(secure)` snippet:保留 `encode`(它自己不压缩,首屏 JS/CSS 是 MB 级),
+    但不设 `X-Frame-Options` —— Grafana 自己就发 `deny`(allow_embedding=false),
+    将来真要 embed 只需改 `grafana.ini`,不用再动 Caddy;
+  - `caddy:2` 钉到 `caddy:2.11.7`(当前线上就是这版),避免自动升级带来行为变化;
+  - `zuiti.<域名>` 的 basic_auth 哈希从仓库挪到 `{$ZUITI_BASIC_HASH}`(见 `.env.example`)。
+  顺带修掉一个隐患:服务器 `docker/Caddyfile` 里手加的 `douyu` 段此前不在仓库,
+  下次 CI 部署会被整文件覆盖丢掉。
+
 ### 新增
 
 - **项目卡:360 行体验 · 我去干了一个月**:新增一张个人项目卡,指向

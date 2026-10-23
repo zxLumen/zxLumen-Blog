@@ -16,6 +16,9 @@
 - `apps/next-home`:Next.js 16 应用(端口 3000)
 - `packages/shared`:设计系统(主题/布局)+ 共享 React 组件 + 类型 + SQLite 数据层(`@zx/shared`)
 - `docker/`:Dockerfile / compose / Caddyfile / 备份脚本
+  - `docker/caddy/sites/<name>.caddy`:子域路由,**一应用一文件**(主 `Caddyfile` 里
+    `import /etc/caddy/sites/*.caddy`)。新增子域只需加一个文件,不用动主配置;
+    改完用 `docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile` 校验
 - `docs/`:部署、上报、邮件等文档(邮件服务器在服务器 `~/mail/` 单独跑,见 `docs/MAIL.md`)
 - `TODO.md`:待办清单 / Roadmap(新需求先记这里)
 
@@ -253,8 +256,9 @@ npm run test:load -- quick   # L6 压测冒烟(需 k6:brew install k6)
 
 > 注意:服务器仓库**从不 `git pull`**,且部署密钥被 `authorized_keys` 的 `command=` 强制
 > 绑定到 `ci-run.sh`(scp/sftp 通道会被拦截)。因此 `ci-run.sh` 在部署前会**从公开仓库
-> `git fetch` 那几个「不进镜像」的服务器侧配置**(`docker/Caddyfile` / `docker-compose.yml` /
-> `deploy.sh` / `ci-run.sh`)—— 改动一 push 即随之生效,无需人工同步。
+> `git fetch` 那几个「不进镜像」的服务器侧配置**(`docker/Caddyfile` / `docker/caddy/sites/` /
+> `docker-compose.yml` / `deploy.sh` / `ci-run.sh`)—— 改动一 push 即随之生效,无需人工同步。
+> 子域路由是**以仓库为准的全量同步**(服务器上手加的文件会被删);新应用一律先进仓库。
 
 ## 部署时必须同步的「不入库」内容(**每次上线都要做**)
 
@@ -319,8 +323,16 @@ npm run test:load -- quick   # L6 压测冒烟(需 k6:brew install k6)
    字段**(与项目卡、应用栏、联系方式一致:库为准)。要回退成源码值,线上清掉 `meta.site_content`
    (或 `DELETE /api/admin/site-content`)。项目卡文字仍存 `projects_config`,联系方式仍存 `meta`。
 
-> `docker/Caddyfile` / `docker/docker-compose.yml` / `docker/deploy.sh` / `docker/ci-run.sh` /
-> `docker/observability/` **无需手动传**:服务器 `ci-run.sh` 会在部署前从公开仓库自动 `git fetch` 同步(见上)。
+> `docker/Caddyfile` / `docker/caddy/sites/` / `docker/docker-compose.yml` / `docker/deploy.sh` /
+> `docker/ci-run.sh` / `docker/observability/` **无需手动传**:服务器 `ci-run.sh` 会在部署前从公开仓库
+> 自动 `git fetch` 同步(见上)。`ci-run.sh` 会先把三样(Caddyfile / compose / `caddy/sites`)
+> 备份到 `docker/.deploy-backup/<时间戳>/`,再用**新配置**在一个一次性容器里预校验,
+> **通过才落地(mv 原子替换)**;预校验或 `deploy.sh` 的 validate 失败都会自动回滚三样,
+> 线上继续跑旧配置。部署末尾跑 `caddy-smoke.sh`(从 `sites/*.caddy` 抽 host 逐个 curl)。
+>
+> ⚠️ `docker/.env` 里**含 `$` 的值必须加单引号**(`GRAFANA_BASIC_HASH` / `ZUITI_BASIC_HASH` 等):
+> compose 的 `env_file` 只有加引号才不做变量插值,否则 `$2a$14$Xu…` 会被截成 `$2a$14`;
+> 而预校验用的裸 `docker run --env-file` 不剥引号,所以 `ci-run.sh` 会先剥一层再传。
 >
 > 一句话:**源码改了 `content.local.ts` / 简历 / 二维码 / 联系方式 → 上线时把
 > `docker/site-content/*` 传服务器即可,镜像与配置都不用动**。

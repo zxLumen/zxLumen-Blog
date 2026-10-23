@@ -1,0 +1,6 @@
+# 心语(独立容器:对话式 MBTI 测评;见 mbti-web 仓库)
+mbti.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy mbti:8787
+}

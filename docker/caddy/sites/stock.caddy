@@ -1,0 +1,6 @@
+# StockApp 股票速览(独立容器,加入 docker_web 网络;见 StockApp 仓库)
+stock.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy stock:8789
+}

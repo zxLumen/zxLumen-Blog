@@ -1,0 +1,13 @@
+# 本地 Grafana(仅本机采集 → 云端数据源;Web 在服务器):basic_auth 保护
+#
+# 用 (secure) 而不是 (deny):Grafana 自己不压缩,首屏 JS/CSS 体积大,压缩必须留;
+# 而 X-Frame-Options 它自己就会发 deny(allow_embedding=false),
+# 不设反而给将来开 embed 留了余地(改 grafana.ini 即可,不用动 Caddy)。
+grafana.{$DOMAIN} {
+	import secure
+	import accesslog
+	basic_auth {
+		admin {$GRAFANA_BASIC_HASH}
+	}
+	reverse_proxy grafana:3000
+}

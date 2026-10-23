@@ -1,0 +1,6 @@
+# Opentodo 网页版(独立容器,加入 docker_web 网络;见 Opentodo 仓库 web/)
+todo.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy opentodo:8787
+}

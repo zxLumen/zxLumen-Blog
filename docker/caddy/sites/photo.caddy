@@ -1,0 +1,6 @@
+# 光圈(独立容器:AI 构图裁剪 + 自动修图;见 photo 仓库)
+photo.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy photo:8791
+}

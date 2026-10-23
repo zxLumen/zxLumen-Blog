@@ -1,0 +1,6 @@
+# RAG 知识库问答 demo(独立容器,需加入 docker_web 网络;见 RAG 仓库 deploy/)
+rag.{$DOMAIN} {
+	import accesslog
+	import deny
+	reverse_proxy rag:8000
+}

@@ -1,0 +1,5 @@
+# Bark 推送服务(容器 bark-server,与 caddy 同在 docker_web 网络)
+bark.{$DOMAIN} {
+	import accesslog
+	reverse_proxy bark-server:8080
+}

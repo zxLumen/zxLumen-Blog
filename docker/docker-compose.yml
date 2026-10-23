@@ -197,7 +197,7 @@ services:
 
   caddy:
     mem_limit: 256m
-    image: caddy:2
+    image: caddy:2.11.7
     restart: unless-stopped
     depends_on:
       - app
@@ -214,6 +214,9 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 子域路由:一应用一文件(docker/caddy/sites/<name>.caddy),主 Caddyfile 里 import
+      # 新增应用只需往这个目录丢文件,不用再改主配置;内容由 ci-run.sh 从仓库同步
+      - ./caddy/sites:/etc/caddy/sites:ro
       - caddy-data:/data
       - caddy-config:/config
       # 静态资源(简历 PDF / 微信二维码)挂在 Caddy,不走应用

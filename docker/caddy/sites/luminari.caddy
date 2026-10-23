@@ -1,0 +1,6 @@
+# Luminari 生灵(独立容器,加入 docker_web 网络;见 luminari 仓库)
+luminari.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy luminari:8790
+}

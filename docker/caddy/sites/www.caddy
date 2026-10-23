@@ -1,0 +1,5 @@
+# www → 主域 301 跳转(需 www 的 A 记录指向本机,Caddy 自动签证书)
+www.{$DOMAIN} {
+	import accesslog
+	redir https://{$DOMAIN}{uri} permanent
+}

@@ -1,0 +1,9 @@
+# Agent Brain 网页端(独立容器,加入 docker_web 网络;见 agentbrain 仓库 web/)
+# 纯静态站点:无后端、无环境变量、不收集数据。容器 agentbrain-web 监听 80。
+# 用 webapp_append:容器自己已有一条严格 CSP(脚本/连接/表单全部锁死),
+# 这里只「追加」frame-ancestors,多条 CSP 头各自独立生效、取交集。
+brain.{$DOMAIN} {
+	import accesslog
+	import webapp_append
+	reverse_proxy brain:80
+}
