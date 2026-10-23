@@ -103,7 +103,7 @@ services:
   # 与 Opentodo / 易经同一套模式:给主站 iframe 嵌进应用栏;与博客共享 admin(SSO)——
   # 两边配同一个 SESSION_SECRET(在 docker/.env 里)。详见 StockApp 仓库 README.md。
   stock:
-    mem_limit: 512m
+    mem_limit: 1024m
     image: ghcr.io/zxlumen/stock-web:${STOCK_TAG:-latest}
     restart: unless-stopped
     env_file: .env
