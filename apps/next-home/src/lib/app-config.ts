@@ -18,6 +18,8 @@ const DEFAULT_APPS: AppItem[] = [
   { id: 'mbti', name: '心语', url: 'https://mbti.zxlumen.cn', icon: '/apps/mbti.png', openIn: 'panel', bind: 'mbti' },
   { id: 'attune', name: '无恙', url: 'attune.zxlumen.cn', icon: '/apps/attune.png', openIn: 'panel', bind: 'attune' },
   { id: 'photo', name: '光圈', url: 'photo.zxlumen.cn', icon: '/apps/photo.png', openIn: 'panel', bind: 'photo' },
+  // 酒桌游戏:独立子域(game.*),主站应用栏 newtab 打开;房间状态在主站 SQLite
+  { id: 'game', name: '酒桌', url: 'game.zxlumen.cn', icon: '/apps/game.png', openIn: 'newtab' },
   // 访客沙盒:公开 opencode web,newtab 打开(见 docs/PLAYGROUND.md);bind 留空 → app_click
   { id: 'code-sandbox', name: '代码沙盒', url: 'code-sandbox.zxlumen.cn', icon: '/apps/code-sandbox.png', openIn: 'newtab' },
 ]

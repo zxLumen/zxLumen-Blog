@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import "@zx/shared/styles.css";
 import "./luminari-floats.css";
 import {
@@ -58,6 +58,14 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // game.zxlumen.cn 是独立酒桌应用：同一个 Next 实例，但不套主站顶栏/页脚/应用栏。
+  // 本机直接访问 /games/* 仍保留主站外壳，方便从主页应用栏进入。
+  const host = ((await headers()).get("host") ?? "").split(":")[0].toLowerCase();
+  const gameHost = (
+    process.env.GAME_HOST || `game.${process.env.DOMAIN || "zxlumen.cn"}`
+  ).split(":")[0].toLowerCase();
+  const standaloneGame = host === gameHost;
+
   const admin = await isAdmin();
   const contacts = await getClientContacts();
   const { PROFILE } = await getSiteContent();
@@ -84,30 +92,37 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       lang="zh-CN"
       data-theme={appearance.defaultTheme}
       data-layout={appearance.defaultLayout}
-      data-apps={apps.length > 0 ? "1" : undefined}
+      data-apps={!standaloneGame && apps.length > 0 ? "1" : undefined}
+      data-standalone={standaloneGame ? "1" : undefined}
       suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: initScript }} />
       </head>
       <body>
-        <AppShell
-          nav={nav}
-          contacts={contacts}
-          profile={PROFILE}
-          apps={apps}
-          allowedThemeIds={appearance.themes}
-          allowedLayoutIds={appearance.layouts}
-          defaultTheme={appearance.defaultTheme}
-          defaultLayout={appearance.defaultLayout}
-          mockId={mockCid || undefined}
-          admin={admin && !mockCid}
-          floatsDismissable={appearance.floatsDismissable}
-          extra={adminTools}
-        >
-          {children}
-        </AppShell>
-        <LuminariFloatsClient dismissable={appearance.floatsDismissable} />
+        {standaloneGame ? (
+          children
+        ) : (
+          <AppShell
+            nav={nav}
+            contacts={contacts}
+            profile={PROFILE}
+            apps={apps}
+            allowedThemeIds={appearance.themes}
+            allowedLayoutIds={appearance.layouts}
+            defaultTheme={appearance.defaultTheme}
+            defaultLayout={appearance.defaultLayout}
+            mockId={mockCid || undefined}
+            admin={admin && !mockCid}
+            floatsDismissable={appearance.floatsDismissable}
+            extra={adminTools}
+          >
+            {children}
+          </AppShell>
+        )}
+        {standaloneGame ? null : (
+          <LuminariFloatsClient dismissable={appearance.floatsDismissable} />
+        )}
       </body>
     </html>
   );
