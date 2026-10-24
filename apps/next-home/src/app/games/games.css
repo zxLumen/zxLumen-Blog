@@ -1038,6 +1038,102 @@ html[data-standalone='1'] .hub-page {
   line-height: 1.5;
   text-align: center;
 }
+.ld-shake-progress {
+  padding: 14px;
+}
+.ld-shake-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--g-muted);
+  font-size: 11px;
+}
+.ld-shake-progress-head b {
+  color: var(--g-accent);
+  font-size: 12px;
+}
+.ld-shake-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.ld-shake-dots span {
+  padding: 4px 8px;
+  border: 1px dashed var(--g-line);
+  border-radius: 999px;
+  color: var(--g-muted);
+  font-size: 10px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.ld-shake-dots span.done {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--g-accent) 45%, transparent);
+  background: var(--g-accent-soft);
+  color: var(--g-accent);
+}
+.ld-shake-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 2px;
+}
+.ld-shake-cup-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.ld-shake-btn {
+  width: min(280px, 100%);
+  min-height: 58px;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+}
+.ld-shake-btn:not(:disabled) {
+  animation: ready-pulse 2.4s ease-in-out infinite;
+}
+.ld-cup-player.done {
+  border-color: color-mix(in srgb, var(--g-accent) 28%, var(--g-line));
+}
+.ld-cup-name span.shaken {
+  color: var(--g-accent);
+}
+.ld-cup-name span.waiting {
+  color: var(--g-warn);
+}
+.ld-cup.waiting-cup {
+  opacity: 0.46;
+}
+.ld-open-box {
+  border-color: color-mix(in srgb, var(--g-line) 80%, transparent);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.ld-open-box.ready {
+  border-color: color-mix(in srgb, var(--g-danger) 42%, var(--g-line));
+  box-shadow: 0 18px 60px -42px var(--g-danger);
+}
+.ld-open-btn {
+  width: 100%;
+  min-height: 56px;
+  font-size: 19px;
+  letter-spacing: 0.12em;
+}
+.ld-open-box.ready .ld-open-btn:not(:disabled) {
+  background: linear-gradient(135deg, #ff6b7a, #d92e44);
+  border-color: #ff8b96;
+  color: #fff;
+  box-shadow: 0 12px 34px -14px rgba(255, 70, 90, 0.85);
+  animation: ready-pulse 2.4s ease-in-out infinite;
+}
+.ld-totals-note {
+  margin: 10px 0 0;
+  color: var(--g-muted);
+  font-size: 10px;
+  line-height: 1.55;
+  text-align: center;
+}
 .ld-rolling {
   display: flex;
   flex-direction: column;

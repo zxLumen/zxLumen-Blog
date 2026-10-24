@@ -1,15 +1,12 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
 import { GAME_BY_ID } from '@/lib/games/catalog'
 import {
   DICE_PER_PLAYER,
-  bidLabel,
-  checkBid,
-  type BidMode,
-  type LiarView,
   type LiarSettings,
+  type LiarView,
 } from '@/lib/games/liars-dice-shared'
 import type { PlayerView } from '@/lib/games/types'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -47,47 +44,21 @@ function RulesCard() {
     <details className="game-side-card ld-rules" open>
       <summary>规则速查</summary>
       <ul>
-        <li>每人 5 颗骰，只看得到自己的；一局只摇一次，刷新也不会重摇。</li>
-        <li><b>飞</b>：1 点万能；<b>斋</b>：1 只算 1，且 1 点最大。</li>
-        <li>斋转飞要双倍或 +2（房主在大厅可设）；飞转斋可少 1 个。</li>
-        <li>豹子：含 1 凑成五同 <b>+1</b>，五个完全相同 <b>+2</b>。</li>
-        <li>五颗全不同（顺子）服务端自动重摇，摇完直接开始叫骰。</li>
-        <li>开骰后实际数量 ≥ 叫数 → 叫骰成立，开的人输；否则叫的人输。</li>
+        <li>每人 5 颗骰，只看得到自己的。</li>
+        <li><b>每个人自己点一次「摇骰」</b>；所有人点完才能开骰，一个人点不会替全桌摇。</li>
+        <li>服务端生成，一局只能摇一次，刷新/重进不会重摇。</li>
+        <li>五颗全不同（顺子）服务端自动重摇。</li>
+        <li>开骰后同时给出斋 / 飞两套各点数总计，机器不判输赢。</li>
+        <li>豹子：含 1 凑成五同 <b>+1</b>，五个完全相同 <b>+2</b>；房主可关。</li>
       </ul>
-      <p>开骰结果只做参考，最终按你们线下的规矩判。</p>
+      <p>开骰后按你们线下的规矩看总骰数判输赢。</p>
     </details>
-  )
-}
-
-function BidHistory({ data }: { data: LiarView }) {
-  const bids = data.bids
-  if (bids.length === 0) {
-    return (
-      <div className="game-side-card">
-        <h3>叫骰记录</h3>
-        <p className="game-side-empty">还没有人叫骰</p>
-      </div>
-    )
-  }
-  return (
-    <div className="game-side-card">
-      <h3>叫骰记录</h3>
-      <ol className="ld-history">
-        {bids.slice(-8).map((bid) => (
-          <li key={bid.id} className={bid.id === data.currentBid?.id ? 'current' : ''}>
-            <span>#{bid.id}</span>
-            <b>{bidLabel(bid)}</b>
-          </li>
-        ))}
-      </ol>
-    </div>
   )
 }
 
 function TotalsTable({ data }: { data: LiarView }) {
   const reveal = data.reveal
   if (!reveal) return null
-  const activeMode = reveal.bid.mode
   return (
     <div className="ld-totals-wrap">
       <div className="ld-totals-head">
@@ -98,35 +69,35 @@ function TotalsTable({ data }: { data: LiarView }) {
           <span>颗骰子在场</span>
         </div>
         <div className="ld-totals-legend">
-          <span className={activeMode === 'zhai' ? 'active' : ''}>斋 · 1 不算万能</span>
-          <span className={activeMode === 'fei' ? 'active' : ''}>飞 · 1 万能</span>
+          <span>斋 · 1 不算万能</span>
+          <span>飞 · 1 万能</span>
         </div>
       </div>
       <table className="ld-totals">
         <thead>
           <tr>
             <th>点数</th>
-            <th className={activeMode === 'zhai' ? 'active' : ''}>斋</th>
-            <th className={activeMode === 'fei' ? 'active' : ''}>飞</th>
+            <th>斋</th>
+            <th>飞</th>
           </tr>
         </thead>
         <tbody>
           {FACES.map((face) => (
-            <tr key={face} className={reveal.bid.face === face ? 'target' : ''}>
+            <tr key={face}>
               <td>
                 <span className={`ld-mini-face face-${face}`}>{face}</span>
-                {reveal.bid.face === face ? <em>叫点</em> : null}
               </td>
-              <td className={activeMode === 'zhai' ? 'active' : ''}>
+              <td>
                 <CountUp value={reveal.totalsZhai[face] ?? 0} duration={500} />
               </td>
-              <td className={activeMode === 'fei' ? 'active' : ''}>
+              <td>
                 <CountUp value={reveal.totalsFei[face] ?? 0} duration={500} />
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      <p className="ld-totals-note">按你们这局约定的斋 / 飞口径看对应列；App 只报数，不判输赢。</p>
     </div>
   )
 }
@@ -138,29 +109,26 @@ function PlayerDiceGrid({
   room: LiarRoom
   data: LiarView
 }) {
-  const reveal = data.reveal
-  if (!reveal) return null
+  if (!data.reveal) return null
   return (
     <div className="ld-reveal-players">
       {room.players.map((player, index) => {
-        const entry = reveal.playerDice.find((p) => p.playerId === player.id)
-        const isOpener = reveal.openerId === player.id
-        const isBidder = reveal.bidderId === player.id
+        const entry = data.reveal?.playerDice.find((p) => p.playerId === player.id)
         return (
           <div
             key={player.id}
-            className={`ld-reveal-player${reveal.loserId === player.id ? ' loser' : ''}${isOpener ? ' opener' : ''}${isBidder ? ' bidder' : ''}`}
+            className="ld-reveal-player"
             style={{ '--reveal-delay': `${index * 90}ms` } as React.CSSProperties}
           >
             <div className="ld-reveal-player-head">
               <span className="game-dot online" />
               <b>{player.name}</b>
-              {isOpener ? <em className="ld-tag opener">开骰</em> : null}
-              {isBidder ? <em className="ld-tag bidder">被开</em> : null}
-              {reveal.loserId === player.id ? <em className="ld-tag loser">输</em> : null}
-              <LeopardBadge kind={entry?.kind ?? 'none'} />
+              <LeopardBadge kind={data.settings.leopard ? entry?.kind ?? 'none' : 'none'} />
             </div>
-            <DiceHand dice={entry?.dice ?? []} kind={entry?.kind} />
+            <DiceHand
+              dice={entry?.dice ?? []}
+              kind={data.settings.leopard ? entry?.kind : 'none'}
+            />
           </div>
         )
       })}
@@ -177,44 +145,6 @@ function SettingsEditor({
 }) {
   return (
     <div className="ld-settings">
-      <div className="ld-setting-row">
-        <span>起叫</span>
-        <div className="game-seg tiny">
-          <button
-            type="button"
-            className={settings.startCount === 'players' ? 'active' : ''}
-            onClick={() => onChange({ ...settings, startCount: 'players' })}
-          >
-            按人数
-          </button>
-          <button
-            type="button"
-            className={settings.startCount === 'two' ? 'active' : ''}
-            onClick={() => onChange({ ...settings, startCount: 'two' })}
-          >
-            2 个起
-          </button>
-        </div>
-      </div>
-      <div className="ld-setting-row">
-        <span>斋转飞</span>
-        <div className="game-seg tiny">
-          <button
-            type="button"
-            className={settings.zhaiToFei === 'double' ? 'active' : ''}
-            onClick={() => onChange({ ...settings, zhaiToFei: 'double' })}
-          >
-            双倍
-          </button>
-          <button
-            type="button"
-            className={settings.zhaiToFei === 'plus2' ? 'active' : ''}
-            onClick={() => onChange({ ...settings, zhaiToFei: 'plus2' })}
-          >
-            +2
-          </button>
-        </div>
-      </div>
       <div className="ld-setting-row">
         <span>豹子加成</span>
         <div className="game-seg tiny">
@@ -250,41 +180,11 @@ export function LiarDiceGame() {
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null)
   const [rolling, setRolling] = useState(false)
   const [revealFx, setRevealFx] = useState(false)
-  const roundRef = useRef(0)
-  const lastPhaseRef = useRef('')
-  const lastDraftKeyRef = useRef('')
-  const rollTimerRef = useRef<number | null>(null)
   const revealTimerRef = useRef<number | null>(null)
+  const rollTimerRef = useRef<number | null>(null)
+  const lastPhaseRef = useRef('')
 
-  const [q, setQ] = useState(2)
-  const [face, setFace] = useState(2)
-  const [mode, setMode] = useState<BidMode>('fei')
-  const bidBoxRef = useRef<HTMLDivElement | null>(null)
-
-  const prevBid = data?.currentBid ?? null
-  const yourTurn = !!data && data.turnId === room?.you.id
-  const check = useMemo(
-    () => checkBid(prevBid, { q, face, mode }, data?.settings ?? { startCount: 'players', zhaiToFei: 'double', leopard: true }, room?.players.length ?? 2),
-    [data?.settings, face, mode, prevBid, q, room?.players.length],
-  )
-
-  // 新一轮：摇骰动画。不是轮询到旧状态也播，只在 roundNo 变化时触发。
-  useEffect(() => {
-    if (!room || !data) return
-    if (data.roundNo > 0 && data.roundNo !== roundRef.current) {
-      roundRef.current = data.roundNo
-      if (room.phase === 'bidding') {
-        if (rollTimerRef.current) window.clearTimeout(rollTimerRef.current)
-        window.setTimeout(() => setRolling(true), 0)
-        rollTimerRef.current = window.setTimeout(() => {
-          setRolling(false)
-          rollTimerRef.current = null
-        }, 1150)
-      }
-    }
-  }, [data, room])
-
-  // 开骰：一次性「开！」动效
+  // 开骰：一次性「开！」动效。不要每次轮询都重置，所以用 ref 记相位并用独立计时器。
   useEffect(() => {
     if (!room) return
     if (room.phase === 'revealed' && lastPhaseRef.current !== 'revealed') {
@@ -300,62 +200,13 @@ export function LiarDiceGame() {
     lastPhaseRef.current = room.phase
   }, [room])
 
-  // 卸载时清掉动画计时器
   useEffect(
     () => () => {
-      if (rollTimerRef.current) window.clearTimeout(rollTimerRef.current)
       if (revealTimerRef.current) window.clearTimeout(revealTimerRef.current)
+      if (rollTimerRef.current) window.clearTimeout(rollTimerRef.current)
     },
     [],
   )
-
-  // 手机端轮到自己时，把操作面板滚进视野（只滚一次，不跟轮询反复抢滚动）
-  useEffect(() => {
-    if (!yourTurn || room?.phase !== 'bidding') return
-    if (window.innerWidth >= 860) return
-    const timer = window.setTimeout(() => {
-      bidBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 420)
-    return () => window.clearTimeout(timer)
-  }, [room?.phase, yourTurn])
-
-  // 轮到自己的时候，把叫骰草稿重置成一个合法的「下一口」
-  useEffect(() => {
-    if (!data || !room) return
-    const key = `${data.currentBid?.id ?? 'none'}:${data.turnId ?? 'none'}`
-    if (key === lastDraftKeyRef.current) return
-    lastDraftKeyRef.current = key
-    const timer = window.setTimeout(() => {
-      const prev = data.currentBid
-      if (!prev) {
-        setMode('fei')
-        setQ(data.minStart)
-        setFace(2)
-        return
-      }
-      const nextMode: BidMode = prev.mode
-      let nextFace = prev.face
-      let nextQ = prev.q
-      if (prev.mode === 'zhai') {
-        if (prev.face < 6) nextFace = prev.face + 1
-        else if (prev.face === 6) nextFace = 1
-        else {
-          nextFace = 2
-          nextQ = prev.q + 1
-        }
-      } else {
-        if (prev.face < 6) nextFace = prev.face + 1
-        else {
-          nextFace = 2
-          nextQ = prev.q + 1
-        }
-      }
-      setMode(nextMode)
-      setQ(nextQ)
-      setFace(nextFace)
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [data, room])
 
   if (checking) {
     return (
@@ -380,86 +231,10 @@ export function LiarDiceGame() {
     )
   }
 
-  const yourDice = data.yourDice
   const phase = room.phase
-  const total = data.totalDice
-
-  const changeMode = (nextMode: BidMode) => {
-    setMode(nextMode)
-    if (nextMode === 'zhai') {
-      setFace((current) => (current === 1 ? 1 : current))
-      if (prevBid?.mode === 'fei') {
-        setQ(Math.max(2, prevBid.q))
-        setFace(1)
-      }
-    } else {
-      setFace((current) => (current === 1 ? 2 : current))
-      if (prevBid?.mode === 'zhai') {
-        setQ(
-          data.settings.zhaiToFei === 'double'
-            ? Math.max(2, prevBid.q * 2)
-            : Math.max(2, prevBid.q + 2),
-        )
-        setFace(2)
-      }
-    }
-  }
-
-  const chooseFace = (nextFace: number) => {
-    setFace(nextFace)
-    if (nextFace === 1) setMode('zhai')
-  }
-
-  const submitBid = () => {
-    if (!check.ok || !yourTurn) return
-    const candidate = { q, face, mode: check.mode }
-    const special = check.mode === 'zhai' || prevBid?.mode === 'zhai'
-    if (!special) {
-      void act({ type: 'bid', ...candidate })
-      return
-    }
-    setConfirm({
-      title: check.mode === 'zhai' ? '确认叫斋？' : '确认飞（破斋）？',
-      description: (
-        <>
-          <p>
-            你将叫 <b>{q} 个 {face}</b>，模式 <b>{check.mode === 'zhai' ? '斋' : '飞'}</b>。
-          </p>
-          <p>
-            {check.mode === 'zhai'
-              ? '斋：1 点不再万能，只按实际点数计算；1 点成为最大点。'
-              : '飞：解除斋，1 点恢复万能；这手叫数已经按斋转飞的门槛校验过。'}
-          </p>
-        </>
-      ),
-      confirmText: check.mode === 'zhai' ? '确认叫斋' : '确认飞',
-      onConfirm: () => {
-        setConfirm(null)
-        void act({ type: 'bid', ...candidate })
-      },
-    })
-  }
-
-  const submitOpen = () => {
-    if (!prevBid || !yourTurn) return
-    setConfirm({
-      title: '确认开骰？',
-      description: (
-        <>
-          <p>
-            开 <b>{bidLabel(prevBid)}</b>。开骰后本局立即结束，亮出所有人的骰子。
-          </p>
-          <p>叫骰成立 → 开骰的人输；叫骰不成立 → 被开的人输。开完就不能再改口了。</p>
-        </>
-      ),
-      confirmText: '开！',
-      tone: 'danger',
-      onConfirm: () => {
-        setConfirm(null)
-        void act({ type: 'open' })
-      },
-    })
-  }
+  const isHost = room.you.isHost
+  const shakenCount = data.shakenIds.length
+  const playerCount = room.players.length
 
   const goHub = () => {
     void leave().then(() => router.push('/games'))
@@ -482,6 +257,19 @@ export function LiarDiceGame() {
     })
   }
 
+  const requestKick = (target: PlayerView) => {
+    setConfirm({
+      title: `把 ${target.name} 移出房间？`,
+      description: '如果他是不小心关掉页面，移出后他的 cookie 就回不到这局了；本局会回到大厅重新开始。',
+      confirmText: '移出房间',
+      tone: 'danger',
+      onConfirm: () => {
+        setConfirm(null)
+        void act({ type: 'kick', targetId: target.id })
+      },
+    })
+  }
+
   const requestLobby = () => {
     setConfirm({
       title: '回到大厅？',
@@ -494,15 +282,34 @@ export function LiarDiceGame() {
     })
   }
 
-  const requestKick = (target: PlayerView) => {
+  const shake = () => {
+    if (rolling || data.yourShaken) return
+    setRolling(true)
+    if (rollTimerRef.current) window.clearTimeout(rollTimerRef.current)
+    rollTimerRef.current = window.setTimeout(() => {
+      setRolling(false)
+      rollTimerRef.current = null
+    }, 950)
+    void act({ type: 'shake' }).then((ok) => {
+      if (!ok) setRolling(false)
+    })
+  }
+
+  const requestOpen = () => {
+    if (!data.allShaken) return
     setConfirm({
-      title: `把 ${target.name} 移出房间？`,
-      description: '如果他是不小心关掉页面，移出后他的 cookie 就回不到这局了；本局会回到大厅重新开始。',
-      confirmText: '移出房间',
+      title: '确认开骰？',
+      description: (
+        <>
+          <p>所有人已经摇完，开骰后立即亮出全部骰子。</p>
+          <p>App 会给出总骰数、斋 / 飞两套各点数总计；输赢由你们线下判断。</p>
+        </>
+      ),
+      confirmText: '开！',
       tone: 'danger',
       onConfirm: () => {
         setConfirm(null)
-        void act({ type: 'kick', targetId: target.id })
+        void act({ type: 'open' })
       },
     })
   }
@@ -529,16 +336,16 @@ export function LiarDiceGame() {
                 <div>
                   <div className="ld-eyebrow">房间已就绪</div>
                   <h2>{room.code}</h2>
-                  <p>把房间号告诉同桌的人，等大家进来就可以开摇。</p>
+                  <p>把房间号告诉同桌的人；开一局后每个人都要自己点一次摇骰。</p>
                 </div>
               </div>
               <div className="ld-lobby-stats">
                 <span><b>{room.players.length}</b> 人在房间</span>
-                <span><b>{total}</b> 颗骰子</span>
-                <span><b>{data.minStart}</b> 个起叫</span>
+                <span><b>{data.totalDice}</b> 颗骰子</span>
+                <span><b>{playerCount}</b> 人各摇一次</span>
               </div>
               {data.abortNote ? <div className="game-alert soft">{data.abortNote}</div> : null}
-              {room.you.isHost ? (
+              {isHost ? (
                 <>
                   <SettingsEditor
                     settings={data.settings}
@@ -550,55 +357,56 @@ export function LiarDiceGame() {
                     disabled={busy || room.players.length < 2}
                     onClick={() => void act({ type: 'start' })}
                   >
-                    {room.players.length < 2 ? '至少 2 人才能开局' : '开始摇骰'}
+                    {room.players.length < 2 ? '至少 2 人才能开局' : '开一局，大家分别摇骰'}
                   </button>
-                  <p className="ld-hint">摇骰不需要确认；一局只摇一次，服务端生成，刷新也不会变。</p>
+                  <p className="ld-hint">开一局只建局，不会替任何人摇骰；每个人都要自己点。</p>
                 </>
               ) : (
-                <p className="ld-wait-host">等房主开始摇骰…</p>
+                <p className="ld-wait-host">等房主开一局…</p>
               )}
             </section>
           ) : null}
 
-          {phase === 'bidding' ? (
+          {phase === 'shaking' ? (
             <section className="ld-table">
               <div className="ld-table-top">
                 <div>
-                  <div className="ld-eyebrow">第 {data.roundNo} 局</div>
-                  <h2>{yourTurn ? '轮到你' : '等对手'}</h2>
+                  <div className="ld-eyebrow">第 {data.roundNo} 局 · 摇骰</div>
+                  <h2>
+                    {!data.yourShaken ? '该你摇' : data.allShaken ? '都摇完了' : '等其他人'}
+                  </h2>
                   <p>
-                    {yourTurn
-                      ? '叫一个更大的数，或者直接开上家。'
-                      : `等 ${room.players.find((p) => p.id === data.turnId)?.name ?? '对手'} 叫骰或开骰。`}
+                    {!data.yourShaken
+                      ? '点下面的「摇骰」，只能摇一次，摇完不能改。'
+                      : data.allShaken
+                        ? '所有人已经摇完，任意人都可以点开骰。'
+                        : '你的骰子已经锁定，等其他人点完摇骰。'}
                   </p>
                 </div>
                 <div className="ld-total-pill">
-                  <span>场上</span>
-                  <b>{total}</b>
-                  <span>颗</span>
+                  <span>已摇</span>
+                  <b>{shakenCount}/{playerCount}</b>
+                  <span>人</span>
                 </div>
               </div>
 
-              {prevBid ? (
-                <div className={`ld-current-bid${yourTurn ? ' hot' : ''}`}>
-                  <div>
-                    <span className="ld-bid-by">
-                      {room.players.find((p) => p.id === prevBid.playerId)?.name ?? '玩家'} 叫
+              <div className="ld-shake-progress game-card">
+                <div className="ld-shake-progress-head">
+                  <span>本局进度</span>
+                  <b>{data.allShaken ? '全部摇完，可以开骰' : `还有 ${playerCount - shakenCount} 人没摇`}</b>
+                </div>
+                <div className="ld-shake-dots">
+                  {room.players.map((player) => (
+                    <span
+                      key={player.id}
+                      className={data.shakenIds.includes(player.id) ? 'done' : ''}
+                      title={`${player.name}：${data.shakenIds.includes(player.id) ? '已摇' : '未摇'}`}
+                    >
+                      {player.name}
                     </span>
-                    <strong>{bidLabel(prevBid)}</strong>
-                  </div>
-                  <span className={`ld-mode-badge ${prevBid.mode}`}>
-                    {prevBid.mode === 'zhai' ? '斋 · 1 不万能' : '飞 · 1 万能'}
-                  </span>
+                  ))}
                 </div>
-              ) : (
-                <div className="ld-current-bid empty">
-                  <div>
-                    <span className="ld-bid-by">还没有人叫骰</span>
-                    <strong>本局由 {room.players.find((p) => p.id === data.starterId)?.name ?? '玩家'} 先叫</strong>
-                  </div>
-                </div>
-              )}
+              </div>
 
               <div className="ld-my-dice game-card">
                 <div className="ld-section-head">
@@ -608,185 +416,116 @@ export function LiarDiceGame() {
                   </div>
                   <LeopardBadge kind={data.settings.leopard ? data.yourKind : 'none'} />
                 </div>
-                {rolling ? (
-                  <div className="ld-rolling">
-                    <DiceHand dice={[]} rolling />
-                    <p>摇骰中… 一局只摇这一次</p>
+                {!data.yourShaken || rolling ? (
+                  <div className="ld-shake-stage">
+                    <div className="ld-shake-cup-row">
+                      {Array.from({ length: DICE_PER_PLAYER }, (_, i) => (
+                        <PipDie key={i} hidden rolling={rolling} delay={i * 55} />
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="game-btn primary ld-shake-btn"
+                      disabled={busy || rolling}
+                      onClick={shake}
+                    >
+                      {rolling ? '摇骰中…' : '摇骰'}
+                    </button>
+                    <p className="ld-dice-note">一局只能摇一次；五颗全不同会自动重摇。</p>
                   </div>
                 ) : (
-                  <DiceHand dice={yourDice} kind={data.settings.leopard ? data.yourKind : 'none'} />
+                  <>
+                    <DiceHand
+                      dice={data.yourDice}
+                      kind={data.settings.leopard ? data.yourKind : 'none'}
+                    />
+                    <p className="ld-dice-note">
+                      {data.allShaken ? '所有人都摇完了，可以开骰。' : '已摇好，等其他人点摇骰。'}
+                    </p>
+                  </>
                 )}
-                <p className="ld-dice-note">
-                  {data.settings.leopard
-                    ? '豹子已计入开骰统计；五颗全不同会自动重摇。'
-                    : '本房关闭了豹子加成；五颗全不同会自动重摇。'}
-                </p>
+              </div>
+
+              <div className={`ld-open-box game-card${data.allShaken ? ' ready' : ''}`}>
+                <div className="ld-section-head">
+                  <div>
+                    <span className="ld-eyebrow">开骰</span>
+                    <h3>所有人摇完后才能开</h3>
+                  </div>
+                  <span className={`ld-legal${data.allShaken ? ' ok' : ''}`}>
+                    {data.allShaken ? '可以开骰' : `还差 ${playerCount - shakenCount} 人`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="game-btn danger ld-open-btn"
+                  disabled={busy || !data.allShaken}
+                  onClick={requestOpen}
+                >
+                  开骰
+                </button>
+                <p className="ld-confirm-note">开骰前会二次确认；开骰后亮出所有人的骰子。</p>
               </div>
 
               <div className="ld-cups game-card">
                 <div className="ld-section-head">
                   <div>
                     <span className="ld-eyebrow">桌面</span>
-                    <h3>其他玩家的骰盅</h3>
+                    <h3>大家的骰盅</h3>
                   </div>
-                  <span className="ld-dim">{room.players.length} 人 · {total} 颗</span>
+                  <span className="ld-dim">{playerCount} 人 · {data.totalDice} 颗</span>
                 </div>
                 <div className="ld-cup-grid">
-                  {room.players.map((player) => (
-                    <div key={player.id} className={`ld-cup-player${player.id === data.turnId ? ' turn' : ''}`}>
-                      <div className="ld-cup-name">
-                        {player.name}
-                        {player.id === room.you.id ? <em>你</em> : null}
-                        {player.id === data.turnId ? <span>叫骰中</span> : null}
+                  {room.players.map((player) => {
+                    const done = data.shakenIds.includes(player.id)
+                    return (
+                      <div key={player.id} className={`ld-cup-player${done ? ' done' : ''}`}>
+                        <div className="ld-cup-name">
+                          {player.name}
+                          {player.id === room.you.id ? <em>你</em> : null}
+                          <span className={done ? 'shaken' : 'waiting'}>
+                            {done ? '已摇' : '未摇'}
+                          </span>
+                        </div>
+                        <div className="ld-cup-row">
+                          {Array.from({ length: DICE_PER_PLAYER }, (_, i) => (
+                            <span
+                              key={i}
+                              className={`ld-cup${!done ? ' waiting-cup' : ''}`}
+                              style={{ '--cup-delay': `${i * 60}ms` } as React.CSSProperties}
+                            >
+                              <i />
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <div className="ld-cup-row">
-                        {player.id === room.you.id
-                          ? Array.from({ length: DICE_PER_PLAYER }, (_, i) => (
-                              <PipDie
-                                key={i}
-                                value={yourDice[i]}
-                                hidden={rolling}
-                                rolling={rolling}
-                                delay={i * 55}
-                                kind={data.settings.leopard ? data.yourKind : 'none'}
-                              />
-                            ))
-                          : Array.from({ length: DICE_PER_PLAYER }, (_, i) => (
-                              <span
-                                key={i}
-                                className={`ld-cup${rolling ? ' shaking' : ''}`}
-                                style={{ '--cup-delay': `${i * 60}ms` } as React.CSSProperties}
-                              >
-                                <i />
-                              </span>
-                            ))}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
 
-              {yourTurn ? (
-                <div ref={bidBoxRef} className="ld-bid-box game-card">
-                  <div className="ld-section-head">
-                    <div>
-                      <span className="ld-eyebrow">你的操作</span>
-                      <h3>叫骰 / 开骰</h3>
-                    </div>
-                    <span className={`ld-legal${check.ok ? ' ok' : ''}`}>
-                      {check.ok ? '合法叫法' : check.reason}
-                    </span>
-                  </div>
-
-                  <div className="ld-bid-controls">
-                    <div className="ld-mode-switch">
-                      <button
-                        type="button"
-                        className={mode === 'fei' ? 'active fei' : ''}
-                        onClick={() => changeMode('fei')}
-                      >
-                        <b>飞</b>
-                        <span>1 万能</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={mode === 'zhai' ? 'active zhai' : ''}
-                        onClick={() => changeMode('zhai')}
-                      >
-                        <b>斋</b>
-                        <span>1 只算 1</span>
-                      </button>
-                    </div>
-
-                    <div className="ld-qty">
-                      <span>数量</span>
-                      <div>
-                        <button type="button" onClick={() => setQ((n) => Math.max(1, n - 1))} aria-label="减少数量">−</button>
-                        <b>{q}</b>
-                        <button type="button" onClick={() => setQ((n) => Math.min(99, n + 1))} aria-label="增加数量">+</button>
-                      </div>
-                    </div>
-
-                    <div className="ld-face-grid">
-                      {FACES.map((n) => (
-                        <button
-                          key={n}
-                          type="button"
-                          className={`ld-face-btn${face === n ? ' active' : ''}${n === 1 ? ' one' : ''}`}
-                          onClick={() => chooseFace(n)}
-                        >
-                          <span className={`ld-mini-face face-${n}`}>{n}</span>
-                          {n === 1 ? <em>最大</em> : null}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="ld-bid-preview">
-                    你要叫：<b>{bidLabel({ q, face, mode: check.mode })}</b>
-                    {!check.ok ? <em>{check.reason}</em> : null}
-                  </div>
-
-                  <div className="ld-actions">
-                    <button
-                      type="button"
-                      className="game-btn primary"
-                      disabled={busy || !check.ok}
-                      onClick={submitBid}
-                    >
-                      叫骰
-                    </button>
-                    <button
-                      type="button"
-                      className="game-btn danger"
-                      disabled={busy || !prevBid}
-                      onClick={submitOpen}
-                    >
-                      开骰
-                    </button>
-                  </div>
-                  <p className="ld-confirm-note">斋、飞、开都需要二次确认。</p>
-                </div>
-              ) : (
-                <div className="ld-waiting game-card">
-                  <span className="ld-wait-dot" />
-                  <p>等 <b>{room.players.find((p) => p.id === data.turnId)?.name ?? '对手'}</b> 叫骰…</p>
-                  <span className="ld-dim">你的骰子已经锁定，本局不能重摇</span>
-                </div>
-              )}
+              <div className="ld-waiting game-card">
+                <span className="ld-wait-dot" />
+                <p>
+                  {data.allShaken
+                    ? '所有人都摇完了，等任意一个人开骰。'
+                    : `已摇 ${shakenCount}/${playerCount}，等其他人自己点摇骰…`}
+                </p>
+                <span className="ld-dim">一个人点不会替全桌摇</span>
+              </div>
             </section>
           ) : null}
 
           {phase === 'revealed' && data.reveal ? (
             <section className="ld-reveal">
-              <div className={`ld-reveal-stamp${data.reveal.success ? ' success' : ' fail'}`}>
+              <div className="ld-reveal-stamp">
                 <span>开</span>
                 <div>
-                  <b>{data.reveal.success ? '叫骰成立' : '叫骰不成立'}</b>
+                  <b>全部骰子已亮出</b>
                   <p>
-                    {data.reveal.success
-                      ? `开骰的 ${room.players.find((p) => p.id === data.reveal?.openerId)?.name} 输`
-                      : `叫骰的 ${room.players.find((p) => p.id === data.reveal?.bidderId)?.name} 输`}
+                    {room.players.find((p) => p.id === data.reveal?.openedBy)?.name ?? '有人'} 开的骰；
+                    按总骰数线下判输赢。
                   </p>
-                </div>
-              </div>
-
-              <div className="ld-reveal-bid game-card">
-                <div>
-                  <span className="ld-eyebrow">本局叫数</span>
-                  <strong>{bidLabel(data.reveal.bid)}</strong>
-                </div>
-                <div>
-                  <span className="ld-eyebrow">实际数量（{data.reveal.bid.mode === 'zhai' ? '斋' : '飞'}）</span>
-                  <strong className="ld-actual">
-                    <CountUp value={data.reveal.actual} /> 个
-                  </strong>
-                </div>
-                <div>
-                  <span className="ld-eyebrow">判定</span>
-                  <strong className={data.reveal.success ? 'ld-win' : 'ld-lose'}>
-                    {data.reveal.actual} {data.reveal.success ? '≥' : '<'} {data.reveal.bid.q}
-                  </strong>
                 </div>
               </div>
 
@@ -794,19 +533,25 @@ export function LiarDiceGame() {
               <PlayerDiceGrid room={room} data={data} />
 
               <div className="ld-next game-card">
-                {room.you.isHost ? (
-                  <NextRoundControls
-                    room={room}
-                    data={data}
-                    busy={busy}
-                    onStart={(starterId) => void act({ type: 'start', starterId })}
-                    onLobby={requestLobby}
-                  />
+                {isHost ? (
+                  <div className="ld-next-actions">
+                    <button
+                      type="button"
+                      className="game-btn primary"
+                      disabled={busy}
+                      onClick={() => void act({ type: 'start' })}
+                    >
+                      开始下一局
+                    </button>
+                    <button type="button" className="game-btn ghost" disabled={busy} onClick={requestLobby}>
+                      回大厅（可加人）
+                    </button>
+                  </div>
                 ) : (
                   <p className="ld-wait-host">等房主开下一局…</p>
                 )}
                 <p className="ld-disclaimer">
-                  以上是机器按本房规则算出的参考结果；最终谁喝、谁赢，按你们线下的判定来。
+                  App 只展示总骰数和两套统计口径；最终谁输谁赢，按你们线下的判定来。
                 </p>
               </div>
             </section>
@@ -821,20 +566,15 @@ export function LiarDiceGame() {
             </div>
             <PlayerList
               room={room}
-              turnId={data.turnId}
-              isHost={room.you.isHost}
+              isHost={isHost}
               onKick={requestKick}
-              renderExtra={(player) =>
-                phase === 'revealed' && data.reveal
-                  ? data.reveal.loserId === player.id
-                    ? '本局输家'
-                    : ''
-                  : ''
-              }
+              renderExtra={(player) => {
+                if (phase !== 'shaking') return ''
+                return data.shakenIds.includes(player.id) ? '已摇' : '未摇'
+              }}
             />
             <p className="game-side-note">关掉页面不会退出，下次打开会凭 cookie 回到这里；离线太久可让房主移出。</p>
           </div>
-          {phase === 'bidding' ? <BidHistory data={data} /> : null}
           <RulesCard />
           <button type="button" className="ld-switch-game" onClick={requestLeave}>换个游戏 →</button>
         </aside>
@@ -864,46 +604,6 @@ export function LiarDiceGame() {
         onConfirm={() => confirm?.onConfirm()}
         onClose={() => setConfirm(null)}
       />
-    </div>
-  )
-}
-
-function NextRoundControls({
-  room,
-  data,
-  busy,
-  onStart,
-  onLobby,
-}: {
-  room: LiarRoom
-  data: LiarView
-  busy: boolean
-  onStart: (starterId: string) => void
-  onLobby: () => void
-}) {
-  const defaultStarter = data.reveal?.loserId ?? room.players[0]?.id ?? ''
-  const [starterId, setStarterId] = useState(defaultStarter)
-
-  return (
-    <div className="ld-next-controls">
-      <div>
-        <span className="ld-eyebrow">下一局先叫</span>
-        <select value={starterId} onChange={(event) => setStarterId(event.target.value)}>
-          {room.players.map((player) => (
-            <option key={player.id} value={player.id}>
-              {player.name}{player.id === data.reveal?.loserId ? '（上局输家）' : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="ld-next-actions">
-        <button type="button" className="game-btn primary" disabled={busy} onClick={() => onStart(starterId)}>
-          摇骰，开下一局
-        </button>
-        <button type="button" className="game-btn ghost" disabled={busy} onClick={onLobby}>
-          回大厅（可加人）
-        </button>
-      </div>
     </div>
   )
 }

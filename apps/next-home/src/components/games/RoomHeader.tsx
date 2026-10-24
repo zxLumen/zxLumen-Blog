@@ -14,6 +14,7 @@ interface RoomHeaderProps {
 
 function phaseLabel(phase: string): string {
   if (phase === 'lobby') return '等人中'
+  if (phase === 'shaking') return '摇骰中'
   if (phase === 'revealed' || phase === 'exploded') return '本局结束'
   return '进行中'
 }
