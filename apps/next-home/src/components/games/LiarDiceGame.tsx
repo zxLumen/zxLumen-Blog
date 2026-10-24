@@ -62,42 +62,40 @@ function TotalsTable({ data }: { data: LiarView }) {
   return (
     <div className="ld-totals-wrap">
       <div className="ld-totals-head">
-        <div>
+        <div className="ld-total-summary">
           <span className="ld-total-big">
             <CountUp value={reveal.totalDice} />
           </span>
-          <span>颗骰子在场</span>
+          <span className="ld-total-label">颗骰子在场</span>
         </div>
         <div className="ld-totals-legend">
-          <span>斋 · 1 不算万能</span>
-          <span>飞 · 1 万能</span>
+          <span><b>斋</b> 1 不算万能</span>
+          <span><b>飞</b> 1 万能</span>
         </div>
       </div>
-      <table className="ld-totals">
-        <thead>
-          <tr>
-            <th>点数</th>
-            <th>斋</th>
-            <th>飞</th>
-          </tr>
-        </thead>
-        <tbody>
-          {FACES.map((face) => (
-            <tr key={face}>
-              <td>
-                <span className={`ld-mini-face face-${face}`}>{face}</span>
-              </td>
-              <td>
-                <CountUp value={reveal.totalsZhai[face] ?? 0} duration={500} />
-              </td>
-              <td>
-                <CountUp value={reveal.totalsFei[face] ?? 0} duration={500} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="ld-totals-note">按你们这局约定的斋 / 飞口径看对应列；App 只报数，不判输赢。</p>
+
+      <div className="ld-count-grid">
+        {FACES.map((face) => (
+          <div className="ld-count-card" key={face}>
+            <div className="ld-count-face">
+              <span className={`ld-mini-face face-${face}`}>{face}</span>
+              <span>{face} 点</span>
+            </div>
+            <div className="ld-count-values">
+              <div className="zhai">
+                <span>斋</span>
+                <b><CountUp value={reveal.totalsZhai[face] ?? 0} duration={500} /></b>
+              </div>
+              <div className="fei">
+                <span>飞</span>
+                <b><CountUp value={reveal.totalsFei[face] ?? 0} duration={500} /></b>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="ld-totals-note">按你们这局约定的斋 / 飞口径看对应数字；App 只报数，不判输赢。</p>
     </div>
   )
 }
