@@ -240,6 +240,15 @@ export function LiarDiceGame() {
     void leave().then(() => router.push('/games'))
   }
 
+  const scrollToTop = () => {
+    const reduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' })
+    })
+  }
+
   const requestLeave = () => {
     if (phase === 'lobby') {
       goHub()
@@ -289,9 +298,12 @@ export function LiarDiceGame() {
     rollTimerRef.current = window.setTimeout(() => {
       setRolling(false)
       rollTimerRef.current = null
+      // 布局从「摇骰按钮」切成「骰子」后页面高度会变，等落定后再滚一次到页首
+      scrollToTop()
     }, 950)
     void act({ type: 'shake' }).then((ok) => {
-      if (!ok) setRolling(false)
+      if (ok) window.setTimeout(scrollToTop, 80)
+      else setRolling(false)
     })
   }
 
@@ -309,7 +321,9 @@ export function LiarDiceGame() {
       tone: 'danger',
       onConfirm: () => {
         setConfirm(null)
-        void act({ type: 'open' })
+        void act({ type: 'open' }).then((ok) => {
+          if (ok) scrollToTop()
+        })
       },
     })
   }
