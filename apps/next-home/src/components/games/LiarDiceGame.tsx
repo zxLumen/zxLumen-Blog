@@ -58,7 +58,9 @@ function RulesCard() {
 
 function TotalsTable({ data }: { data: LiarView }) {
   const reveal = data.reveal
+  const [mode, setMode] = useState<'fei' | 'zhai'>('fei')
   if (!reveal) return null
+  const totals = mode === 'fei' ? reveal.totalsFei : reveal.totalsZhai
   return (
     <div className="ld-totals-wrap">
       <div className="ld-totals-head">
@@ -68,34 +70,47 @@ function TotalsTable({ data }: { data: LiarView }) {
           </span>
           <span className="ld-total-label">颗骰子在场</span>
         </div>
-        <div className="ld-totals-legend">
-          <span><b>斋</b> 1 不算万能</span>
-          <span><b>飞</b> 1 万能</span>
+
+        <div className="ld-stat-tabs" role="tablist" aria-label="统计口径">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'fei'}
+            className={mode === 'fei' ? 'active' : ''}
+            onClick={() => setMode('fei')}
+          >
+            飞<em>1 万能</em>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'zhai'}
+            className={mode === 'zhai' ? 'active' : ''}
+            onClick={() => setMode('zhai')}
+          >
+            斋<em>1 不算万能</em>
+          </button>
         </div>
       </div>
 
-      <div className="ld-count-grid">
+      <div className="ld-count-grid" data-mode={mode}>
         {FACES.map((face) => (
           <div className="ld-count-card" key={face}>
             <div className="ld-count-face">
               <span className={`ld-mini-face face-${face}`}>{face}</span>
               <span>{face} 点</span>
             </div>
-            <div className="ld-count-values">
-              <div className="zhai">
-                <span>斋</span>
-                <b><CountUp value={reveal.totalsZhai[face] ?? 0} duration={500} /></b>
-              </div>
-              <div className="fei">
-                <span>飞</span>
-                <b><CountUp value={reveal.totalsFei[face] ?? 0} duration={500} /></b>
-              </div>
+            <div className="ld-count-value">
+              <b><CountUp value={totals[face] ?? 0} duration={500} /></b>
+              <span>个</span>
             </div>
           </div>
         ))}
       </div>
 
-      <p className="ld-totals-note">按你们这局约定的斋 / 飞口径看对应数字；App 只报数，不判输赢。</p>
+      <p className="ld-totals-note">
+        默认按「飞」显示；如果这局按斋算，点上面的「斋」切换。
+      </p>
     </div>
   )
 }
