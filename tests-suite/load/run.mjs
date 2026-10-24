@@ -94,6 +94,16 @@ async function main() {
     process.exit(1)
   }
 
+  // 生产构建的首个页面请求会做一次冷启动（路由/DB/上游探测），耗时远高于稳态。
+  // 先各打一枪把热路径预热，否则 S0 的 p95<500ms 会被这一个请求直接打穿。
+  log('预热首页与留言接口 …')
+  for (let i = 0; i < 3; i += 1) {
+    await Promise.allSettled([
+      fetch(`${BASE}/`),
+      fetch(`${BASE}/api/comments?page=1&pageSize=20`),
+    ])
+  }
+
   const k6env = [`ZX_LOAD_BASE=${BASE}`]
   for (const k of ['ZX_GATEWAY_TOKEN', 'ZX_GATEWAY_MODEL', 'ZX_STATIC_PATHS', 'ZX_SOAK_DURATION', 'ZX_SOAK_VUS']) {
     if (process.env[k]) k6env.push(`${k}=${process.env[k]}`)
