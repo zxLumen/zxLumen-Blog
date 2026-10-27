@@ -1,0 +1,16 @@
+# OrderHub public entry. Copy to the existing Caddy sites directory:
+#   /home/ubuntu/zxLumen-Blog/docker/caddy/sites/orderhub.caddy
+# The Caddy container reaches the host systemd service via host.docker.internal.
+orderhub.{$DOMAIN} {
+	import accesslog
+	import deny
+	request_body {
+		max_size 20MB
+	}
+	reverse_proxy host.docker.internal:8000 {
+		transport http {
+			read_timeout 120s
+			write_timeout 120s
+		}
+	}
+}
