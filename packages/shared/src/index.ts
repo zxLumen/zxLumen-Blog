@@ -95,6 +95,10 @@ export type { GoModel, GoPrice } from './go-pricing.js'
 export { auditGatewayConfig, modelOptions, isModelInList } from './ai-gateway-audit.js'
 export type { GatewayAuditIssue, AuditIssueKind, AuditAppLike, AuditProviderLike } from './ai-gateway-audit.js'
 
+// OpenCode Go 订阅配额合并(本月已满的 workspace 不参与 5h/本周/本月)
+export { mergeGoQuota, GO_MONTHLY_CAP_PCT } from './go-quota.js'
+export type { GoQuota, GoQuotaWindow } from './go-quota.js'
+
 // CSV 解析(通用)
 export { parseCsv, num } from './csv.js'
 

@@ -1,4 +1,4 @@
-import { RANGES, type UsageRow } from '@zx/shared'
+import { RANGES, mergeGoQuota, type UsageRow } from '@zx/shared'
 import { granularityOf } from '@/lib/usage/range'
 import { codeToSource, errorCode } from '@/lib/usage/errors'
 import { REPORT_TOKEN, readJson } from '@/lib/db'
@@ -9,7 +9,6 @@ import {
   fetchUsageOpenCodeWs,
   filterUsageOpenCode,
   mergeUsageOpenCode,
-  mergeGoQuota,
   fetchGoQuotaWs,
   getWorkspaces,
   getLastData,

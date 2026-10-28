@@ -59,16 +59,8 @@ export const localIso = (d: Date) =>
 
 export const mergeUnique = (a: string[], b: string[]) => Array.from(new Set([...a, ...b]))
 
-export interface GoQuotaWindow {
-  percent: number
-  status?: string
-  resetsAt?: string
-}
-export interface GoQuota {
-  rolling?: GoQuotaWindow
-  weekly?: GoQuotaWindow
-  monthly?: GoQuotaWindow
-}
+// Go 配额的类型与合并规则统一在 shared 根(go-quota.ts),这里只做再导出
+export type { GoQuota, GoQuotaWindow } from '../../go-quota.js'
 export interface ZhipuQuotaLimit {
   type?: string
   unit?: number
