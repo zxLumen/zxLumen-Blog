@@ -1,14 +1,8 @@
-# 酒桌游戏(主站 Next 应用内的 /games/*;game 子域根路径重写到游戏库)
+# 酒桌游戏(独立仓库 zxLumen/game,独立容器 game:3000)
 #
-# 没有独立容器:房间状态存主站 SQLite(meta 表),这样同一套部署、同一套备份。
-# 根路径 / 重写到 /games,其余路径(/games/liars-dice、/_next、/api/games/*)原样
-# 交给 app:3000;Next 侧按 Host=game.{$DOMAIN} 关闭主站顶栏/页脚/应用栏。
+# 房间数据在 game-data 卷里,不再写主站 SQLite;Caddy 只做反代。
 game.{$DOMAIN} {
 	import accesslog
 	import webapp
-
-	@hub path /
-	rewrite @hub /games
-
-	reverse_proxy app:3000
+	reverse_proxy game:3000
 }

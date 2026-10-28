@@ -195,12 +195,29 @@ services:
     networks:
       - web
 
+  # 酒桌游戏(独立服务:骰子吹牛 / 数字炸弹 / 七八九;见 zxLumen/game 仓库)。
+  # 房间数据存 game-data 卷;Caddy 反代 game.${DOMAIN} → game:3000。
+  game:
+    mem_limit: 256m
+    image: ghcr.io/zxlumen/game-web:${GAME_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      GAME_DATA_DIR: /data
+    volumes:
+      - game-data:/data
+    expose:
+      - "3000"
+    networks:
+      - web
+
   caddy:
     mem_limit: 256m
     image: caddy:2.11.7
     restart: unless-stopped
     depends_on:
       - app
+      - game
     ports:
       - "80:80"
       - "443:443"
@@ -385,6 +402,7 @@ volumes:
   attune-data:
   mbti-data:
   photo-data:
+  game-data:
 
 networks:
   web:
