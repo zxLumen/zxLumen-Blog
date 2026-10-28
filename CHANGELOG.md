@@ -6,6 +6,12 @@
 
 ### 变更
 
+- **酒桌游戏拆为独立仓库 / 独立容器**:代码迁到 [`zxLumen/game`](https://github.com/zxLumen/game),
+  独立镜像 `ghcr.io/zxlumen/game-web`、容器 `game`、数据卷 `game-data`;`game.${DOMAIN}`
+  由 Caddy 直接反代 `game:3000`,不再走主站 Next。主站只保留应用栏「酒桌」入口与图标,
+  删除主站 `/games` 路由、游戏 API/组件和 Host 特殊布局;房间数据从主站 SQLite 迁到
+  独立 JSON 文件(`GAME_DATA_DIR/rooms.json`),旧房间不迁移。
+
 - **骰子吹牛改为「各摇各的 + 只开骰」**:取消喊骰 / 轮次 / 叫骰记录,保留「开骰」;
   每人必须自己点一次「摇骰」,全部人点完才能开,一个人点不会替全桌摇。开骰后只展示
   总骰数和每人骰子,输赢由线下判断;服务端仍保证一局只摇一次、顺子自动重摇、刷新/重进不重摇。
