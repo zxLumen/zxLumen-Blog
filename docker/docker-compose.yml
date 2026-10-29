@@ -211,6 +211,17 @@ services:
     networks:
       - web
 
+  # 冰壶大作战(独立服务:10 关闯关 + 爬塔;见 zxLumen/curling-gates 仓库)。
+  # 纯静态 nginx 镜像,无后端;Caddy 反代 curling.${DOMAIN} → curling:80。
+  curling:
+    mem_limit: 128m
+    image: ghcr.io/zxlumen/curling-web:${CURLING_TAG:-latest}
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks:
+      - web
+
   caddy:
     mem_limit: 256m
     image: caddy:2.11.7
@@ -218,6 +229,7 @@ services:
     depends_on:
       - app
       - game
+      - curling
     ports:
       - "80:80"
       - "443:443"

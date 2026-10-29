@@ -6,6 +6,13 @@
 
 ### 变更
 
+- **新增子应用「冰壶」(`curling.${DOMAIN}`)**:冰壶大作战 10 关闯关 + 爬塔原型迁到独立仓库
+  [`zxLumen/curling-gates`](https://github.com/zxLumen/curling-gates),纯静态 nginx 镜像
+  `ghcr.io/zxlumen/curling-web`(容器 `curling`,无后端、无持久化),Caddy 反代
+  `curling.${DOMAIN}` → `curling:80`(`docker/caddy/sites/curling.caddy`,`import webapp`
+  以便应用栏 iframe 内嵌);`deploy.sh` 增加 `CURLING_TAG` pull。应用栏新增「冰壶」入口
+  (图标 `curling.png`,面板内嵌)。
+
 - **Go 订阅配额条:「本月已用满」的 workspace 不再计入**:`5 小时 / 本周 / 本月` 三根条改成
   **只统计本月用量未达 100% 的 workspace** —— 用满后它自己的 5h/周 会掉到很低,混进平均会把
   「还剩多少余量」算得过于乐观(实测:两个已满 + 一个 0% 时,旧算法给 `2% / 13.7% / 66.7%`,

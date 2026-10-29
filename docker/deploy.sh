@@ -82,6 +82,9 @@ echo "[deploy] Caddy 配置校验通过"
   # 酒桌游戏:独立仓库 zxLumen/game 的 CI 推 latest
   ${SUDO:-} env GAME_TAG="${GAME_TAG:-latest}" docker compose pull game \
     || echo "[deploy] game 镜像拉取失败(可能尚未推送),跳过"
+  # 冰壶大作战:独立仓库 zxLumen/curling-gates 的 CI 推 latest
+  ${SUDO:-} env CURLING_TAG="${CURLING_TAG:-latest}" docker compose pull curling \
+    || echo "[deploy] curling 镜像拉取失败(可能尚未推送),跳过"
   ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
 
 # 服务器侧配置(Caddyfile / caddy/sites / compose)由 ci-run.sh 从仓库同步;

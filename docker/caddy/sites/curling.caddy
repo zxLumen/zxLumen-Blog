@@ -1,0 +1,8 @@
+# 冰壶大作战(独立容器:10 关闯关 + 爬塔;见 zxLumen/curling-gates 仓库)
+# 纯静态 nginx(容器内 80),无后端、无环境变量、不收集数据。
+# 会被主站 iframe 嵌进应用栏,所以用 webapp(允许 frame-ancestors)。
+curling.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy curling:80
+}
