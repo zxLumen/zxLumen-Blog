@@ -9,7 +9,8 @@ code-sandbox.{$DOMAIN} {
 	}
 }
 
-# 观众在沙盒里做的网站(独立域名;由 Opencode-Pocket ci-run.sh 自愈补上)
+# 观众在沙盒里做的网站(独立域名)。单一真相源:只在本文件定义,
+# 不要在 docker/Caddyfile 或 Opencode-Pocket 的 ci-run.sh 里重复追加。
 preview.{$DOMAIN} {
 	import accesslog
 	rewrite * /preview{path}

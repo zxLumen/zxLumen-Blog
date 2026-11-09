@@ -87,12 +87,33 @@ echo "[deploy] Caddy 配置校验通过"
     || echo "[deploy] curling 镜像拉取失败(可能尚未推送),跳过"
   ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
 
-# 服务器侧配置(Caddyfile / caddy/sites / compose)由 ci-run.sh 从仓库同步;
-# `up -d` 不会因挂载文件内容变化而重启 caddy,这里显式 reload 让它读到新配置。
-# 前面已 validate 过,这里失败就当真失败(不再静默跳过)。
+# 服务器侧配置(Caddyfile / caddy/sites / compose)由 ci-run.sh 从仓库同步。
+# Caddyfile 是「文件」bind-mount:ci-run.sh 用 mv 原子换 inode(避免半截文件),
+# 但运行中的容器仍绑定旧 inode —— 只 `caddy reload` 读到的是旧内容,新配置根本不生效
+# (本次故障即旧文件末尾残留的 preview 块与新 sites/sandbox.caddy 冲突 →
+#  ambiguous site definition)。必须重建容器,让 bind mount 重新解析到新 inode。
+# 前面已用「磁盘上的新配置」validate 通过,重建是安全的。
 if ${SUDO:-} docker compose ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
-  ${SUDO:-} docker compose exec -T -w /etc/caddy caddy caddy reload --config /etc/caddy/Caddyfile
-  echo "[deploy] caddy 已 reload"
+  echo "[deploy] 强制重建 caddy(让新 Caddyfile 的 inode 生效)"
+  if ! ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d --force-recreate --no-deps caddy; then
+    echo "[deploy] caddy 重建失败,恢复部署前备份后重试"
+    rollback_config || true
+    ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d --force-recreate --no-deps caddy
+  fi
+  # 配置错误会让 caddy 启动后立即退出,而 `up -d` 仍可能返回 0;这里确认它真的在跑。
+  for _ in 1 2 3 4 5; do
+    if ${SUDO:-} docker compose ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
+      break
+    fi
+    sleep 1
+  done
+  if ! ${SUDO:-} docker compose ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
+    echo "[deploy] caddy 重建后未运行,恢复部署前备份并再次重建:"
+    ${SUDO:-} docker compose logs --tail=20 caddy || true
+    rollback_config || true
+    ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d --force-recreate --no-deps caddy
+  fi
+  echo "[deploy] caddy 已重建"
 fi
 
 # 监控配置(observability/alloy.alloy 等)由 ci-run.sh 同步;alloy 以「文件」形式
