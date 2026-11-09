@@ -1,0 +1,13 @@
+# 一人公司 · 经营驾驶舱
+#
+# 与其它子应用不同:它**不在容器里**,跑在宿主机 :8080
+# (要读宿主机路径、sudo cat 卷里的文件、docker ps,进容器反而要挂一堆 host 目录)。
+# Caddy 容器用 extra_hosts 的 host.docker.internal 反代过去。
+#
+# 公开可看:出网前把绝对路径收敛成 ~,raw 采集明细不出网。
+# 想加回认证:caddy hash-password 生成后加 basic_auth { admin <hash> } 三行。
+company.{$DOMAIN} {
+	import secure
+	import accesslog
+	reverse_proxy host.docker.internal:8080
+}
