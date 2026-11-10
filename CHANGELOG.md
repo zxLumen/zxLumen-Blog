@@ -6,6 +6,15 @@
 
 ### 变更
 
+- **新增子应用「随口」(`voice.${DOMAIN}`)**:手机浏览器语音聊天(豆包式)独立仓库
+  [`zxLumen/voice-chat`](https://github.com/zxLumen/voice-chat),零依赖 Node + 原生前端 +
+  ffmpeg,镜像 `ghcr.io/zxlumen/voice-chat`(容器 `voice`,无状态:录音转写后即删、对话只存
+  浏览器)。链路:录音 → 16k mp3 → 网关 `/audio/transcriptions`(新增音频密钥
+  `provider-voice-asr` = SiliconFlow SenseVoice)→ 网关 `/chat/completions`
+  (令牌 `voice`,deepseek-v4.1-flash,reasoning_effort=none)→ 按句 `/audio/speech`
+  (CosyVoice2,暂时应用侧直连,待网关补该端点后切 `VOICE_TTS_MODE=gateway`)。
+  新增 caddy 站点 `voice.caddy`、compose 服务、应用栏入口 `voice`、sitemap 一行。
+
 - **Caddy 拦截凭据探测 + 补 robots/sitemap**:`(accesslog)` 统一引入 `(probes)`,对
   `.env` / `.git` / `.aws` / `.terraform` / `terraform.tfstate` 等明确的敏感配置路径直接
   `respond 444`(只匹配具体文件名,不拦 `/api`、`/_next`、静态资源与正常页面)。依据

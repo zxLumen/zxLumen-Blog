@@ -148,6 +148,7 @@ ROBOTS 200
   <url><loc>https://code-sandbox.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://stock.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://todo.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://voice.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://wear.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://yijing.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://zuiti.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>

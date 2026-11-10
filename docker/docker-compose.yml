@@ -243,6 +243,30 @@ services:
     networks:
       - web
 
+  # 随口(手机浏览器语音聊天;见 zxLumen/voice-chat 仓库)
+  # 录音→ffmpeg→网关转写→流式对话→按句合成;无状态,不存音频/对话。
+  voice:
+    mem_limit: 192m
+    image: ghcr.io/zxlumen/voice-chat:${VOICE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 8795
+      ZX_AI_GATEWAY_URL: http://app:3000/api/ai/v1
+      VOICE_AI_TOKEN: ${VOICE_AI_TOKEN:-}
+      VOICE_ASR_TOKEN: ${VOICE_ASR_TOKEN:-}
+      VOICE_ASR_MODEL: ${VOICE_ASR_MODEL:-FunAudioLLM/SenseVoiceSmall}
+      VOICE_MODEL: ${VOICE_MODEL:-deepseek-v4.1-flash}
+      VOICE_TTS_MODE: ${VOICE_TTS_MODE:-direct}
+      VOICE_TTS_BASE_URL: ${VOICE_TTS_BASE_URL:-https://api.siliconflow.cn/v1}
+      VOICE_TTS_KEY: ${VOICE_TTS_KEY:-}
+      VOICE_TTS_MODEL: ${VOICE_TTS_MODEL:-FunAudioLLM/CosyVoice2-0.5B}
+      VOICE_TTS_VOICE: ${VOICE_TTS_VOICE:-anna}
+    expose:
+      - "8795"
+    networks:
+      - web
+
   caddy:
     mem_limit: 256m
     image: caddy:2.11.7

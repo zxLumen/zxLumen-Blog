@@ -1,0 +1,6 @@
+# 随口（独立容器：手机浏览器语音聊天；见 zxLumen/voice-chat 仓库）
+voice.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy voice:8795
+}
