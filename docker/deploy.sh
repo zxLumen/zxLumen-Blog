@@ -85,6 +85,9 @@ echo "[deploy] Caddy 配置校验通过"
   # 冰壶大作战:独立仓库 zxLumen/curling-gates 的 CI 推 latest
   ${SUDO:-} env CURLING_TAG="${CURLING_TAG:-latest}" docker compose pull curling \
     || echo "[deploy] curling 镜像拉取失败(可能尚未推送),跳过"
+  # 对位(JD 智能筛选):独立仓库 zxLumen/jd-screener 的 CI 推 latest
+  ${SUDO:-} env JD_TAG="${JD_TAG:-latest}" docker compose pull duiwei \
+    || echo "[deploy] duiwei 镜像拉取失败(可能尚未推送),跳过"
   ${SUDO:-} env IMAGE_TAG="${IMAGE_TAG}" docker compose up -d
 
 # 服务器侧配置(Caddyfile / caddy/sites / compose)由 ci-run.sh 从仓库同步。

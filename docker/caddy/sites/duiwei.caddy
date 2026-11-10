@@ -1,0 +1,6 @@
+# 对位(独立容器:AI 智能筛选 JD;见 zxLumen/jd-screener 仓库)
+duiwei.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy duiwei:8790
+}

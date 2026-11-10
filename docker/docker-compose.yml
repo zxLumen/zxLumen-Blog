@@ -222,6 +222,27 @@ services:
     networks:
       - web
 
+  # 对位(JD 智能筛选;见 zxLumen/jd-screener 仓库)。
+  # 零依赖 Node 原生 http;规则分永远可用,AI 经主站网关做加分项。
+  duiwei:
+    mem_limit: 96m
+    image: ghcr.io/zxlumen/jd-screener:${JD_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 8790
+      # 大模型经主站 AI 网关;令牌在 admin「AI 密钥」页生成后填 docker/.env
+      ZX_AI_GATEWAY_URL: http://app:3000/api/ai/v1
+      ZX_AI_APP_TOKEN: ${JD_AI_TOKEN:-}
+      # 可选：留空由网关按令牌/密钥决定
+      JD_MODEL: ${JD_MODEL:-}
+    volumes:
+      - duiwei-data:/app/data
+    expose:
+      - "8790"
+    networks:
+      - web
+
   caddy:
     mem_limit: 256m
     image: caddy:2.11.7
@@ -415,6 +436,7 @@ volumes:
   mbti-data:
   photo-data:
   game-data:
+  duiwei-data:
 
 networks:
   web:
