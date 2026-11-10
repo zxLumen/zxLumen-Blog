@@ -6,6 +6,13 @@
 
 ### 变更
 
+- **Caddy 拦截凭据探测 + 补 robots/sitemap**:`(accesslog)` 统一引入 `(probes)`,对
+  `.env` / `.git` / `.aws` / `.terraform` / `terraform.tfstate` 等明确的敏感配置路径直接
+  `respond 444`(只匹配具体文件名,不拦 `/api`、`/_next`、静态资源与正常页面)。依据
+  access.log:主站 125 条非预期 404(其中 122 条同一扫描 UA)与 bark 254 条 400(同一 UA)。
+  根站新增由 Caddy 直接返回的 `/robots.txt`(Allow / + Sitemap)与 `/sitemap.xml`
+  (主站首页 + 19 个公开子域入口,XML 可解析)。
+
 - **新增子应用「冰壶」(`curling.${DOMAIN}`)**:冰壶大作战 10 关闯关 + 爬塔原型迁到独立仓库
   [`zxLumen/curling-gates`](https://github.com/zxLumen/curling-gates),纯静态 nginx 镜像
   `ghcr.io/zxlumen/curling-web`(容器 `curling`,无后端、无持久化),Caddy 反代

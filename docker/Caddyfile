@@ -23,10 +23,24 @@
 # 公共片段(snippet)。注意:必须定义在下面的 import 之前。
 # -----------------------------------------------------------------------------
 
+# 已知凭据/配置探测路径:命中直接 444 断开,不进应用、不产生 404/400 噪音。
+# 只匹配明确的敏感文件名或目录,不做 `/api`、`/_next`、静态资源之类的宽泛拦截;
+# 因此正常页面、接口、构建产物与 /robots.txt、/sitemap.xml 都不受影响。
+(probes) {
+	@known_probe {
+		path_regexp known_probe `(?i)^/(?:.*/)?(?:\.env(?:[-.~][a-z0-9._~-]*)?|\.git(?:/.*)?|\.git-credentials|\.gitmodules|\.gitlab-ci\.yml|\.github(?:/.*)?|\.aws(?:/.*)?|\.terraform(?:/.*)?|terraform\.tfstate(?:\.[a-z0-9._-]+)?|\.docker(?:/.*)?|\.boto|\.netrc|\.npmrc|\.s3cfg|\.htaccess|\.amplifyrc|\.cursor(?:/.*)?|\.claude(?:/.*)?|dockerfile|docker-compose\.ya?ml|actuator/env|_profiler/phpinfo|phpinfo(?:\.php)?|info\.php|wp-config\.php(?:\.bak)?|wp-content/debug\.log|config\.php(?:\.bak)?|database\.sql|composer\.json|credentials(?:\.(?:json|ini|bak))?|secrets?\.json|auth\.json|settings\.json|settings\.php|appsettings(?:\.[a-z]+)?\.json|aws-exports\.js|sendgrid\.env|config\.env|env(?:\.txt)?|env\.js|env-config\.js|runtime-config\.js|storage/logs/laravel\.log|vendor/composer/installed\.json|server-info|web\.config|sentry\.properties|config/config\.js|config/aws\.yml|config\.json|config\.yaml|config\.js)$`
+	}
+	# 用 handle 包一层:保证它排在站点末尾的 catch-all handle 之前。
+	handle @known_probe {
+		respond 444
+	}
+}
+
 # 访问日志(站点级 `log` = access log;全局 `log` 是运行日志,别混)
 # 写 caddy-data 卷(/data),容器重建不丢;不随 Alloy 外发,避免第三方留存访客 IP。
 # 多个站点用完全相同配置时 Caddy 会按 writer 配置共享同一个文件句柄,不会互相踩滚动。
 (accesslog) {
+	import probes
 	log {
 		output file /data/access.log {
 			roll_size 10MiB
@@ -99,6 +113,47 @@ import /etc/caddy/sites/*.caddy
 {$DOMAIN} {
 	import deny
 	import accesslog
+
+	# 搜索引擎入口:由 Caddy 直接返回,避免再落到 Next 产生 404。
+	# robots 明确 Allow /,并把 sitemap 指向同域 /sitemap.xml。
+	handle /robots.txt {
+		header Content-Type "text/plain; charset=utf-8"
+		respond <<ROBOTS
+User-agent: *
+Allow: /
+Sitemap: https://{$DOMAIN}/sitemap.xml
+ROBOTS 200
+	}
+
+	# 主站首页 + 19 个公开子域入口(不含 www/bark/grafana/preview)。
+	handle /sitemap.xml {
+		header Content-Type "application/xml; charset=utf-8"
+		respond <<SITEMAP
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://{$DOMAIN}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>https://attune.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://brain.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://company.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://curling.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://douyu.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://duiwei.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://game.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://luminari.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://mbti.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://orderhub.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://photo.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pocket.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://rag.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://code-sandbox.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://stock.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://todo.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://wear.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://yijing.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://zuiti.{$DOMAIN}/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+</urlset>
+SITEMAP 200
+	}
 
 	# 简历 PDF / 微信二维码:由 Caddy 从挂载目录直接静态服务(不入应用镜像)
 	# 新文件放 docker/site-content/ 并 scp 上传即可,无需重建/重启
