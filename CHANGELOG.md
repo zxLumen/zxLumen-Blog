@@ -6,6 +6,13 @@
 
 ### 变更
 
+- **AI 网关新增 `/audio/speech`**:OpenAI 兼容的语音合成端点(请求体 `{input, voice, model,
+  speed, response_format}`,返回 `audio/mpeg` 字节流)。上游走密钥池里的音频密钥(SiliconFlow
+  CosyVoice2 / MOSS-TTSD),`voice` 写 `anna` 会自动补成 `FunAudioLLM/CosyVoice2-0.5B:anna`;
+  网关只做鉴权/路由/计量,音频原样透传不落内存,按文本长度粗估音频秒数计入音频分钟限额。
+  「随口」已改用该端点(`VOICE_TTS_MODE=gateway`),应用容器不再注入 SiliconFlow key,
+  全部密钥只留主站。
+
 - **新增子应用「随口」(`voice.${DOMAIN}`)**:手机浏览器语音聊天(豆包式)独立仓库
   [`zxLumen/voice-chat`](https://github.com/zxLumen/voice-chat),零依赖 Node + 原生前端 +
   ffmpeg,镜像 `ghcr.io/zxlumen/voice-chat`(容器 `voice`,无状态:录音转写后即删、对话只存
