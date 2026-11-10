@@ -82,10 +82,6 @@ async function withTimeout<T>(p: (signal: AbortSignal) => Promise<T>, ms: number
 /* ------------------------------ OpenAI 兼容 ------------------------------ */
 
 async function transcribeOpenAI(provider: GatewayProvider, input: AudioInput): Promise<NormalizedTranscript> {
-  const form = new FormData()
-  form.set('file', new Blob([input.bytes as unknown as BlobPart], { type: input.contentType }), input.filename)
-  if (input.language) form.set('language', input.language)
-
   const diarize = !!input.diarize
   // 分离要用专用模型 gpt-4o-transcribe-diarize;普通转写用配置的模型
   const model = diarize
@@ -93,24 +89,50 @@ async function transcribeOpenAI(provider: GatewayProvider, input: AudioInput): P
       ? (input.model as string)
       : 'gpt-4o-transcribe-diarize'
     : input.model || provider.model || 'whisper-1'
-  form.set('model', model)
-  if (diarize) {
-    form.set('response_format', 'diarized_json')
-    form.set('chunking_strategy', 'auto') // >30s 需分块
-  } else {
-    form.set('response_format', 'verbose_json')
+
+  const buildForm = (verbose: boolean): FormData => {
+    const form = new FormData()
+    form.set('file', new Blob([input.bytes as unknown as BlobPart], { type: input.contentType }), input.filename)
+    if (input.language) form.set('language', input.language)
+    form.set('model', model)
+    if (diarize) {
+      form.set('response_format', 'diarized_json')
+      form.set('chunking_strategy', 'auto') // >30s 需分块
+    } else if (verbose) {
+      form.set('response_format', 'verbose_json')
+    }
+    return form
   }
 
-  const res = await withTimeout(
+  // 部分上游(Qwen3-ASR / 新模型)不接受 verbose_json(直接 400 且 body 为空),
+  // 这时退回最简表单再试一次,拿不到时间轴也照样能用。
+  let res = await withTimeout(
     (signal) =>
       fetch(`${provider.baseUrl}/audio/transcriptions`, {
         method: 'POST',
         headers: { authorization: `Bearer ${provider.apiKey}` },
-        body: form,
+        body: buildForm(true),
         signal,
       }),
     300_000,
   )
+  if (!res.ok && !diarize && (res.status === 400 || res.status === 415 || res.status === 422)) {
+    const firstErr = await res.text().catch(() => '')
+    res = await withTimeout(
+      (signal) =>
+        fetch(`${provider.baseUrl}/audio/transcriptions`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${provider.apiKey}` },
+          body: buildForm(false),
+          signal,
+        }),
+      300_000,
+    )
+    if (!res.ok) {
+      const t = await res.text().catch(() => '')
+      throw new Error(`openai 转写失败 ${res.status}:${(t || firstErr).slice(0, 200)}`)
+    }
+  }
   if (!res.ok) {
     const t = await res.text().catch(() => '')
     throw new Error(`openai 转写失败 ${res.status}:${t.slice(0, 200)}`)
@@ -124,7 +146,8 @@ async function transcribeOpenAI(provider: GatewayProvider, input: AudioInput): P
     text: tidyCjk(typeof s.text === 'string' ? s.text : ''),
   }))
   const text = tidyCjk(typeof j.text === 'string' ? j.text : segments.map((s) => s.text).join(''))
-  const seconds = num(j.duration) || segments.reduce((a, s) => Math.max(a, s.end), 0)
+  const usageSeconds = num((j.usage as Record<string, unknown> | undefined)?.seconds)
+  const seconds = num(j.duration) || segments.reduce((a, s) => Math.max(a, s.end), 0) || usageSeconds
   return { text, language: typeof j.language === 'string' ? j.language : input.language, segments, seconds }
 }
 

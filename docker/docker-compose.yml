@@ -257,9 +257,9 @@ services:
       VOICE_ASR_TOKEN: ${VOICE_ASR_TOKEN:-}
       VOICE_ASR_MODEL: ${VOICE_ASR_MODEL:-XingChenAGI/XingChenASR-V3.2}
       VOICE_MODEL: ${VOICE_MODEL:-deepseek-v4.1-flash}
-      VOICE_TTS_MODE: ${VOICE_TTS_MODE:-direct}
-      VOICE_TTS_BASE_URL: ${VOICE_TTS_BASE_URL:-https://api.siliconflow.cn/v1}
-      VOICE_TTS_KEY: ${VOICE_TTS_KEY:-}
+      # TTS 走主站网关：应用容器里不注入 SiliconFlow key
+      VOICE_TTS_MODE: ${VOICE_TTS_MODE:-gateway}
+      VOICE_TTS_TOKEN: ${VOICE_TTS_TOKEN:-}
       VOICE_TTS_MODEL: ${VOICE_TTS_MODEL:-FunAudioLLM/CosyVoice2-0.5B}
       VOICE_TTS_VOICE: ${VOICE_TTS_VOICE:-anna}
     expose:
