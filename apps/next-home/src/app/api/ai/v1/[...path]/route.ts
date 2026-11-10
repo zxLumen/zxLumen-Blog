@@ -8,10 +8,18 @@ import {
   type GatewayProvider,
 } from '@/lib/ai-gateway'
 import { transcribeAudio } from '@/lib/gateway/audio'
+import { estimateSpeechSeconds, synthesizeSpeech } from '@/lib/gateway/speech'
 
 export const dynamic = 'force-dynamic'
 
-const ALLOWED = new Set(['chat/completions', 'embeddings', 'models', 'completions', 'audio/transcriptions'])
+const ALLOWED = new Set([
+  'chat/completions',
+  'embeddings',
+  'models',
+  'completions',
+  'audio/transcriptions',
+  'audio/speech',
+])
 
 /** 音频上传上限(压缩后的语音;约 25MB ≈ 很多分钟 16k 单声道) */
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024
@@ -202,6 +210,73 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     } catch (e) {
       return Response.json(
         { error: { message: `转写失败:${e instanceof Error ? e.message : 'unknown'}` } },
+        { status: 502, headers: CORS },
+      )
+    }
+  }
+
+  if (route === 'audio/speech') {
+    const raw = await req.text().catch(() => '')
+    let payload: Record<string, unknown> = {}
+    try {
+      payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+    } catch {
+      return Response.json({ error: { message: '请求体非 JSON' } }, { status: 400, headers: CORS })
+    }
+    const text = typeof payload.input === 'string' ? payload.input.trim() : ''
+    if (!text) {
+      return Response.json({ error: { message: '缺少 input' } }, { status: 400, headers: CORS })
+    }
+    if (text.length > 2000) {
+      return Response.json({ error: { message: 'input 过长(上限 2000 字)' } }, { status: 413, headers: CORS })
+    }
+    const reqModel = typeof payload.model === 'string' ? payload.model : ''
+    const provider = resolveProvider('audio', app, app.model || reqModel)
+    if (!provider) {
+      return Response.json({ error: { message: '未配置可用的音频上游密钥' } }, { status: 503, headers: CORS })
+    }
+    const model = app.model || provider.model || reqModel
+    try {
+      const upstream = await synthesizeSpeech(
+        provider,
+        {
+          text,
+          voice: typeof payload.voice === 'string' ? payload.voice : undefined,
+          model,
+          speed: Number(payload.speed) || undefined,
+          format: typeof payload.response_format === 'string' ? payload.response_format : undefined,
+        },
+        req.signal,
+      )
+      if (!upstream.ok || !upstream.body) {
+        const t = await upstream.text().catch(() => '')
+        return Response.json(
+          { error: { message: `合成失败:${upstream.status} ${t.slice(0, 200)}` } },
+          { status: 502, headers: CORS },
+        )
+      }
+      recordGatewayUsage({
+        appId: app.id,
+        providerId: provider.id,
+        model,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheHitTokens: 0,
+        audioSeconds: estimateSpeechSeconds(text, Number(payload.speed) || 1),
+        requests: 1,
+      })
+      return new Response(upstream.body, {
+        status: 200,
+        headers: {
+          ...CORS,
+          'content-type': upstream.headers.get('content-type') || 'audio/mpeg',
+          'cache-control': 'no-store',
+          'x-accel-buffering': 'no',
+        },
+      })
+    } catch (e) {
+      return Response.json(
+        { error: { message: `合成失败:${e instanceof Error ? e.message : 'unknown'}` } },
         { status: 502, headers: CORS },
       )
     }

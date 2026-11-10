@@ -16,6 +16,7 @@ OpenAI 兼容,透传到上游:
 | `POST /api/ai/v1/embeddings` | 向量 |
 | `GET /api/ai/v1/models` | 模型列表 |
 | `POST /api/ai/v1/audio/transcriptions` | 语音转写(可含说话人分离;`multipart/form-data`) |
+| `POST /api/ai/v1/audio/speech` | 语音合成(OpenAI 兼容;返回 `audio/mpeg` 字节流) |
 
 地址:
 - 公网:`https://${DOMAIN}/api/ai/v1`
@@ -95,6 +96,24 @@ OpenCode Go 端点(`opencode.ai/zen/go`)要求 `x-opencode-session` 头,网关�
     不传时相近嗓音易被并成一人。**无公开模型列表接口**,面板「拉取模型」返回内置清单。
 - 说话人仅在 `diarize=true` 且上游形状支持时出现。
 - 音频密钥与对话/向量密钥**分开**管理,并各有「默认音频」密钥。
+
+## 语音合成(TTS)
+
+`POST /api/ai/v1/audio/speech`(JSON,鉴权同上):
+
+| 字段 | 说明 |
+| --- | --- |
+| `input` | 要朗读的文本,上限 2000 字(口语场景建议按句调用,单句 < 60 字) |
+| `voice` | 音色。写 `anna` 会自动补成 `<model>:anna`;写全 `FunAudioLLM/CosyVoice2-0.5B:anna` 则原样透传 |
+| `model` | 可选,覆盖密钥默认模型(令牌固定模型优先) |
+| `speed` | 可选,0.7~1.3 |
+| `response_format` | 可选,默认 `mp3` |
+
+- 上游形状:OpenAI 兼容 `POST {baseUrl}/audio/speech`(SiliconFlow 的
+  `FunAudioLLM/CosyVoice2-0.5B` / `fnlp/MOSS-TTSD-v0.5` 都可用)。
+- 网关只做鉴权/路由/计量,音频字节流原样透传,不落内存。
+- 用量按文本长度粗估音频秒数(`字数 / 4.5 / speed`)计入**音频分钟**限额;
+  只是计量口径,不是真实播放时长。
 
 ## 额度限流
 
