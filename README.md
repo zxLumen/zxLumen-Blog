@@ -1,3 +1,7 @@
+© 2026 刘子祥 · 原创作品，转载请注明出处
+
+> **定位**：刘子祥的个人主页与子应用入口（Next.js 16 + SQLite，自托管部署）。 使用许可见 [LICENSE](./LICENSE)。
+
 # zxLumen-Blog
 
 刘子祥的个人主页 —— **Next.js 16 + SQLite,自托管部署**。
