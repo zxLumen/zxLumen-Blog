@@ -6,5 +6,12 @@
 douying.{$DOMAIN} {
 	import secure
 	import accesslog
-	reverse_proxy host.docker.internal:8099
+	reverse_proxy host.docker.internal:8099 {
+		# 主动探活：进程挂掉/端口不通时 30s 内摘除，返回 503 而不是等 3s 超时 502；
+		# 恢复后由 10s 一次的探活自动回切。
+		health_uri /api/health
+		health_interval 10s
+		fail_duration 30s
+		max_fails 2
+	}
 }
