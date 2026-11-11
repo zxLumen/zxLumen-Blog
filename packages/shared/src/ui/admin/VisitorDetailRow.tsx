@@ -14,6 +14,7 @@ const EVENT_LABEL: Record<EventType, string> = {
   contact_click: '联系点击',
   vlog_play: '视频播放',
   app_click: '应用点击',
+  app_impression: '应用曝光',
 }
 
 function targetLabel(t: string, projects: Project[]) {

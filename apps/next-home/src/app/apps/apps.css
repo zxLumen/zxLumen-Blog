@@ -1,0 +1,264 @@
+/* /apps 应用流:一张卡一个应用,竖向滚动。
+   卡片高度按「一屏 2.5 张」定 —— 半张露出来,告诉访客还能往下滑(抖音的同款提示)。 */
+
+.zf {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: clamp(1rem, 3vw, 2rem) var(--zx-gutter) 3rem;
+}
+
+.zf-head {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1rem;
+}
+
+.zf-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.zf-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  line-height: 1.2;
+  color: var(--fg);
+}
+
+.zf-sub {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--fg-dim);
+}
+
+.zf-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  scroll-snap-type: y proximity;
+  /* 卡片各自滚动吸附;容器本身不另开滚动条,跟随页面滚动 */
+}
+
+.zf-card {
+  scroll-snap-align: start;
+}
+
+.zf-hit {
+  display: grid;
+  grid-template-columns: minmax(96px, 34%) 1fr;
+  gap: 0;
+  height: clamp(190px, 28dvh, 300px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, var(--bg-2), var(--elev));
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.zf-hit:hover,
+.zf-hit:focus-visible {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.zf-hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- 首屏画面 ---------- */
+
+.zf-hook {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 20% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
+    linear-gradient(150deg, var(--bg-2), #04120a);
+  border-right: 1px solid var(--line);
+}
+
+.zf-hook-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* 截图压暗一点,保证上面的标签可读 */
+  filter: saturate(1.05) brightness(0.82);
+}
+
+.zf-hook-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0.9;
+}
+
+.zf-hook-fallback img {
+  width: clamp(48px, 9vw, 76px);
+  height: clamp(48px, 9vw, 76px);
+  border-radius: 12px;
+}
+
+.zf-hook-fallback > span {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+/* 有截图时把图标兜底压到角落,当成小水印 */
+.zf-hook:not(.is-plain) .zf-hook-fallback {
+  inset: auto 0.6rem 0.6rem auto;
+  width: 34px;
+  height: 34px;
+  opacity: 0.9;
+}
+
+.zf-hook:not(.is-plain) .zf-hook-fallback img {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.zf-hook:not(.is-plain) .zf-hook-fallback > span {
+  font-size: 1rem;
+}
+
+.zf-badge {
+  position: absolute;
+  top: 0.55rem;
+  left: 0.55rem;
+  padding: 0.14rem 0.45rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.zf-badge.is-explore {
+  background: var(--accent-2);
+}
+
+.zf-tags {
+  position: absolute;
+  left: 0.55rem;
+  bottom: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zf-tags li {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+}
+
+/* ---------- 文案 ---------- */
+
+.zf-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: clamp(0.85rem, 2.5vw, 1.35rem);
+  min-width: 0;
+}
+
+.zf-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.zf-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 2.6vw, 1.35rem);
+  color: var(--fg);
+}
+
+.zf-cta {
+  flex: none;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.zf-tagline {
+  margin: 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+  line-height: 1.45;
+  color: var(--fg-dim);
+}
+
+.zf-meta {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+}
+
+.zf-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+}
+
+.zf-foot a {
+  color: var(--fg-dim);
+  text-decoration: none;
+}
+
+.zf-foot a:hover {
+  color: var(--accent);
+}
+
+/* 窄屏:图在上、文字在下,卡片更矮更好滑 */
+@media (max-width: 560px) {
+  .zf-hit {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1.15fr 1fr;
+    height: clamp(220px, 34dvh, 320px);
+  }
+
+  .zf-hook {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .zf-body {
+    justify-content: flex-start;
+    gap: 0.3rem;
+    padding: 0.8rem 0.9rem;
+  }
+}

@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import type {
   AiUsageRow,
+  AppFunnelRow,
   ChatDayCount,
   ChatLogRow,
   ChatSessionPage,
@@ -16,6 +17,7 @@ import type {
   UsageRow,
   VisitorAlias,
   Visibility,
+  ViewerAppRow,
 } from '../../schema.js'
 
 /** better-sqlite3 连接实例类型 */
@@ -108,6 +110,10 @@ export interface Db {
   addEvent(input: NewEventInput): void
   /** 同上但按 (cid, day, type, target) 去重(同一人同一天同一目标只记一次),返回是否真的写入 */
   addEventOnce(input: NewEventInput): boolean
+  /** 应用卡片漏斗:最近 days 天按应用 id 聚合曝光 / 点击 / s3 / r7(应用流 /apps 排序用) */
+  appFunnel(days?: number): AppFunnelRow[]
+  /** 某访客最近 days 天点开过的应用(打开次数 + 最后一次的北京日) */
+  viewerAppHistory(cid: string, days?: number): ViewerAppRow[]
   /** 首页统计聚合(PV/UV/趋势/留言/事件;visitors 仅在 opts.visitors=true 时计算) */
   stats(opts?: { trendDays?: number; onlineMinutes?: number; visitors?: boolean }): StatsResult
   /** 站长给某访客的备注(未备注返回 null;仅服务端/站长接口使用) */
@@ -206,7 +212,7 @@ export type CommentStore = Pick<
 export type UsageStore = Pick<Db, 'listUsage' | 'allUsage' | 'addUsage'>
 export type AiUsageStore = Pick<Db, 'addAiUsage' | 'listAiUsage' | 'resetAiUsage'>
 export type FeedbackStore = Pick<Db, 'addFeedback' | 'setFeedbackStatus'>
-export type EventStore = Pick<Db, 'addEvent' | 'addEventOnce'>
+export type EventStore = Pick<Db, 'addEvent' | 'addEventOnce' | 'appFunnel' | 'viewerAppHistory'>
 export type StatsStore = Pick<Db, 'stats'>
 export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta' | 'listMetaKeys'>
 export type VisitorStore = Pick<Db, 'getVisitorAlias' | 'listVisitorAliases' | 'setVisitorAlias'>

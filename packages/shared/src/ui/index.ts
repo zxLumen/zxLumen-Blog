@@ -50,6 +50,8 @@ AI_VOICE_MIN_GAP_MS,
 } from './ai-voice.js'
 export type { AiVoiceEvent } from './ai-voice.js'
 export { AppPanelProvider, useAppPanel } from './AppPanel.js'
+export { useAppImpressions } from './useAppImpressions.js'
+export { resolveAppTrack } from './app-track.js'
 export {
   FLOATS_CHANGE_EVENT,
   readFloatsHidden,

@@ -10,16 +10,47 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/i
 /** 图标只接受本站 `/apps/` 下的固定形态(兜底 `<id>.<ext>` / 站长上传同名),避免任意 URL 注入 */
 const ICON_RE = /^\/apps\/[a-z0-9][a-z0-9-]{0,39}\.(?:jpg|jpeg|png|webp)$/i
 
+/** 卡片首屏截图同样只收本站 `/apps/hooks/` 下的固定形态,避免任意 URL 注入 */
+const HOOK_RE = /^\/apps\/hooks\/[a-z0-9][a-z0-9-]{0,39}\.(?:jpg|jpeg|png|webp|gif)$/i
+
+/**
+ * 卡片文案默认值:按 id 兜底。
+ * 线上 / 本地库多半早已有 `apps_config`(出厂 DEFAULT_APPS 不再生效),
+ * 所以在 normalizeOne 里按 id 回填 —— 老数据不用重存也能立刻有文案,
+ * 站长以后在库里显式写的值优先。
+ * hook 是首屏截图约定路径(资产放 `docker/site-content/apps/hooks/<id>.jpg`)。
+ */
+const CARD_DEFAULTS: Record<
+  string,
+  { tagline: string; tags: string[]; action: string; hook?: string }
+> = {
+  luminari: { tagline: '捏一个会进化的生灵', hook: '/apps/hooks/luminari.jpg', tags: ['养成', '随机', '免登录'], action: '开始创造' },
+  mbti: { tagline: '30 秒测出你的 MBTI', hook: '/apps/hooks/mbti.jpg', tags: ['情绪', '对话', '免登录'], action: '测一测' },
+  duiwei: { tagline: '挑出最该投的岗位', hook: '/apps/hooks/duiwei.jpg', tags: ['求职', '匹配', '免登录'], action: '开始匹配' },
+  attune: { tagline: '说一段话看见状态', hook: '/apps/hooks/attune.jpg', tags: ['情绪', '隐私', '1 分钟'], action: '开始觉察' },
+  photo: { tagline: '裁出最好看的构图', hook: '/apps/hooks/photo.jpg', tags: ['修图', '构图', '免登录'], action: '上传照片' },
+  voice: { tagline: '对着手机说就行', tags: ['语音', '手机', '免登录'], action: '开始说话' },
+  opentodo: { tagline: '待办悬浮在屏幕上', tags: ['待办', '多端', '免登录'], action: '看今天的' },
+  stock: { tagline: '今日选股与模拟盘', tags: ['A股', '策略', '模拟盘'], action: '看今日' },
+  yijing: { tagline: '起一卦,看看这一卦', tags: ['六十四卦', '免登录'], action: '起卦' },
+  game: { tagline: '抽一个酒桌游戏', tags: ['聚会', '免登录'], action: '抽一个' },
+  curling: { tagline: '手机上溜一局冰壶', tags: ['小游戏', '1 分钟'], action: '来一局' },
+  zuiti: { tagline: '难回的消息交给它', tags: ['微信', '嘴替'], action: '看看' },
+  'code-sandbox': { tagline: '浏览器里开个沙盒', tags: ['opencode', '免装'], action: '进入沙盒' },
+  resume: { tagline: '下载一页纸简历', tags: ['PDF'], action: '下载' },
+  github: { tagline: '35 个公开仓库', tags: ['开源'], action: '去 GitHub' },
+}
+
 /** 出厂默认应用(未配置时的初始列表;不落库,保存后才生效) */
 const DEFAULT_APPS: AppItem[] = [
   { id: 'github', name: 'GitHub', url: 'https://github.com/zxlumen', bind: 'github' },
   { id: 'resume', name: '简历', url: '/resume.pdf', bind: 'resume' },
-  { id: 'luminari', name: '生灵', url: 'luminari.zxlumen.cn', icon: '/apps/luminari.png', openIn: 'panel', bind: 'luminari' },
-  { id: 'mbti', name: '心语', url: 'https://mbti.zxlumen.cn', icon: '/apps/mbti.png', openIn: 'panel', bind: 'mbti' },
-  { id: 'duiwei', name: '对位', url: 'https://duiwei.zxlumen.cn', icon: '/apps/duiwei.png', openIn: 'panel', bind: 'duiwei' },
+  { id: 'luminari', name: '生灵', url: 'luminari.zxlumen.cn', icon: '/apps/luminari.png', openIn: 'panel', bind: 'luminari', ...CARD_DEFAULTS.luminari },
+  { id: 'mbti', name: '心语', url: 'https://mbti.zxlumen.cn', icon: '/apps/mbti.png', openIn: 'panel', bind: 'mbti', ...CARD_DEFAULTS.mbti },
+  { id: 'duiwei', name: '对位', url: 'https://duiwei.zxlumen.cn', icon: '/apps/duiwei.png', openIn: 'panel', bind: 'duiwei', ...CARD_DEFAULTS.duiwei },
   { id: 'voice', name: '随口', url: 'https://voice.zxlumen.cn', icon: '/apps/voice.png', openIn: 'panel', bind: 'voice' },
-  { id: 'attune', name: '无恙', url: 'attune.zxlumen.cn', icon: '/apps/attune.png', openIn: 'panel', bind: 'attune' },
-  { id: 'photo', name: '光圈', url: 'photo.zxlumen.cn', icon: '/apps/photo.png', openIn: 'panel', bind: 'photo' },
+  { id: 'attune', name: '无恙', url: 'attune.zxlumen.cn', icon: '/apps/attune.png', openIn: 'panel', bind: 'attune', ...CARD_DEFAULTS.attune },
+  { id: 'photo', name: '光圈', url: 'photo.zxlumen.cn', icon: '/apps/photo.png', openIn: 'panel', bind: 'photo', ...CARD_DEFAULTS.photo },
   // 酒桌游戏:独立子域(game.*),主站应用栏 newtab 打开;房间状态在主站 SQLite
   { id: 'game', name: '酒桌', url: 'game.zxlumen.cn', icon: '/apps/game.png', openIn: 'newtab' },
   // 访客沙盒:公开 opencode web,newtab 打开(见 docs/PLAYGROUND.md);bind 留空 → app_click
@@ -42,6 +73,20 @@ function normalizeOne(raw: unknown): StoredApp | null {
   const group = typeof r.group === 'string' && r.group.trim() ? r.group.trim() : undefined
   // 点击埋点绑定(纯统计):空/非字符串一律丢弃,交由前端 resolveAppTrack 兜底成 app_click
   const bind = typeof r.bind === 'string' && r.bind.trim() ? r.bind.trim() : undefined
+  // 卡片文案(全部可选;老数据没有这些字段 → 按 id 回填默认文案,再缺就留空由渲染端兜底)
+  const card = CARD_DEFAULTS[id]
+  const tagline = clip(typeof r.tagline === 'string' ? r.tagline.trim() : '', 14) || card?.tagline
+  const hook =
+    (typeof r.hook === 'string' && HOOK_RE.test(r.hook.trim()) ? r.hook.trim() : undefined) ?? card?.hook
+  const rawTags = Array.isArray(r.tags)
+    ? r.tags
+        .filter((t): t is string => typeof t === 'string')
+        .map((t) => clip(t.trim(), 12))
+        .filter(Boolean)
+        .slice(0, 3)
+    : []
+  const tags = rawTags.length > 0 ? rawTags : card?.tags ?? []
+  const action = clip(typeof r.action === 'string' ? r.action.trim() : '', 12) || card?.action
   return {
     id,
     name,
@@ -50,8 +95,18 @@ function normalizeOne(raw: unknown): StoredApp | null {
     openIn,
     ...(group ? { group } : {}),
     ...(bind ? { bind } : {}),
+    ...(tagline ? { tagline } : {}),
+    ...(hook ? { hook } : {}),
+    ...(tags.length > 0 ? { tags } : {}),
+    ...(action ? { action } : {}),
     deleted: r.deleted === true,
   }
+}
+
+/** 按「字」(码点)截断,避免把 emoji / 生僻字切成半个 */
+function clip(s: string, max: number): string {
+  const chars = Array.from(s)
+  return chars.length > max ? chars.slice(0, max).join('') : s
 }
 
 /** 规范化整表(丢弃非法条目) */

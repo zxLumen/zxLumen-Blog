@@ -135,6 +135,7 @@ export const CONTACTS: Contacts = DEFAULT_CONTENT.CONTACTS
 
 export const NAV: NavItem[] = [
   { label: '主页', href: '/' },
+  { label: '应用', href: '/apps' },
   { label: '项目', href: '/#projects' },
   { label: 'Token用量', href: '/#usage' },
   { label: '关于', href: '/#about' },

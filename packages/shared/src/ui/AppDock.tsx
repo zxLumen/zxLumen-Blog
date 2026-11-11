@@ -9,6 +9,7 @@ import { appsOrderKey } from './identity.js'
 import { resolveAppTrack } from './app-track.js'
 import { trackEvent } from './track.js'
 import { applySavedOrder, groupContiguous, useDragReorder } from './useDragReorder.js'
+import { useAppImpressions } from './useAppImpressions.js'
 import { useAppPanel } from './AppPanel.js'
 
 interface AppDockProps {
@@ -103,6 +104,9 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
    */
   const defaultKey = base.map((a) => a.id).join(' ')
   const byId = new Map(list.map((a) => [a.id, a]))
+
+  // 卡片曝光 / s3 埋点(IntersectionObserver + 3s 心跳;不做 video)
+  useAppImpressions(navRef, list)
 
   const { dragId, drop, registerItem, handleProps } = useDragReorder({
     ids,

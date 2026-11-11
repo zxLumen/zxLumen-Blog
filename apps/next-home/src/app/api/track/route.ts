@@ -6,7 +6,7 @@ import { cidCookie, isMockActive, resolveCid } from '@/lib/clientid'
 
 export const dynamic = 'force-dynamic'
 
-const TYPES = new Set<EventType>(['visit', 'project_click', 'resume_download', 'leave', 'section_view', 'contact_click', 'vlog_play', 'app_click'])
+const TYPES = new Set<EventType>(['visit', 'project_click', 'resume_download', 'leave', 'section_view', 'contact_click', 'vlog_play', 'app_click', 'app_impression'])
 /** 常见爬虫/扫描器 UA(beacon 为 JS 触发,这里再兜一层) */
 const BOT_RE =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora|pinterest|headless|python-requests|curl|wget|go-http-client|axios|node-fetch/i
@@ -47,12 +47,31 @@ export async function POST(req: Request) {
   let target = ''
   let referrer = ''
   let dwell = 0
+  let session = ''
+  let pos = -1
   try {
-    const j = JSON.parse(await req.text()) as { type?: string; target?: string; ref?: string; dwell?: number }
+    const j = JSON.parse(await req.text()) as {
+      type?: string
+      target?: string
+      ref?: string
+      dwell?: number
+      session?: string
+      pos?: number
+    }
     if (j.type && TYPES.has(j.type as EventType)) type = j.type as EventType
     target = String(j.target ?? '').slice(0, 200)
     referrer = String(j.ref ?? '').slice(0, 200)
-    dwell = type === 'leave' || type === 'section_view' ? Math.max(0, Math.min(86400, Math.round(Number(j.dwell) || 0))) : 0
+    if (type === 'leave' || type === 'section_view' || type === 'app_impression') {
+      dwell = Math.max(0, Math.min(86400, Math.round(Number(j.dwell) || 0)))
+    }
+    // 会话 ID 只收客户端固定形态(8–64 位小写字母/数字/连字符),非法值丢弃
+    const sid = typeof j.session === 'string' ? j.session.trim() : ''
+    if (/^[a-z0-9-]{8,64}$/i.test(sid)) session = sid
+    // 卡片位置只对曝光有意义;非法/越界一律 -1
+    const p = j.pos
+    if (type === 'app_impression' && typeof p === 'number' && Number.isInteger(p) && p >= 0 && p < 1000) {
+      pos = p
+    }
   } catch {
     /* 空/非法 body 视为 visit */
   }
@@ -64,7 +83,7 @@ export async function POST(req: Request) {
     if (isNew) dup.headers.append('Set-Cookie', cidCookie(cid))
     return dup
   }
-  const payload = { type, target, cid, ua: ua.slice(0, 200), referrer, dwell }
+  const payload = { type, target, cid, ua: ua.slice(0, 200), referrer, dwell, session, pos }
   const db = await getDb()
   // 视频播放:同一访客每天同一集只记一次(服务端按 cid+day+type+target 原子去重)
   if (type === 'vlog_play' && target !== '') db.addEventOnce(payload)

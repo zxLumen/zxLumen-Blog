@@ -42,6 +42,12 @@
   - `resume` → `resume_download`,与简历下载按钮**合并**;
   - 其它(项目 id,如 `proj-8f58rlh81`)→ `project_click`,与项目卡「试用/repo」**合并**。
   只重真点击(拖动后浏览器补发的那次 click 会被源码里的 `onClickCapture` 吞掉)。
+- **应用卡片曝光**上报 `app_impression`(target=应用 id,带 `pos` 位置下标与 `session` 会话 id):
+  应用栏用 `IntersectionObserver` 观察,卡片可见 ≥50% 时上报一次(`dwell=0`);
+  **3 秒后仍可见且页面在前台**再报一条 `dwell=3` 的心跳。每次挂载内每张卡只报一次,
+  刷新算新的一次曝光。`s3 = dwell=3 条数 / dwell=0 条数`。
+  漏斗聚合脚本:`node scripts/app-funnel.mjs`(默认读 `apps/next-home/data/zx.db`,
+  可选 `--db <path>` / `--days N`,输出 impression / click / ctr / s3 / r7 的 markdown 表)。
 - **视频播放**上报 `vlog_play`(target=抖音 vid),**只在访客真的点进播放器时**才上报
   —— 打开首页、切换系列/集数、左右箭头、滑动切换都**不**计。抖音 iframe 跨域,收不到它内部的
   点击,也不发播放事件(播放器 3 个 bundle 的 `postMessage` 全是埋点/调试内部用途),因此改为

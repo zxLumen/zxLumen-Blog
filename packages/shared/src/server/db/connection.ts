@@ -87,6 +87,9 @@ export function openDb(path: string): Db {
   )
   if (!ecols.has('referrer')) db.exec("ALTER TABLE events ADD COLUMN referrer TEXT DEFAULT ''")
   if (!ecols.has('dwell')) db.exec('ALTER TABLE events ADD COLUMN dwell INTEGER DEFAULT 0')
+  // app_impression 曝光口径:会话 ID + 卡片位置(老库补列,缺省安全)
+  if (!ecols.has('session')) db.exec("ALTER TABLE events ADD COLUMN session TEXT DEFAULT ''")
+  if (!ecols.has('pos')) db.exec('ALTER TABLE events ADD COLUMN pos INTEGER DEFAULT -1')
   // addEventOnce 的去重查重走这个索引
   db.exec('CREATE INDEX IF NOT EXISTS idx_events_dedup ON events(type, cid, day, target)')
 

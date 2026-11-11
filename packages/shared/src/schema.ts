@@ -63,7 +63,9 @@ CREATE TABLE IF NOT EXISTS events (
   target   TEXT DEFAULT '',          -- 路径 / 区块 / 项目 id / 文件名 / 联系方式 / 抖音 vid
   ua       TEXT DEFAULT '',
   referrer TEXT DEFAULT '',          -- 落地来源(访客 document.referrer,仅 admin 可见)
-  dwell    INTEGER DEFAULT 0         -- 前台停留秒数(leave = 整页;section_view = 该区块可见时长)
+  dwell    INTEGER DEFAULT 0,        -- 前台停留秒数(leave = 整页;section_view = 该区块可见时长;app_impression = 3 表示 3s 仍可见)
+  session  TEXT DEFAULT '',          -- 客户端会话 ID(每个标签页一个,用于 s3 / r7 口径)
+  pos      INTEGER DEFAULT -1        -- 卡片在应用栏里的位置下标(app_impression 用,-1 = 未知)
 );
 
 -- 访客反馈(应用栏「?」按钮 → 站长邮箱;入库兜底,发信失败也不丢)
@@ -230,7 +232,7 @@ export interface AiUsageRow {
 
 export type Visibility = 'public' | 'private'
 
-/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击;vlog_play = 点进抖音播放器;app_click = 应用栏里未绑定其它事件的应用被点击) */
+/** 埋点事件类型(leave = 离开页面;section_view = 区块浏览,均携带 dwell 秒数;contact_click = 联系方式点击;vlog_play = 点进抖音播放器;app_click = 应用栏里未绑定其它事件的应用被点击;app_impression = 应用卡片曝光,dwell=3 表示曝光后 3s 仍可见) */
 export type EventType =
   | 'visit'
   | 'project_click'
@@ -240,6 +242,7 @@ export type EventType =
   | 'contact_click'
   | 'vlog_play'
   | 'app_click'
+  | 'app_impression'
 
 /** 联系方式点击的目标(email | wechat | phone | github | guestbook) */
 export type ContactTarget = 'email' | 'wechat' | 'phone' | 'github' | 'guestbook'
@@ -253,9 +256,42 @@ export interface NewEventInput {
   referrer?: string
   /** 前台停留秒数(leave = 整页,section_view = 该区块可见时长) */
   dwell?: number
+  /** 客户端会话 ID(app_impression 必带;其他事件也带,便于按会话算 r7) */
+  session?: string
+  /** 卡片位置下标(app_impression 用;-1/缺省 = 未知) */
+  pos?: number
+}
+
+/**
+ * 应用卡片漏斗(最近 N 天,按 target=应用 id 聚合)。
+ * 口径见 `docs/RESEARCH-douyin-app-platform-2026-11-11.md` 与 docs/STATS.md。
+ */
+export interface AppFunnelRow {
+  target: string
+  /** 曝光条数(app_impression 且 dwell=0) */
+  impressions: number
+  /** 曝光 3 秒后仍可见的条数(dwell≥3) */
+  s3: number
+  /** 点击条数(app_click + 命中 bind 的合并事件) */
+  clicks: number
+  /** clicks / impressions,无曝光记 0 */
+  ctr: number
+  /** s3 / impressions */
+  s3Rate: number
+  /** 7 天内又点过的人 / 点过的人 */
+  r7: number
+}
+
+/** 单个访客在窗口内点开过的应用(用于「上次 N 天前」与探索位) */
+export interface ViewerAppRow {
+  target: string
+  opens: number
+  /** 北京日 YYYY-MM-DD */
+  lastDay: string
 }
 
 export interface DayPoint {
+
   day: string
   pv: number
   uv: number
@@ -550,6 +586,17 @@ export interface StoredApp {
    *  - 其它(项目 id,如 `proj-8f58rlh81`)→ 记 `project_click`(与项目卡「试用/repo」合并)
    */
   bind?: string
+  /** 卡片一句话卖点(≤14 字,动词开头;如「30 秒测出你的 MBTI」) */
+  tagline?: string
+  /**
+   * 首屏截图/动图站内路径(`/apps/hooks/<id>.<ext>`),用于应用卡片的「前 3 秒」。
+   * 与 icon 同样只接受本站固定形态,避免任意 URL 注入。
+   */
+  hook?: string
+  /** 卡片标签(1–3 个,如「情绪」「1 分钟」「免登录」) */
+  tags?: string[]
+  /** 卡片主按钮文案(如「开始」「测一测」) */
+  action?: string
   /** true=在垃圾箱(前端不显示);缺省/false=正常 */
   deleted?: boolean
 }

@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **`/apps` 应用流(二级页)**:把应用当成信息流里的一张卡 —— 一屏 2.5 张,卡片 = 首屏画面
+  (`hook`)+ 一句话(`tagline`)+ 一个动作(`action`),点开走应用自己的 `openIn`(面板 / 新标签)。
+  排序用真实数据:`0.5×ctr + 0.3×r7 + 0.2×新鲜度`,曝光 <200 的卡进冷启动池拿固定加权,
+  第 4 张固定插一张访客 30 天没打开过的(探索位)。数据来自 `eventStore.appFunnel()`
+  与 `viewerAppHistory()`,页面 60 秒缓存;没有数据时退化成 admin 配的顺序。
+  首页(个人主页 / 简历门面)完全不动,只在顶栏加了一个「应用」入口。
+
+- **应用卡片转化漏斗可量化**:新增 `app_impression` 埋点(应用栏 IntersectionObserver 观察,
+  曝光 ≥50% 即报一次,带 app id / 位置 index / 会话 id;3 秒后仍可见再报 `dwell=3` 心跳,
+  两者之比即 `s3`,不做 video)。`AppItem` 增加可选 `tagline(≤14 字)/ hook(首屏截图路径)/
+  tags(≤3)/ action(按钮文案)`,`normalizeOne` 做长度/路径/数组兜底(老数据无字段照常工作),
+  并给生灵 / 心语 / 对位 / 无恙 / 光圈 5 个应用填了默认文案。新增 `scripts/app-funnel.mjs`,
+  从 `apps/next-home/data/zx.db` 聚合每个 app 的 impression / click / ctr / s3 / r7,
+  直接输出 markdown 表(`--db` / `--days` 可选)。
+
 ### 变更
 
 - **AI 网关新增 `/audio/speech`**:OpenAI 兼容的语音合成端点(请求体 `{input, voice, model,
