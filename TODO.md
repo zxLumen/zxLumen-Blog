@@ -28,6 +28,7 @@
 
 ## blog / 应用栏
 
+- [x] **应用预览**:19 个应用各抓首屏 WebP(长边 1280、≤120KB)落 `docker/site-content/apps/shots/` 并随仓库部署;桌面 hover 220ms 出预览卡,点击先开预览浮层再按原 `openIn` 进入;移动端单击出预览;admin 应用面板显示有/无预览图,缺图回退现有图标;`scripts/app-shots.mjs` 可重跑更新 — 优先级:中
 - [x] 右侧应用栏(macOS Dock):桌面右侧竖排常驻 + 移动端底部横排,10 套布局适配,右下角悬浮件避让 — 优先级:中
 - [x] admin「应用」面板:整表增删改 / 拖拽排序 / 分组 / 垃圾箱 / 恢复默认,存 `meta.apps_config` — 优先级:中
 - [x] 图标上传:浏览器端压到长边 256px,落 `docker/site-content/apps/`,Caddy 经 `/apps/*` 供图 — 优先级:中

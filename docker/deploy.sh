@@ -15,6 +15,35 @@ export IMAGE_TAG
 [[ "${EUID}" -eq 0 ]] || SUDO="sudo -n"
 echo "[deploy] IMAGE_TAG=${IMAGE_TAG} (工作目录: $(pwd))"
 
+# 应用栏预览图 + manifest:跟镜像/配置一样从公开仓库按同一 commit 同步。
+# 放在 deploy.sh 里而不是只放 ci-run.sh:服务器上正在跑的可能是旧 ci-run.sh,
+# 但它会先落盘新 deploy.sh 再执行,所以首次新增 assets 的提交也能生效。
+# 仓库里没有该目录(例如回滚提交)时清空线上目录 —— 保证回滚后不残留。
+sync_app_shots() {
+  local ref="${1:-main}"
+  [ "${ref}" = "latest" ] && ref="main"
+  local repo="${REPO_URL:-https://github.com/zxLumen/zxLumen-Blog.git}"
+  local tmp
+  tmp="$(mktemp -d)"
+  if git -C "${tmp}" init -q \
+      && git -C "${tmp}" remote add origin "${repo}" \
+      && git -C "${tmp}" fetch -q --depth 1 origin "${ref}"; then
+    ${SUDO:-} mkdir -p ./site-content/apps/shots
+    ${SUDO:-} find ./site-content/apps/shots -mindepth 1 -delete
+    if git -C "${tmp}" checkout -q FETCH_HEAD -- docker/site-content/apps/shots; then
+      ${SUDO:-} cp -a "${tmp}/docker/site-content/apps/shots/." ./site-content/apps/shots/
+      echo "[deploy] 已同步应用预览图 → ./site-content/apps/shots"
+    else
+      echo "[deploy] 该提交没有应用预览图目录,已清空线上 shots(回滚)"
+    fi
+  else
+    echo "[deploy] 应用预览图同步失败(不阻断部署,保留线上现有文件)"
+  fi
+  rm -rf "${tmp}"
+}
+
+sync_app_shots "${IMAGE_TAG}"
+
 # 冒烟脚本必须存在:它是唯一能发现"空目录 / 少文件 / 路由没了"的检查,
 # 不能因为 ci-run 同步清单漏了就静默跳过。缺失 = 同步有问题,在动任何东西之前中止。
 if [ ! -x ./caddy-smoke.sh ]; then

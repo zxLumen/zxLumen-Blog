@@ -1,0 +1,157 @@
+{
+  "generatedAt": "2026-11-11T17:23:21.697Z",
+  "apps": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "url": "https://github.com/zxlumen",
+      "shot": "/apps/shots/github.webp",
+      "intro": "GitHub 开源主页，代码与项目都在这里。",
+      "capturedAt": "2026-11-11T17:22:16.684Z"
+    },
+    {
+      "id": "csdn",
+      "name": "CSDN",
+      "url": "https://blog.csdn.net/ChallengerRumble",
+      "shot": "/apps/shots/csdn.webp",
+      "intro": "CSDN 技术博客，记录工程实践与踩坑。",
+      "capturedAt": "2026-11-11T17:22:20.269Z"
+    },
+    {
+      "id": "resume",
+      "name": "简历",
+      "url": "https://zxlumen.cn/resume.pdf",
+      "shot": "/apps/shots/resume.webp",
+      "intro": "在线简历，一页看完工作经历与技术栈。",
+      "capturedAt": "2026-11-11T17:22:22.442Z"
+    },
+    {
+      "id": "brain",
+      "name": "Agent Brain",
+      "url": "https://brain.zxlumen.cn/",
+      "shot": "/apps/shots/brain.webp",
+      "intro": "Agent Brain 智能体知识库与实验场。",
+      "capturedAt": "2026-11-11T17:22:24.012Z"
+    },
+    {
+      "id": "code-sandbox",
+      "name": "代码沙盒",
+      "url": "https://code-sandbox.zxlumen.cn/",
+      "shot": "/apps/shots/code-sandbox.webp",
+      "intro": "公开的 OpenCode 代码沙盒，直接在浏览器里跑。",
+      "capturedAt": "2026-11-11T17:22:49.202Z"
+    },
+    {
+      "id": "opentodo",
+      "name": "Opentodo",
+      "url": "https://todo.zxlumen.cn/",
+      "shot": "/apps/shots/opentodo.webp",
+      "intro": "轻量待办清单，访客数据各自独立。",
+      "capturedAt": "2026-11-11T17:22:50.904Z"
+    },
+    {
+      "id": "company",
+      "name": "一人公司",
+      "url": "https://company.zxlumen.cn/",
+      "shot": "/apps/shots/company.webp",
+      "intro": "一人公司经营模拟，体验从 0 到 1。",
+      "capturedAt": "2026-11-11T17:22:52.893Z"
+    },
+    {
+      "id": "voice",
+      "name": "随口",
+      "url": "https://voice.zxlumen.cn/",
+      "shot": "/apps/shots/voice.webp",
+      "intro": "随口手机语音聊天，开口就能对话。",
+      "capturedAt": "2026-11-11T17:22:54.712Z"
+    },
+    {
+      "id": "stock",
+      "name": "股票速览",
+      "url": "https://stock.zxlumen.cn/",
+      "shot": "/apps/shots/stock.webp",
+      "intro": "股票速览，实时行情与自选股。",
+      "capturedAt": "2026-11-11T17:22:57.913Z"
+    },
+    {
+      "id": "app-4ib9vf8fp",
+      "name": "易经64",
+      "url": "https://yijing.zxlumen.cn/",
+      "shot": "/apps/shots/app-4ib9vf8fp.webp",
+      "intro": "易经六十四卦，在线起卦与解读。",
+      "capturedAt": "2026-11-11T17:23:00.766Z"
+    },
+    {
+      "id": "luminari",
+      "name": "生灵",
+      "url": "https://luminari.zxlumen.cn/",
+      "shot": "/apps/shots/luminari.webp",
+      "intro": "生灵图鉴，观察与培育会发光的小生物。",
+      "capturedAt": "2026-11-11T17:23:02.385Z"
+    },
+    {
+      "id": "zuiti",
+      "name": "嘴替",
+      "url": "https://zuiti.zxlumen.cn/",
+      "shot": "/apps/shots/zuiti.webp",
+      "intro": "嘴替，帮你把想说的话说得更得体。",
+      "capturedAt": "2026-11-11T17:23:05.145Z"
+    },
+    {
+      "id": "mbti",
+      "name": "心语",
+      "url": "https://mbti.zxlumen.cn/",
+      "shot": "/apps/shots/mbti.webp",
+      "intro": "心语对话式 MBTI 测评，聊聊就出结果。",
+      "capturedAt": "2026-11-11T17:23:08.725Z"
+    },
+    {
+      "id": "attune",
+      "name": "无恙",
+      "url": "https://attune.zxlumen.cn/",
+      "shot": "/apps/shots/attune.webp",
+      "intro": "无恙，对话式音频觉察与情绪陪伴。",
+      "capturedAt": "2026-11-11T17:23:10.322Z"
+    },
+    {
+      "id": "photo",
+      "name": "光圈",
+      "url": "https://photo.zxlumen.cn/",
+      "shot": "/apps/shots/photo.webp",
+      "intro": "光圈，AI 构图裁剪与自动修图。",
+      "capturedAt": "2026-11-11T17:23:12.202Z"
+    },
+    {
+      "id": "app-tath3kcvk",
+      "name": "RAG",
+      "url": "https://rag.zxlumen.cn/",
+      "shot": "/apps/shots/app-tath3kcvk.webp",
+      "intro": "RAG 知识库问答，基于个人语料的检索增强。",
+      "capturedAt": "2026-11-11T17:23:15.179Z"
+    },
+    {
+      "id": "game",
+      "name": "酒桌",
+      "url": "https://game.zxlumen.cn/",
+      "shot": "/apps/shots/game.webp",
+      "intro": "酒桌小游戏，聚会时打开就能玩。",
+      "capturedAt": "2026-11-11T17:23:17.606Z"
+    },
+    {
+      "id": "curling",
+      "name": "冰壶",
+      "url": "https://curling.zxlumen.cn/",
+      "shot": "/apps/shots/curling.webp",
+      "intro": "冰壶大作战，瞄准、蓄力、投壶。",
+      "capturedAt": "2026-11-11T17:23:19.619Z"
+    },
+    {
+      "id": "duiwei",
+      "name": "对位",
+      "url": "https://duiwei.zxlumen.cn/",
+      "shot": "/apps/shots/duiwei.webp",
+      "intro": "对位 JD 智能筛选，快速判断岗位匹配度。",
+      "capturedAt": "2026-11-11T17:23:21.625Z"
+    }
+  ]
+}

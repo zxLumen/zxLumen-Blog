@@ -49,6 +49,13 @@ packages/shared/src/content.local.ts
 
 # 运行时站点内容(export:content 生成 + 简历/二维码副本,不入库,部署时手动上传)
 docker/site-content/
+# 例外:应用栏预览图 + manifest 由 scripts/app-shots.mjs 生成,随仓库部署
+!docker/site-content/
+docker/site-content/*
+!docker/site-content/apps/
+docker/site-content/apps/*
+!docker/site-content/apps/shots/
+!docker/site-content/apps/shots/**
 
 # 微信二维码(个人联系方式,不入库,部署时手动上传)
 apps/next-home/public/wechat.png
@@ -57,9 +64,9 @@ apps/next-home/public/wechat.png
 # 这里是指向它的软链,让本地 dev 也能用同一个 /vlog/<vid>.jpg 路径
 apps/next-home/public/vlog
 
-# 应用栏图标(/admin 面板上传到 docker/site-content/apps/,不入库)
-# 这里是指向它的软链,让本地 dev 也能用同一个 /apps/<id>.png 路径
-apps/next-home/public/apps
+# 应用栏图标目录本身不入库;指向它的软链要入库 —— 本地 dev / CI 的 E2E 靠它
+# 访问 /apps/shots/*(预览图在仓库里);线上仍由 Caddy 直接服务 site-content。
+# (以前软链也被忽略,新克隆需要手动 ln -s)
 
 docs/proxy.yaml
 
