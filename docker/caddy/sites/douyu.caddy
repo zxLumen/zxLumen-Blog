@@ -1,6 +1,7 @@
 # 斗鱼监控看板(宿主机 8899)
+# 会被主站 iframe 嵌进应用栏,所以用 webapp(允许 frame-ancestors)而不是 deny。
 douyu.{$DOMAIN} {
 	import accesslog
-	import deny
+	import webapp
 	reverse_proxy host.docker.internal:8899
 }
