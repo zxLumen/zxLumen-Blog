@@ -6,14 +6,6 @@
 
 ### 新增
 
-- **应用栏应用预览**:为生产应用栏 19 个应用抓首屏截图,压成 WebP(长边 1280、单张 ≤120KB)
-  落 `docker/site-content/apps/shots/`,并生成 `manifest.json`(id / name / url / shot /
-  一句话 / 抓取时间)。桌面 hover 220ms 出预览卡(截图 + 名称 + 一句话 + 打开),点击图标先开
-  预览浮层、浮层内「打开应用」再按原 `openIn` 进入;390px 移动端单击出预览。图片懒加载、
-  `prefers-reduced-motion` 降级、portal + fixed 定位无布局抖动,零新依赖。admin「应用」面板
-  显示每项有无预览图,缺图/加载失败回退现有图标。抓图脚本 `scripts/app-shots.mjs` 可重跑;
-  `docker/deploy.sh` 按同一 commit 同步 shots(回滚提交没有该目录时自动清空)。
-
 - **`/apps` 应用流(二级页)**:把应用当成信息流里的一张卡 —— 一屏 2.5 张,卡片 = 首屏画面
   (`hook`)+ 一句话(`tagline`)+ 一个动作(`action`),点开走应用自己的 `openIn`(面板 / 新标签)。
   排序用真实数据:`0.5×ctr + 0.3×r7 + 0.2×新鲜度`,曝光 <200 的卡进冷启动池拿固定加权,

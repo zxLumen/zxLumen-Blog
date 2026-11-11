@@ -20,7 +20,6 @@ import { MantineBridge } from './mantine-bridge.js'
 import { adminFetch } from './admin-fetch.js'
 import type { NotifyMsg } from './admin-types.js'
 import { snapDropToGroup, useDragReorder } from '../useDragReorder.js'
-import { loadAppShots, type AppShot } from '../app-shots.js'
 
 /** 覆盖面门控:应用栏在 Tab 模式下仅对应 Tab 显 */
 function gate(showTabs: boolean, tab: string): boolean {
@@ -112,29 +111,11 @@ export function AdminAppsPanel({
   const [iconFile, setIconFile] = useState<Record<string, 'ok' | 'bad'>>({})
   const markIconFile = (id: string, s: 'ok' | 'bad') =>
     setIconFile((prev) => (prev[id] === s ? prev : { ...prev, [id]: s }))
-  /** /apps/shots/manifest.json 的预览图；按 id 索引 */
-  const [shots, setShots] = useState<Record<string, AppShot>>({})
-  /** 预览图文件实际能否加载；bad 时回退到现有图标 */
-  const [shotFile, setShotFile] = useState<Record<string, 'ok' | 'bad'>>({})
-  const markShotFile = (id: string, s: 'ok' | 'bad') =>
-    setShotFile((prev) => (prev[id] === s ? prev : { ...prev, [id]: s }))
 
   const gated = gate(showTabs, tab)
   useEffect(() => {
     if (gated && active) void load()
   }, [gated, active, loadKey])
-
-  // 预览图清单（只读静态 JSON；没有也不影响面板其它功能）
-  useEffect(() => {
-    if (!active) return
-    let alive = true
-    void loadAppShots().then((map) => {
-      if (alive) setShots(map)
-    })
-    return () => {
-      alive = false
-    }
-  }, [active])
 
   const notify = (kind: 'ok' | 'err', text: string) => onNotify?.({ kind, text })
 
@@ -371,8 +352,6 @@ export function AdminAppsPanel({
           visible.map((a, vi) => {
             const busyRow = iconBusy.has(a.id)
             const letter = Array.from(a.name.trim())[0] ?? '?'
-            const shot = shots[a.id]
-            const shotOk = !!shot && shotFile[a.id] !== 'bad'
             const dragging = dragId === a.id
             const dropSide = !dragging && drop?.targetId === a.id ? (drop.before ? 'before' : 'after') : null
             return (
@@ -501,31 +480,21 @@ export function AdminAppsPanel({
                   </Group>
 
                   <Group gap="xs" wrap="wrap" align="center">
-                    {/* 有预览图先显示预览缩略图；缺图/加载失败回退到现有图标 */}
+                    {/* 缩略图与栏内一致:等比 contain,所见即访客所见 */}
                     <Box
                       style={{
-                        width: 88,
-                        height: 55,
+                        width: 44,
+                        height: 44,
                         flex: 'none',
                         background: 'color-mix(in srgb, var(--bg-2) 78%, transparent)',
                         border: '1px solid var(--line)',
-                        borderRadius: 8,
+                        borderRadius: 12,
                         overflow: 'hidden',
                         display: 'grid',
                         placeItems: 'center',
                       }}
                     >
-                      {shotOk ? (
-                        <img
-                          src={shot.shot}
-                          alt={`${a.name} 预览图`}
-                          loading="lazy"
-                          decoding="async"
-                          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-                          onLoad={() => markShotFile(a.id, 'ok')}
-                          onError={() => markShotFile(a.id, 'bad')}
-                        />
-                      ) : a.icon ? (
+                      {a.icon ? (
                         <img
                           src={a.icon}
                           alt=""
@@ -539,21 +508,6 @@ export function AdminAppsPanel({
                         </Text>
                       )}
                     </Box>
-                    {shot ? (
-                      shotFile[a.id] === 'bad' ? (
-                        <Badge size="xs" color="red" variant="light" title="manifest 里有记录，但线上图片加载失败">
-                          预览图缺失 · 回退图标
-                        </Badge>
-                      ) : (
-                        <Badge size="xs" color="teal" variant="light">
-                          有预览图
-                        </Badge>
-                      )
-                    ) : (
-                      <Badge size="xs" color="gray" variant="light" title="scripts/app-shots.mjs 抓图后自动出现">
-                        无预览图 · 回退图标
-                      </Badge>
-                    )}
                     {a.icon ? (
                       iconFile[a.id] === 'bad' ? (
                         <Badge size="xs" color="red" variant="light" title="线上没找到这个文件,图标显示不出来">

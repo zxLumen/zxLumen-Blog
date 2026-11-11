@@ -11,8 +11,6 @@ import { trackEvent } from './track.js'
 import { applySavedOrder, groupContiguous, useDragReorder } from './useDragReorder.js'
 import { useAppImpressions } from './useAppImpressions.js'
 import { useAppPanel } from './AppPanel.js'
-import { loadAppShots, type AppShot } from './app-shots.js'
-import { HoverPreview, PreviewOverlay } from './AppPreview.js'
 
 interface AppDockProps {
   /** 展示用应用条目(已排除垃圾箱);空数组 → 不渲染 */
@@ -57,22 +55,6 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
   const [tip, setTip] = useState<{ text: string; top: number; left: number; side: 'left' | 'top' } | null>(null)
   /** 「?」反馈弹窗是否打开 */
   const [feedbackOpen, setFeedbackOpen] = useState(false)
-  /** 预览图清单（manifest 拉不到时保持空对象 → 全部走旧行为） */
-  const [shots, setShots] = useState<Record<string, AppShot>>({})
-  /** 是否精确指针（桌面鼠标）：只有这里才做 hover 220ms 预览 */
-  const [finePointer, setFinePointer] = useState(false)
-  /** 桌面 hover 卡（portal + fixed，位置按图标 rect 现算） */
-  const [hoverCard, setHoverCard] = useState<{
-    app: AppItem
-    shot: AppShot
-    top: number
-    left: number
-    side: 'left' | 'top'
-  } | null>(null)
-  /** 点击后的预览浮层 */
-  const [previewApp, setPreviewApp] = useState<AppItem | null>(null)
-  const hoverTimer = useRef<number | null>(null)
-  const hoverCloseTimer = useRef<number | null>(null)
 
   const storageKey = appsOrderKey(mockId)
   /** openIn='panel' 的应用:用站内浮层打开(没有 Provider 时为 null,降级成普通链接) */
@@ -86,34 +68,6 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
     mq.addEventListener('change', on)
     return () => mq.removeEventListener('change', on)
   }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return
-    const mq = window.matchMedia('(hover: hover) and (pointer: fine)')
-    const on = () => setFinePointer(mq.matches)
-    on()
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
-
-  // 预览清单只在挂载时拉一次（小 JSON；失败静默降级成无预览）
-  useEffect(() => {
-    let alive = true
-    void loadAppShots().then((map) => {
-      if (alive) setShots(map)
-    })
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  useEffect(
-    () => () => {
-      if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
-      if (hoverCloseTimer.current !== null) window.clearTimeout(hoverCloseTimer.current)
-    },
-    [],
-  )
 
   /**
    * 首帧前(paint 之前)按本地顺序重排。
@@ -196,82 +150,16 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
   )
   const hideTip = useCallback(() => setTip(null), [])
 
-  const clearHoverTimer = useCallback(() => {
-    if (hoverTimer.current !== null) {
-      window.clearTimeout(hoverTimer.current)
-      hoverTimer.current = null
-    }
-  }, [])
-
-  const closeHoverCard = useCallback(() => {
-    clearHoverTimer()
-    if (hoverCloseTimer.current !== null) {
-      window.clearTimeout(hoverCloseTimer.current)
-      hoverCloseTimer.current = null
-    }
-    setHoverCard(null)
-  }, [clearHoverTimer])
-
-  /** 图标 → 预览卡之间有一小段空隙：离开图标先等 160ms，让鼠标能移进卡片 */
-  const scheduleCloseHoverCard = useCallback(() => {
-    if (hoverCloseTimer.current !== null) window.clearTimeout(hoverCloseTimer.current)
-    hoverCloseTimer.current = window.setTimeout(() => {
-      hoverCloseTimer.current = null
-      setHoverCard(null)
-    }, 160)
-  }, [])
-
-  const cancelCloseHoverCard = useCallback(() => {
-    if (hoverCloseTimer.current !== null) {
-      window.clearTimeout(hoverCloseTimer.current)
-      hoverCloseTimer.current = null
-    }
-  }, [])
-
-  /**
-   * 桌面 hover 预览：延迟 220ms 才出现（路过图标不弹），位置在出现时现算。
-   * 没有截图的应用保留原来的名称气泡，不改变老行为。
-   */
-  const scheduleHoverCard = useCallback(
-    (app: AppItem, el: HTMLElement | null) => {
-      const shot = shots[app.id]
-      if (!finePointer || !shot || !el || dragId) {
-        showTip(app.name, el)
-        return
-      }
-      hideTip()
-      clearHoverTimer()
-      hoverTimer.current = window.setTimeout(() => {
-        hoverTimer.current = null
-        const r = el.getBoundingClientRect()
-        const vh = window.innerHeight
-        const vw = window.innerWidth
-        const top = horizontal
-          ? Math.max(160, r.top - 10)
-          : Math.min(Math.max(r.top + r.height / 2, 155), vh - 155)
-        const left = horizontal ? Math.min(Math.max(r.left + r.width / 2, 170), vw - 170) : r.left - 10
-        setHoverCard({ app, shot, top, left, side: horizontal ? 'top' : 'left' })
-      }, 220)
-    },
-    [shots, finePointer, dragId, horizontal, showTip, hideTip, clearHoverTimer],
-  )
-
-  // 拖动中收起:气泡/预览卡会挡住落点,也免得跟着乱飘
+  // 拖动中收起:气泡会挡住落点,也免得跟着乱飘
   useEffect(() => {
-    if (dragId) {
-      setTip(null)
-      setHoverCard(null)
-    }
+    if (dragId) setTip(null)
   }, [dragId])
 
   // 应用栏自身滚动时图标会移位,旧坐标就错了 —— 收起,重新悬停即可
   useEffect(() => {
     const el = navRef.current
     if (!el) return
-    const onScroll = () => {
-      setTip(null)
-      setHoverCard(null)
-    }
+    const onScroll = () => setTip(null)
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
   }, [])
@@ -351,17 +239,11 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
           ...handleProps(app.id),
           'data-dragging': dragId === app.id ? '' : undefined,
           'data-drop': drop?.targetId === app.id ? (drop.before ? 'before' : 'after') : undefined,
-          // 桌面鼠标：有截图时 220ms 出预览卡；没截图仍走原来的名称气泡
-          onMouseEnter: (e: ReactMouseEvent) => scheduleHoverCard(app, e.currentTarget as HTMLElement),
-          onMouseLeave: () => {
-            hideTip()
-            scheduleCloseHoverCard()
-          },
+          // 名称气泡(鼠标悬停 + 键盘聚焦都算)
+          onMouseEnter: (e: ReactMouseEvent) => showTip(app.name, e.currentTarget as HTMLElement),
+          onMouseLeave: hideTip,
           onFocus: (e: ReactFocusEvent) => showTip(app.name, e.currentTarget as HTMLElement),
-          onBlur: () => {
-            hideTip()
-            closeHoverCard()
-          },
+          onBlur: hideTip,
           /**
            * 点击埋点:绑定到项目/联系方式/简历的与对应按钮合并计数,没绑定的记 app_click。
            * 拖动后浏览器补发的那次 click 会被 handleProps 的 onClickCapture 吃掉,故只有真点击才计。
@@ -369,15 +251,6 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
           onClick: (e: ReactMouseEvent) => {
             const { type, target } = resolveAppTrack(app)
             trackEvent(type, target)
-            // 有预览图：普通左键先开预览浮层，浮层里再点「打开」才执行原来的打开方式。
-            // Cmd/Ctrl/Shift/中键仍放行走默认，保证「在新标签打开」的老习惯不变。
-            if (shots[app.id] && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
-              e.preventDefault()
-              hideTip()
-              closeHoverCard()
-              setPreviewApp(app)
-              return
-            }
             if (panel && appPanel) {
               // Cmd/Ctrl/Shift/中键 → 放行走默认,在新标签页打开
               if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
@@ -441,35 +314,6 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
           >
             {tip.text}
           </div>,
-          document.body,
-        )}
-
-      {hoverCard &&
-        createPortal(
-          <HoverPreview
-            app={hoverCard.app}
-            shot={hoverCard.shot}
-            link={link}
-            onPanelOpen={appPanel ? (a) => appPanel.open(a) : undefined}
-            onClose={closeHoverCard}
-            onMouseEnter={cancelCloseHoverCard}
-            top={hoverCard.top}
-            left={hoverCard.left}
-            side={hoverCard.side}
-          />,
-          document.body,
-        )}
-
-      {previewApp &&
-        shots[previewApp.id] &&
-        createPortal(
-          <PreviewOverlay
-            app={previewApp}
-            shot={shots[previewApp.id]}
-            link={link}
-            onPanelOpen={appPanel ? (a) => appPanel.open(a) : undefined}
-            onClose={() => setPreviewApp(null)}
-          />,
           document.body,
         )}
     </nav>
