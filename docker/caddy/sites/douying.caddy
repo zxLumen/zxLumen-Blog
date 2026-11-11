@@ -1,0 +1,10 @@
+# 抖应 · 一键做应用的平台
+#
+# 宿主机 :8099，由 systemd 托管（douying.service），SQLite 落
+# /home/ubuntu/Projects/douying/douying.db。
+# 与 company 一样不在容器里，Caddy 经 host.docker.internal 反代。
+douying.{$DOMAIN} {
+	import secure
+	import accesslog
+	reverse_proxy host.docker.internal:8099
+}
