@@ -5762,6 +5762,36 @@ tr:hover .zx-alias-btn {
   }
 }
 
+/* 站长拖拽排序的落库反馈:portal 到 body、顶部居中,2.6s 自动消失 */
+.zx-appdock-toast {
+  position: fixed;
+  z-index: 9999;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.8rem;
+  max-width: min(22rem, calc(100vw - 2rem));
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--fg);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  animation: zx-appdock-tip-in 0.13s ease;
+}
+
+.zx-appdock-toast[data-kind='ok'] {
+  border-color: var(--accent);
+}
+
+.zx-appdock-toast[data-kind='err'] {
+  border-color: #d9534f;
+  color: #ffb4b0;
+}
+
 /* 分组分隔线 */
 .zx-appdock-sep {
   flex: 0 0 auto;

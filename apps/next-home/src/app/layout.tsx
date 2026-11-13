@@ -10,7 +10,7 @@ import {
 import { isAdmin } from "@/lib/auth";
 import { getClientContacts } from "@/lib/settings";
 import { getAppearance } from "@/lib/theme-config";
-import { getVisibleApps } from "@/lib/app-config";
+import { getAppsOrderRev, getVisibleApps } from "@/lib/app-config";
 import { LuminariFloatsClient } from "@/components/LuminariFloatsClient";
 import { MockUserSwitch } from "@/components/MockUserSwitch";
 import { AppShell } from "@/components/AppShell";
@@ -74,6 +74,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   // 右侧应用栏(admin 可配):为空则不渲染、不占位(data-apps 不设)
   const apps = getVisibleApps();
+  // 默认顺序版本:站长改过顺序后 +1,访客本机的旧自定义顺序据此作废
+  const appsRev = getAppsOrderRev();
 
   const initScript = `${themeInitScript(appearance.themes, appearance.layouts, appearance.defaultTheme, appearance.defaultLayout, mockCid || undefined)};${NAV_INIT_SCRIPT}`;
 
@@ -96,6 +98,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           contacts={contacts}
           profile={PROFILE}
           apps={apps}
+          appsRev={appsRev}
           allowedThemeIds={appearance.themes}
           allowedLayoutIds={appearance.layouts}
           defaultTheme={appearance.defaultTheme}

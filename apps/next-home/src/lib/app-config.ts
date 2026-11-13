@@ -4,6 +4,41 @@ import { getDb } from './db'
 
 const META_KEY = 'apps_config'
 
+/**
+ * 默认顺序的版本号(整数,每次改顺序 +1)。
+ *
+ * 访客自己拖过顺序会存 localStorage;站长再调默认顺序时,那份旧存档会让访客
+ * 一直看着过期的顺序(「我明明改了,别人还是老的」)。所以给默认顺序配一个版本,
+ * 访客存顺序时一起存版本,读到的版本与页面给的不一致 → 丢弃本地顺序、回到新默认。
+ * 只存整数、只增不减,回滚也安全(最坏是访客的自定义顺序被重置一次)。
+ */
+const REV_KEY = 'apps_config_rev'
+
+function readRev(): number {
+  try {
+    const n = Number(getDb().getMeta(REV_KEY) ?? '0')
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+  } catch {
+    return 0
+  }
+}
+
+/** 当前默认顺序版本(未配置过 = 0) */
+export function getAppsOrderRev(): number {
+  return readRev()
+}
+
+/** 默认顺序变了:版本 +1(失败不致命,访客顶多多保留一次旧顺序) */
+function bumpRev(): number {
+  const next = readRev() + 1
+  try {
+    getDb().setMeta(REV_KEY, String(next))
+  } catch {
+    /* 库写失败已经在业务写里暴露,这里不再重复抛 */
+  }
+  return next
+}
+
 /** id 允许的字符:同时用于生成落盘文件名,必须足够严格 */
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/i
 
@@ -134,17 +169,66 @@ export function getStoredApps(): StoredApp[] {
   }
 }
 
+/** 可见项的 id 序列(只看在架的) */
+function visibleIds(list: readonly StoredApp[]): string[] {
+  return list.filter((a) => !a.deleted).map((a) => a.id)
+}
+
+/**
+ * 「相对顺序」是否变了:只看两次都在架的那批应用的先后。
+ * 纯新增 / 纯删除不算 —— 那种情况访客的自定义顺序仍然有意义(新条目按邻居位置插入),
+ * 只有站长真的**调了顺序**,才值得把所有人的自定义顺序重置一遍。
+ */
+function relativeOrderChanged(prev: readonly StoredApp[], next: readonly StoredApp[]): boolean {
+  const nextIds = visibleIds(next)
+  const nextPos = new Map(nextIds.map((id, i) => [id, i]))
+  const common = visibleIds(prev).filter((id) => nextPos.has(id))
+  for (let i = 1; i < common.length; i++) {
+    if (nextPos.get(common[i - 1])! > nextPos.get(common[i])!) return true
+  }
+  return false
+}
+
 /** 规范化后写入整表(数组顺序即展示顺序) */
 export function saveStoredApps(input: unknown): StoredApp[] {
   const list = normalizeAppList(input)
+  const prev = getStoredApps()
   getDb().setMeta(META_KEY, JSON.stringify(list))
+  // 只有顺序真的变了才升版本 —— 改名/加一个应用不该把访客的自定义顺序重置
+  if (relativeOrderChanged(prev, list)) bumpRev()
   return list
 }
 
 /** 恢复为出厂默认(删除配置) */
 export function resetStoredApps(): StoredApp[] {
   getDb().delMeta(META_KEY)
+  bumpRev()
   return DEFAULT_APPS.map((a) => ({ ...a }))
+}
+
+/**
+ * 只调整**在架应用**的顺序(垃圾箱条目原地不动),供首页应用栏的站长拖拽用。
+ *
+ * 为什么单独开一条:应用栏只有「可见项」,若走整表保存,客户端会用这份不完整的
+ * 列表覆盖 `meta.apps_config`,垃圾箱里的条目会被顺手删掉。
+ *
+ * 校验:`ids` 必须与当前可见项集合完全一致 —— 站长在另一个标签页加减过应用时
+ * 这里会拒绝(返回 null),由调用方提示刷新,避免用旧列表把新条目冲掉。
+ */
+export function reorderVisibleApps(ids: readonly string[]): StoredApp[] | null {
+  const list = getStoredApps()
+  const visible = list.filter((a) => !a.deleted)
+  if (ids.length !== visible.length) return null
+  const want = new Set(ids)
+  if (want.size !== ids.length) return null
+  for (const a of visible) if (!want.has(a.id)) return null
+
+  let vi = 0
+  const byId = new Map(list.map((a) => [a.id, a]))
+  const next = list.map((a) => (a.deleted ? a : (byId.get(ids[vi++]) ?? a)))
+  getDb().setMeta(META_KEY, JSON.stringify(next))
+  if (relativeOrderChanged(list, next)) bumpRev()
+  return next
 }
 
 /** 仅取前端要展示的应用(排除垃圾箱),转成展示形状 */

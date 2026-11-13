@@ -13,6 +13,7 @@ export function AppShell({
   contacts,
   profile,
   apps,
+  appsRev,
   allowedThemeIds,
   allowedLayoutIds,
   defaultTheme,
@@ -28,6 +29,8 @@ export function AppShell({
   profile?: Profile
   /** 右侧应用栏条目(空数组 = 不渲染) */
   apps?: AppItem[]
+  /** 应用栏默认顺序版本(变了 = 站长调过顺序,访客本机旧顺序作废) */
+  appsRev?: number
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
   /** admin 配置的默认主题 / 布局 */
@@ -51,6 +54,7 @@ export function AppShell({
       contacts={contacts}
       profile={profile}
       apps={apps}
+      appsRev={appsRev}
       allowedThemeIds={allowedThemeIds}
       allowedLayoutIds={allowedLayoutIds}
       defaultTheme={defaultTheme}

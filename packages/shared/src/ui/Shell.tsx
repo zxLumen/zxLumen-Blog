@@ -22,6 +22,8 @@ interface ShellProps {
   profile?: Profile
   /** 右侧应用栏条目(admin 配置;空数组 = 不渲染) */
   apps?: AppItem[]
+  /** 应用栏默认顺序版本(变了 = 站长调过顺序,访客本机旧顺序作废) */
+  appsRev?: number
   /** 允许的主题 / 布局(admin 配置的放行集合) */
   allowedThemeIds: string[]
   allowedLayoutIds: LayoutId[]
@@ -47,6 +49,7 @@ export function Shell({
   contacts,
   profile,
   apps,
+  appsRev,
   allowedThemeIds,
   allowedLayoutIds,
   defaultTheme,
@@ -80,7 +83,7 @@ export function Shell({
         <ChatWidget />
         {/* 应用「页内浮层」宿主:挂在应用栏同层,AppDock 通过 context 打开 */}
         <AppPanelProvider apps={apps} floatsDismissable={floatsDismissable}>
-          <AppDock apps={apps} link={link} mockId={mockId} />
+          <AppDock apps={apps} appsRev={appsRev} link={link} mockId={mockId} admin={admin} />
         </AppPanelProvider>
       </div>
     </PreferencesProvider>

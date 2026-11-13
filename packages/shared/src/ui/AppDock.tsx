@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import type { AppItem } from '../schema.js'
 import { isSpaRoute, normalizeUrl } from '../content.js'
 import type { LinkComponent } from './types.js'
-import { appsOrderKey } from './identity.js'
+import { appsOrderKey, appsOrderRevKey } from './identity.js'
 import { resolveAppTrack } from './app-track.js'
 import { trackEvent } from './track.js'
 import { applySavedOrder, groupContiguous, useDragReorder } from './useDragReorder.js'
@@ -19,6 +19,13 @@ interface AppDockProps {
   link?: LinkComponent
   /** 模拟访客身份:自定义顺序按身份分键(等价于该访客设备上的顺序) */
   mockId?: string
+  /**
+   * 站长本人(非 MOCK 身份)。为 true 时拖拽直接改**所有人的默认顺序**并立即落库,
+   * 而不是只改这台设备上的 localStorage。
+   */
+  admin?: boolean
+  /** 默认顺序版本(服务端 `apps_config_rev`);变了 = 站长动过顺序,访客旧存档作废 */
+  appsRev?: number
 }
 
 type LinkLike = React.ComponentType<{
@@ -45,18 +52,23 @@ const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : use
  * 访客可以自己按住拖动调顺序(鼠标 + 触屏都行),顺序按访客身份存 localStorage,
  * 不写库、不影响其他访客和 admin 配的默认顺序。只允许在同一分组内拖动。
  */
-export function AppDock({ apps, link, mockId }: AppDockProps) {
+export function AppDock({ apps, link, mockId, admin = false, appsRev = 0 }: AppDockProps) {
   const navRef = useRef<HTMLElement | null>(null)
   const [horizontal, setHorizontal] = useState(false)
   /** 访客自定义的 id 顺序;null = 还没读 / 用默认 */
   const [order, setOrder] = useState<string[] | null>(null)
   const [customized, setCustomized] = useState(false)
+  /** 站长拖拽落库的反馈(portal 到 body 的小提示;null = 不显示) */
+  const [toast, setToast] = useState<{ kind: 'saving' | 'ok' | 'err'; text: string } | null>(null)
+  const revRef = useRef(appsRev)
+  revRef.current = appsRev
   /** 悬停/聚焦时的名称气泡。位置在事件里按图标 rect 现算,portal 到 body —— 见下方注释 */
   const [tip, setTip] = useState<{ text: string; top: number; left: number; side: 'left' | 'top' } | null>(null)
   /** 「?」反馈弹窗是否打开 */
   const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   const storageKey = appsOrderKey(mockId)
+  const revStorageKey = appsOrderRevKey(mockId)
   /** openIn='panel' 的应用:用站内浮层打开(没有 Provider 时为 null,降级成普通链接) */
   const appPanel = useAppPanel()
 
@@ -84,11 +96,24 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
         const v = JSON.parse(raw)
         if (Array.isArray(v) && v.every((x) => typeof x === 'string')) saved = v
       }
+      /**
+       * 存档必须是**针对当前这份默认顺序**的。站长在别的设备/面板里改过顺序后,
+       * 版本号 +1,这里的旧存档立刻作废 —— 否则「站长改了、访客还看老顺序」,
+       * 而访客自己根本不知道需要点 ↺。没有版本号的旧存档按 0 处理。
+       */
+      if (saved) {
+        const savedRev = Number(window.localStorage.getItem(revStorageKey) ?? '0')
+        if (Number.isFinite(savedRev) && savedRev !== revRef.current) {
+          window.localStorage.removeItem(storageKey)
+          window.localStorage.removeItem(revStorageKey)
+          saved = null
+        }
+      }
     } catch {
       saved = null
     }
     setOrder(saved)
-  }, [storageKey])
+  }, [storageKey, revStorageKey])
 
   // EMPTY 是模块级常量,引用稳定 —— apps 为空时 ids 不会每渲染都换个新数组
   const base = apps ?? EMPTY
@@ -108,17 +133,70 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
   // 卡片曝光 / s3 埋点(IntersectionObserver + 3s 心跳;不做 video)
   useAppImpressions(navRef, list)
 
+  /** 顺序存到本机(访客的自定义顺序;站长也存,刷新后不必等默认顺序回流) */
+  const saveLocal = useCallback(
+    (next: string[]) => {
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(next))
+        window.localStorage.setItem(revStorageKey, String(revRef.current))
+      } catch {
+        /* 隐私模式 / 配额满:这次不落盘,本次会话内仍然有效 */
+      }
+    },
+    [storageKey, revStorageKey],
+  )
+
+  /**
+   * 站长拖完 → 立刻落库,改的是**所有人的默认顺序**(不是这台设备的 localStorage)。
+   * 失败就把画面退回拖之前的样子,并明确说没保存 —— 不能让站长以为改完全网生效了。
+   */
+  const persistOrder = useCallback(
+    async (next: string[], before: string[] | null) => {
+      setToast({ kind: 'saving', text: '正在保存顺序…' })
+      try {
+        const r = await fetch('/api/admin/apps/reorder', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: next }),
+          // 老 Safari 没有 AbortSignal.timeout;没有超时也别把请求变成直接失败
+          signal: typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(15_000) : undefined,
+        })
+        const d = (await r.json().catch(() => ({}))) as { error?: string; rev?: number }
+        if (!r.ok) throw new Error(d.error || `保存失败(${r.status})`)
+        if (typeof d.rev === 'number') {
+          revRef.current = d.rev
+          try {
+            window.localStorage.setItem(revStorageKey, String(d.rev))
+          } catch {
+            /* ignore */
+          }
+        }
+        setToast({ kind: 'ok', text: '顺序已生效,所有访客都会看到' })
+      } catch (err) {
+        // 回滚画面与本机存档 —— 否则这台机器刷新后会「假装」新顺序已经生效
+        setOrder(before)
+        try {
+          if (before) saveLocal(before)
+          else window.localStorage.removeItem(storageKey)
+        } catch {
+          /* ignore */
+        }
+        setToast({ kind: 'err', text: err instanceof Error ? err.message : '顺序没保存' })
+      }
+    },
+    [revStorageKey, saveLocal, storageKey],
+  )
+
   const { dragId, drop, registerItem, handleProps } = useDragReorder({
     ids,
     axis: horizontal ? 'x' : 'y',
     groupOf: (id) => byId.get(id)?.group ?? '',
     onCommit: (next) => {
+      const before = order
       setOrder(next)
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(next))
-      } catch {
-        /* 隐私模式 / 配额满:这次不落盘,本次会话内仍然有效 */
-      }
+      saveLocal(next)
+      if (admin) void persistOrder(next, before)
     },
     getScrollBox: () => navRef.current,
     /**
@@ -168,7 +246,8 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
   useEffect(() => {
     // 比的是**渲染出来的** idsKey,不是 localStorage 里的原始 order:归拢之后画面
     // 可能已经等于 admin 默认顺序了,这时再挂一个 ↺ 就是让用户点没用的东西。
-    setCustomized(order !== null && order.length > 0 && idsKey !== defaultKey)
+    // 站长不显示 ↺:他的「默认」就是服务端那份,拖完已经落库,重置只会把画面拉回旧值
+    setCustomized(!admin && order !== null && order.length > 0 && idsKey !== defaultKey)
     // 依赖字符串形式:数组每渲染都新建,直接进依赖会白跑
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, idsKey, defaultKey])
@@ -183,6 +262,13 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
     }
   }, [storageKey])
 
+  // 站长拖拽反馈:成功 / 失败 2.6s 后自动消失(「保存中」不自动消失)
+  useEffect(() => {
+    if (!toast || toast.kind === 'saving') return
+    const t = window.setTimeout(() => setToast(null), 2600)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
   if (!apps || apps.length === 0) return null
 
   const Comp = (link ?? 'a') as unknown as LinkLike
@@ -193,11 +279,13 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
   let lastGroup = ''
 
   return (
+    // data-apps-rev = 这份页面拿到的默认顺序版本,排查「站长改了但访客没跟上」时一眼可见
     <nav
       className="zx-appdock"
       aria-label="应用栏"
       ref={navRef}
       data-dragging-active={dragId ? '' : undefined}
+      data-apps-rev={appsRev}
     >
       {/* 「?」反馈入口:固定在应用栏顶部空带,不进应用列表、不占应用槽位。
           宽带居中(顶栏通栏时在其下沿与首个应用的正中间);窄带移到横条最右端(CSS)。 */}
@@ -303,6 +391,16 @@ export function AppDock({ apps, link, mockId }: AppDockProps) {
       )}
 
       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
+
+      {/* 站长拖拽后的落库反馈:portal 到 body —— 应用栏自己 overflow,挂里面会被裁掉 */}
+      {toast &&
+        createPortal(
+          <div className="zx-appdock-toast" data-kind={toast.kind} role="status">
+            {toast.kind === 'saving' ? '⏳ ' : toast.kind === 'ok' ? '✓ ' : '✕ '}
+            {toast.text}
+          </div>,
+          document.body,
+        )}
 
       {tip &&
         createPortal(
