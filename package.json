@@ -6,12 +6,13 @@
   "scripts": {
     "shared:build": "cd packages/shared && npm run build",
     "test:unit": "cd packages/shared && npm test",
+    "test:greeting": "vitest run tests-suite/unit/greeting-parse.test.ts",
     "test:data": "npm run shared:build && node --test tests-suite/data/*.test.mjs",
     "test:api": "npm run shared:build && node tests-suite/api/run.mjs",
     "test:e2e": "npm run shared:build && npm --prefix apps/next-home run build && npx playwright test --config tests-suite/e2e/playwright.config.ts",
     "test:load": "npm run shared:build && node tests-suite/load/run.mjs",
     "test:smoke": "node tests-suite/smoke/online-smoke.mjs",
-    "test": "npm run test:data && npm run test:unit"
+    "test": "npm run test:data && npm run test:unit && npm run test:greeting"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

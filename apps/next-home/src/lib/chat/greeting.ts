@@ -8,6 +8,7 @@ import { getRuntimeContent } from '@zx/shared/server'
 import { getDb } from '../db'
 import { chatProtocol, getChatApiKey, getConfig } from './config'
 import { completeChatFull } from './llm'
+import { isMangledGreeting, parseGreetingLines } from './greeting-parse'
 
 const BJ_OFFSET = 8 * 3600_000
 const LAT = 39.9042
@@ -185,7 +186,12 @@ function loadPersisted(): { key: string; lines: string[]; wx?: boolean } | null 
     if (!raw) return null
     const j = JSON.parse(raw) as { key?: unknown; lines?: unknown; wx?: unknown }
     if (typeof j.key === 'string' && Array.isArray(j.lines)) {
-      const lines = j.lines.filter((s): s is string => typeof s === 'string')
+      const all = j.lines.filter((s): s is string => typeof s === 'string')
+      // 旧解析器吃掉行首数字留下的残句(如「月14日周六…」)不再展示
+      const lines = all.filter((s) => !isMangledGreeting(s))
+      if (lines.length !== all.length) {
+        console.warn(`[greeting] 丢弃 ${all.length - lines.length} 条残缺缓存 @ ${j.key}`)
+      }
       if (lines.length) return { key: j.key, lines, wx: j.wx === true }
     }
   } catch {
@@ -200,35 +206,6 @@ function persist(c: { key: string; lines: string[]; wx?: boolean }): void {
   } catch {
     /* ignore */
   }
-}
-
-/** 温度统一为「19°C」形式(℃ 单字形在等宽字体下会走回退、显示怪异) */
-function normalizeSymbols(s: string): string {
-  return s
-    .replace(/\s*℃\s*/g, '°C')
-    .replace(/(\d)\s*度/g, '$1°C')
-}
-
-/** 解析模型输出为问候句列表 */
-function parseLines(text: string): string[] {
-  const out: string[] = []
-  const seen = new Set<string>()
-  for (const raw of text.split(/\r?\n/)) {
-    let s = raw.trim()
-    s = s
-      .replace(/^[-*•\d]+[.、)）]?\s*/, '')
-      .replace(/^["“'‘]+/, '')
-      .replace(/["”'’]+$/, '')
-      .trim()
-    s = normalizeSymbols(s)
-    if (s.length < 6 || s.length > 120) continue
-    if (/^(问候语|示例|输出|以下|好的|当然)/.test(s)) continue
-    if (seen.has(s)) continue
-    seen.add(s)
-    out.push(s)
-    if (out.length >= PER_BUCKET) break
-  }
-  return out
 }
 
 /**
@@ -274,7 +251,7 @@ const prompt = [
         console.warn(`[greeting] audit truncated (budget=${budget}),放大重试`)
         continue
       }
-      const out = parseLines(res.text)
+      const out = parseGreetingLines(res.text)
       if (out.length) return out
     }
     return []
@@ -384,7 +361,7 @@ async function generate(ctx: Ctx, samples: string[]): Promise<void> {
         sessionId: `greet:${crypto.createHash('sha1').update(ctx.key).digest('hex').slice(0, 16)}`,
       })
       const truncated = res.finishReason === 'length'
-      let parsed = parseLines(res.text)
+      let parsed = parseGreetingLines(res.text)
       // 截断时最后一条多半被切断:丢掉后再判断,且整次不作为完整结果
       if (truncated && parsed.length) parsed = parsed.slice(0, -1)
       console.log(
