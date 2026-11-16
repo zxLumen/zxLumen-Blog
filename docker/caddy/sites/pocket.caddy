@@ -1,5 +1,5 @@
-# 私有:你 Mac 上的 opencode(经 SSH 反向隧道暴露到 host.docker.internal:4096)。
-# 仅站长用(Basic 认证由 opencode 自身提供),不进应用栏。见 Opencode-Pocket 仓库。
+# 私有:VPS 上的 opencode(host.docker.internal:4096)。
+# 仅站长用(认证由 opencode 自身提供),不进应用栏。见 Opencode-Pocket 仓库。
 pocket.{$DOMAIN} {
 	import accesslog
 	import webapp
@@ -11,29 +11,44 @@ pocket.{$DOMAIN} {
 	}
 	rewrite @msgInitial {http.request.uri.path}?limit=20&order=desc
 
-	# WebUI 本地补丁:事件流连接超时 2s → 8s。
-	# /sw.js 换成直通 SW(清旧缓存 + 强制 runtime 走网络)，并替换 runtime 资源。
-	# opencode 升级后 asset 哈希会变，需要重新打补丁。
+	# opencode API 与事件流仍反代到本机服务。
+	@opencodeApi path /api /api/* /auth /auth/* /openapi.json
+	handle @opencodeApi {
+		reverse_proxy host.docker.internal:4096 {
+			import sse
+		}
+	}
+
+	# App 图片上传 + WebUI 语音转写中继：/pocketd/* -> pocketd(8788)
+	# 说明：pocketd 跑在宿主机(0.0.0.0:8788)，容器经 host.docker.internal 访问。
+	handle /pocketd/* {
+		uri strip_prefix /pocketd
+		reverse_proxy host.docker.internal:8788
+	}
+
+	# 旧 Service Worker 补丁：清缓存 + 强制走网络，避免升级后仍命中旧 bundle。
 	handle /sw.js {
 		root * /srv/site/oc-patch
 		file_server
 		header Cache-Control "no-cache"
 	}
+
+	# 旧 runtime 的登录密码归一化补丁（opencode 升级后 asset 哈希会变，保留兼容）。
 	handle /_assets/runtime-BfldUWqN.js {
 		root * /srv/site/oc-patch
 		file_server
 		header Cache-Control "no-cache"
 	}
 
-	# App 图片上传中继：/pocketd/upload -> pocketd(8788)/upload
-	# 说明：pocketd 跑在宿主机(0.0.0.0:8788)，容器经 host.docker.internal 访问。
-	handle /pocketd/* {
-		uri strip_prefix /pocketd
-		reverse_proxy host.docker.internal:8788
-	}
+	# WebUI 静态资源：本地构建（含语音输入 + 中文回车发送补丁）。
+	# 只接管静态资源；/api、/auth、/pocketd 仍由上面的 handle 处理。
 	handle {
-		reverse_proxy host.docker.internal:4096 {
-			import sse
-		}
+		root * /srv/site/pocket-app
+		@immutableAssets path /_assets/* /icons/* /assets/*
+		header @immutableAssets Cache-Control "public, max-age=31536000, immutable"
+		@pages not path /_assets/* /icons/* /assets/*
+		header @pages Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
 	}
 }
