@@ -1,0 +1,7 @@
+# Graphite 试点 StockApp（独立容器，不参与生产滚动更新）
+# 2026-11-14 重建：仓库同步会删掉未入库的 pilot 路由，重建用于预览。
+pilot-stock.{$DOMAIN} {
+	import accesslog
+	import webapp
+	reverse_proxy pilot-stock:8789
+}

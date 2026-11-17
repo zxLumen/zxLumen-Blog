@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import "@zx/shared/styles.css";
+import "@zx/shared/pilot.css";
 import "./luminari-floats.css";
 import {
   NAV,

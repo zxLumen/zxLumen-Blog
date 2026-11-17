@@ -23,7 +23,7 @@
   width: 144px;
   height: 144px;
   object-fit: contain;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .4));
+  filter: drop-shadow(0 6px 12px rgba(24, 24, 27, .18));
 }
 .cf-item.is-mine .cf-img {
   filter: drop-shadow(0 0 10px var(--accent));
@@ -36,7 +36,7 @@
   width: 144px;
   height: 144px;
   display: block;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .4));
+  filter: drop-shadow(0 6px 12px rgba(24, 24, 27, .18));
 }
 .cf-item.is-mine .cf-live svg {
   filter: drop-shadow(0 0 10px var(--accent));
@@ -68,7 +68,7 @@
   color: #111;
   font-size: 12px;
   line-height: 1.4;
-  box-shadow: 0 4px 12px #0000004d;
+  box-shadow: 0 4px 12px rgba(24, 24, 27, .18);
   pointer-events: none; /* 气泡盖在最上层也不挡住导航/应用栏的点击 */
 }
 /* 贴近顶边时气泡改挂到下方,避免被裁掉 */

@@ -1,0 +1,20 @@
+# Graphite 试点主站（独立容器，不参与生产滚动更新）
+# 2026-11-14 重建：仓库同步会删掉未入库的 pilot 路由，重建用于预览浅色版。
+pilot.{$DOMAIN} {
+	import accesslog
+	import webapp
+
+	# 应用栏图标 / 视频封面沿用主站静态目录（Caddy 容器内 /srv/site）
+	handle /apps/* {
+		root * /srv/site
+		file_server
+	}
+	handle /vlog/* {
+		root * /srv/site
+		file_server
+	}
+
+	handle {
+		reverse_proxy pilot-home:3000
+	}
+}

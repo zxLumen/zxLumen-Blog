@@ -69,6 +69,7 @@ const CARD_DEFAULTS: Record<
   stock: { tagline: '今日选股与模拟盘', tags: ['A股', '策略', '模拟盘'], action: '看今日' },
   yijing: { tagline: '起一卦,看看这一卦', tags: ['六十四卦', '免登录'], action: '起卦' },
   game: { tagline: '抽一个酒桌游戏', tags: ['聚会', '免登录'], action: '抽一个' },
+  douying: { tagline: '一句话生成一个应用', tags: ['创作', 'AI', '免登录'], action: '做一个' },
   douyu: { tagline: '盯住直播间谁来了', tags: ['直播', '提醒'], action: '看监控' },
   curling: { tagline: '手机上溜一局冰壶', tags: ['小游戏', '1 分钟'], action: '来一局' },
   zuiti: { tagline: '难回的消息交给它', tags: ['微信', '嘴替'], action: '看看' },
@@ -89,6 +90,8 @@ const DEFAULT_APPS: AppItem[] = [
   { id: 'photo', name: '光圈', url: 'photo.zxlumen.cn', icon: '/apps/photo.png', openIn: 'panel', bind: 'photo', ...CARD_DEFAULTS.photo },
   // 酒桌游戏:独立子域(game.*),主站应用栏 newtab 打开;房间状态在主站 SQLite
   { id: 'game', name: '酒桌', url: 'game.zxlumen.cn', icon: '/apps/game.png', openIn: 'newtab' },
+  // 抖应:一句话做应用,独立子域(douying.*),页内浮层打开
+  { id: 'douying', name: '抖应', url: 'douying.zxlumen.cn', icon: '/apps/douying.png', openIn: 'panel', ...CARD_DEFAULTS.douying },
   // 斗鱼监控:宿主机 8899 看板(douyu.*),页内浮层打开;管理员可改、访客只读
   { id: 'douyu', name: '斗鱼监控', url: 'douyu.zxlumen.cn', icon: '/apps/douyu.png', openIn: 'panel', ...CARD_DEFAULTS.douyu },
   // 访客沙盒:公开 opencode web,newtab 打开(见 docs/PLAYGROUND.md);bind 留空 → app_click

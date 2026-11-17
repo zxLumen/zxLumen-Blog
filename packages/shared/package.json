@@ -23,7 +23,8 @@
       "types": "./dist/creature/index.d.ts",
       "import": "./dist/creature/index.js"
     },
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./pilot.css": "./src/pilot.css"
   },
   "files": [
     "dist",

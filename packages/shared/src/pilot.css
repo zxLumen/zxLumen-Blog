@@ -1,0 +1,590 @@
+/* ===========================================================================
+   Graphite · 试点主题
+   只挂在 html[data-theme='graphite'] 下；其他主题零影响。
+   规范：docs/design/DESIGN-SYSTEM.md
+   =========================================================================== */
+
+[data-theme='graphite'] {
+  /* 浅色石墨：默认底 #FAFAF9 + 冷蓝主色；比纯黑底更适合长时间阅读。
+     深色 token 仍保留在 DESIGN-SYSTEM.md，必要时可另开 dark 变体。 */
+  --bg: #fafaf9;
+  --bg-2: #f4f4f2;
+  --elev: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f2f2ef;
+  --line: #e7e5e4;
+  --line-strong: #d6d3d1;
+  --fg: #18181b;
+  --fg-dim: #52525b;
+  --fg-muted: #71717a;
+  --accent: #4f6bed;
+  --accent-strong: #3f57d6;
+  --accent-soft: rgba(79, 107, 237, 0.12);
+  --accent-2: #0f766e;
+  --danger: #dc2626;
+  --warning: #b45309;
+  --selection: rgba(79, 107, 237, 0.18);
+  --glow: rgba(79, 107, 237, 0.08);
+  --glow-2: rgba(15, 118, 110, 0.06);
+  --shadow: 0 8px 24px -18px rgba(24, 24, 27, 0.18);
+  --radius: 10px;
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --font-body: var(--font-sans);
+  --font-display: var(--font-sans);
+  --head-weight: 600;
+  --head-tracking: -0.035em;
+  --head-transform: none;
+  --title-grad: none;
+  --title-fill: currentColor;
+  --title-shadow: none;
+  --card-blur: 0px;
+  --ascii-shadow: none;
+  --ascii-border-left: 1px solid var(--line);
+  --ascii-glow: none;
+  --zx-nav-size: 0.8rem;
+}
+
+[data-theme='graphite'] ::selection {
+  background: var(--selection);
+  color: var(--fg);
+}
+
+/* 四周生灵层保留：它是个人主页的识别度，不移除；层本身 pointer-events:none，
+   不拦截正文阅读与点击。移动端仍由组件按 <820px 的既有规则不渲染。 */
+
+[data-theme='graphite'] body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 顶栏 ---------- */
+
+[data-theme='graphite'] .zx-topbar {
+  padding: 0 0;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+[data-theme='graphite'] .zx-topbar-in {
+  min-height: 60px;
+  gap: 1.25rem;
+}
+
+[data-theme='graphite'] .zx-logo {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+[data-theme='graphite'] .zx-topbar .zx-nav {
+  gap: 0.15rem;
+}
+
+[data-theme='graphite'] .zx-nav a {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--fg-dim);
+  padding: 0.34rem 0.72rem;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+}
+
+[data-theme='graphite'] .zx-nav a:hover {
+  color: var(--fg);
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+[data-theme='graphite'] html[data-nav='home'] .zx-nav a[data-nav='home'],
+[data-theme='graphite'] html[data-nav='projects'] .zx-nav a[data-nav='projects'],
+[data-theme='graphite'] html[data-nav='usage'] .zx-nav a[data-nav='usage'],
+[data-theme='graphite'] html[data-nav='about'] .zx-nav a[data-nav='about'],
+[data-theme='graphite'] html[data-nav='guestbook'] .zx-nav a[data-nav='guestbook'],
+[data-theme='graphite'] html[data-nav='admin'] .zx-nav a[data-nav='admin'] {
+  color: var(--fg);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+/* ---------- Hero ---------- */
+
+[data-theme='graphite'] .zx-hero {
+  padding: clamp(3.5rem, 11vh, 6.5rem) 0 clamp(2.5rem, 7vh, 4.5rem);
+}
+
+[data-theme='graphite'] .zx-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  margin-bottom: 1.1rem;
+}
+
+[data-theme='graphite'] .zx-kicker::before {
+  width: 1.4rem;
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+[data-theme='graphite'] .zx-hero h1 {
+  font-family: var(--font-sans);
+  font-size: clamp(2.4rem, 6vw, 3.75rem);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+  margin-bottom: 0.9rem;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--fg);
+  text-shadow: none;
+}
+
+[data-theme='graphite'] .zx-hero-sub {
+  font-family: var(--font-sans);
+  font-size: clamp(0.95rem, 1.6vw, 1.08rem);
+  line-height: 1.6;
+  color: var(--fg-dim);
+}
+
+[data-theme='graphite'] .zx-type {
+  font-family: var(--font-sans);
+  color: var(--fg);
+}
+
+[data-theme='graphite'] .zx-caret {
+  width: 2px;
+  height: 1.05em;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+[data-theme='graphite'] .zx-hero-body {
+  margin-top: 1.4rem;
+  color: var(--fg-dim);
+  font-size: 0.98rem;
+  max-width: 54ch;
+}
+
+[data-theme='graphite'] .zx-ascii {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  opacity: 0.5;
+  filter: grayscale(1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1rem;
+  background: var(--bg-2);
+}
+
+/* ---------- 区块 ---------- */
+
+[data-theme='graphite'] .zx-section {
+  padding: clamp(3rem, 8vh, 5.5rem) 0;
+  scroll-margin-top: 84px;
+}
+
+[data-theme='graphite'] .zx-sec-head {
+  margin-bottom: 2rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+  gap: 1rem;
+}
+
+[data-theme='graphite'] .zx-sec-tag {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--fg-muted);
+}
+
+[data-theme='graphite'] .zx-sec-title {
+  font-family: var(--font-sans);
+  font-size: clamp(1.6rem, 3.2vw, 2.15rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+/* ---------- 按钮 ---------- */
+
+[data-theme='graphite'] .zx-btn {
+  font-family: var(--font-sans);
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1;
+  min-height: 2.25rem;
+  padding: 0.62rem 1rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  color: var(--fg);
+  background: var(--elev);
+  box-shadow: none;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+[data-theme='graphite'] .zx-btn:hover {
+  color: var(--fg);
+  border-color: var(--fg-muted);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+[data-theme='graphite'] .zx-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+[data-theme='graphite'] .zx-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+[data-theme='graphite'] .zx-btn-primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+[data-theme='graphite'] .zx-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--fg-dim);
+}
+
+[data-theme='graphite'] .zx-btn-ghost:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+[data-theme='graphite'] .zx-btn-sm {
+  min-height: 1.9rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.76rem;
+}
+
+[data-theme='graphite'] .zx-cta {
+  gap: 0.6rem;
+  margin-top: 1.8rem;
+}
+
+/* ---------- 卡片 / 面板 ---------- */
+
+[data-theme='graphite'] .zx-card {
+  background: var(--elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1.5rem;
+  box-shadow: none;
+}
+
+[data-theme='graphite'] .zx-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow);
+}
+
+[data-theme='graphite'] .zx-card.is-featured {
+  border-color: var(--line-strong);
+}
+
+[data-theme='graphite'] .zx-card.is-featured::after {
+  height: 2px;
+  background: var(--accent);
+}
+
+[data-theme='graphite'] .zx-card::before {
+  color: var(--fg-muted);
+  font-size: 0.64rem;
+}
+
+[data-theme='graphite'] .zx-card h3,
+[data-theme='graphite'] .zx-card-title {
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+[data-theme='graphite'] .zx-highlight-v {
+  font-family: var(--font-mono);
+  font-size: calc(1.02rem * var(--hl-scale, 1));
+  font-weight: 500;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme='graphite'] .zx-highlight-l {
+  font-family: var(--font-mono);
+  font-size: calc(0.62rem * var(--hl-scale, 1));
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+}
+
+[data-theme='graphite'] .zx-panel {
+  background: var(--elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: none;
+}
+
+[data-theme='graphite'] .zx-panel h3 {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- 表格 ---------- */
+
+[data-theme='graphite'] .zx-table {
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+}
+
+[data-theme='graphite'] .zx-table th,
+[data-theme='graphite'] .zx-table td {
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--line);
+}
+
+[data-theme='graphite'] .zx-table th {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--fg-muted);
+  background: var(--surface-2);
+}
+
+[data-theme='graphite'] .zx-table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+[data-theme='graphite'] .zx-table td.num,
+[data-theme='graphite'] .zx-table th.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 表单 ---------- */
+
+[data-theme='graphite'] .zx-label {
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--fg-dim);
+}
+
+[data-theme='graphite'] .zx-input,
+[data-theme='graphite'] .zx-textarea {
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  color: var(--fg);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0.65rem 0.8rem;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+[data-theme='graphite'] .zx-input:focus,
+[data-theme='graphite'] .zx-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+[data-theme='graphite'] .zx-input::placeholder,
+[data-theme='graphite'] .zx-textarea::placeholder {
+  color: var(--fg-muted);
+}
+
+/* ---------- 标签 / 状态 ---------- */
+
+[data-theme='graphite'] .zx-badge {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 0.18rem 0.55rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--fg-dim);
+}
+
+[data-theme='graphite'] .zx-status {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+}
+
+[data-theme='graphite'] .zx-tags span,
+[data-theme='graphite'] .zx-tag {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  border-color: var(--line);
+  background: transparent;
+}
+
+/* ---------- 页脚 / 应用栏 ---------- */
+
+[data-theme='graphite'] .zx-footer {
+  border-top: 1px solid var(--line);
+  margin-top: 3rem;
+  padding: 2rem 0 calc(2rem + env(safe-area-inset-bottom));
+}
+
+[data-theme='graphite'] .zx-footer-in {
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  color: var(--fg-muted);
+}
+
+[data-theme='graphite'] .zx-appdock-item {
+  border-radius: var(--r-sm);
+}
+
+[data-theme='graphite'] .zx-appdock-item:hover,
+[data-theme='graphite'] .zx-appdock-item:focus-visible {
+  background: var(--surface-2);
+}
+
+[data-theme='graphite'] .zx-appdock-tip {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  background: var(--elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow);
+}
+
+/* ---------- 细节 ---------- */
+
+[data-theme='graphite'] a {
+  color: var(--fg);
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+[data-theme='graphite'] a:hover {
+  color: var(--accent-strong);
+  text-decoration-color: var(--accent);
+}
+
+[data-theme='graphite'] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+[data-theme='graphite'] ::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+[data-theme='graphite'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme='graphite'] :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 竖排侧栏布局：保持 208px 侧栏，别被上面的顶栏 padding 覆盖 */
+[data-theme='graphite'][data-layout='sidebar'] .zx-topbar {
+  padding: 1.25rem 1rem;
+  border-right: 1px solid var(--line);
+  border-bottom: none;
+  background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-theme='graphite'][data-layout='sidebar'] .zx-topbar-in {
+  gap: 1.25rem;
+}
+
+[data-theme='graphite'][data-layout='sidebar'] .zx-nav {
+  gap: 0.2rem;
+}
+
+[data-theme='graphite'][data-layout='sidebar'] .zx-nav a {
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+}
+
+@media (max-width: 900px) {
+  [data-theme='graphite'] .zx-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+
+  [data-theme='graphite'] .zx-ascii {
+    display: none;
+  }
+
+  [data-theme='graphite'] .zx-section {
+    padding: 2.75rem 0;
+  }
+}
+
+@media (max-width: 640px) {
+  [data-theme='graphite'] .zx-topbar-in {
+    min-height: 56px;
+    flex-wrap: wrap;
+  }
+
+  [data-theme='graphite'] .zx-nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  [data-theme='graphite'] .zx-nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  [data-theme='graphite'] .zx-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-theme='graphite'] .zx-hero h1 {
+    font-size: clamp(2.1rem, 10vw, 2.8rem);
+  }
+
+  [data-theme='graphite'] .zx-card {
+    padding: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='graphite'] *,
+  [data-theme='graphite'] *::before,
+  [data-theme='graphite'] *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

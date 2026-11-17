@@ -30,6 +30,12 @@
 
 ### 变更
 
+- **Graphite 主站改为浅色并恢复两个模块**:按老板反馈，`graphite` 默认从深色改为浅色
+  (`--bg:#FAFAF9` + `--accent:#4F6BED`)，纯黑底阅读太暗的问题解决；同时恢复主页
+  **四周生灵层**(不再用 CSS 隐藏)与 Hero **视频展览模块**(预发库重新启用 vlog)。
+  桌面端生灵可见，移动端仍按 <820px 既有规则不渲染；生产未改动，先在
+  `pilot.zxlumen.cn` 预览。
+
 - **AI 网关新增 `/audio/speech`**:OpenAI 兼容的语音合成端点(请求体 `{input, voice, model,
   speed, response_format}`,返回 `audio/mpeg` 字节流)。上游走密钥池里的音频密钥(SiliconFlow
   CosyVoice2 / MOSS-TTSD),`voice` 写 `anna` 会自动补成 `FunAudioLLM/CosyVoice2-0.5B:anna`;

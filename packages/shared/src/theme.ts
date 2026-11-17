@@ -107,6 +107,17 @@ export const THEMES: Theme[] = [
     motif: MOTIF_WAVE,
   },
   {
+    id: 'graphite',
+    label: 'GRAPHITE',
+    tagline: '石墨中性 · 浅色 · 克制层级 · 低装饰',
+    heroLine: '// build, ship, repeat — 少即是多',
+    key: 'g',
+    texture: 'none',
+    mode: 'light',
+    swatch: ['#FAFAF9', '#4F6BED', '#0F766E'],
+    motif: MOTIF_FRAME,
+  },
+  {
     id: 'nord',
     label: 'NORD',
     tagline: '北欧冷蓝灰 · 克制柔和',

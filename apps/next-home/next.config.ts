@@ -10,6 +10,12 @@ const nextConfig: NextConfig = {
   },
   // 原生模块不要打包,运行时从 node_modules 加载
   serverExternalPackages: ["better-sqlite3"],
+  // webpack 构建（备用/本地预览）同样把 better-sqlite3 留给 Node 运行时解析；
+  // 否则 webpack 会把 binding 打进 chunk，运行时找不到 build/Release/*.node。
+  webpack: (config, { isServer }) => {
+    if (isServer) config.externals = [...(config.externals || []), "better-sqlite3"];
+    return config;
+  },
   // 仅产出运行时所需文件(含被 trace 的最小 node_modules),镜像大幅瘦身;见 docker/Dockerfile
   output: "standalone",
   // 注:本地 `next build` 会把 data/zx.db 复制进 .next/standalone —— 它是被
