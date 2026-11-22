@@ -39,12 +39,17 @@
 # 访问日志(站点级 `log` = access log;全局 `log` 是运行日志,别混)
 # 写 caddy-data 卷(/data),容器重建不丢;不随 Alloy 外发,避免第三方留存访客 IP。
 # 多个站点用完全相同配置时 Caddy 会按 writer 配置共享同一个文件句柄,不会互相踩滚动。
+#
+# ⚠️ 改下面 output file 的滚动参数(roll_size/roll_keep)光 reload 不生效:writer 在进程
+#    启动/首次创建时就把滚动参数读进内存,reload 只换配置、不换已有文件的 writer。
+#    要生效必须让 Caddy 打到一个「新文件名」上(本文件 2026-11-21 由 access.log 改为
+#    access-main.log 就是这个原因)或重启进程。collect.py 会同时读 access*.log / access-*.log.gz。
 (accesslog) {
 	import probes
 	log {
-		output file /data/access.log {
-			roll_size 10MiB
-			roll_keep 5
+		output file /data/access-main.log {
+			roll_size 50MiB
+			roll_keep 72
 		}
 		format json
 	}
