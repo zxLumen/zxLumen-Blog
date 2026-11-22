@@ -102,6 +102,17 @@ if [ "${IMAGE_TAG}" != "latest" ]; then
   cp -r "${SRC_SITES}/." ./caddy/sites/
   echo "==> 子域路由已同步:${SITE_COUNT} 个文件"
 
+  # ---- 防复发:保留「服务器独有」的试点路由 ----
+  # pilot / pilot-stock 目前只存在于服务器(或 pilot 分支),尚未进 main;
+  # 上面的整目录替换会把它们删掉(2026-11-16 / 2026-11-22 即因此丢失,试点域名 TLS alert 80)。
+  # 仓库里没有、但部署前备份里有的,原样补回。
+  for f in pilot.caddy pilot-stock.caddy; do
+    if [ ! -f "./caddy/sites/${f}" ] && [ -f "${BAK}/sites/${f}" ]; then
+      cp -a "${BAK}/sites/${f}" "./caddy/sites/${f}"
+      echo "==> 保留服务器独有路由:${f}"
+    fi
+  done
+
   # ---- 预校验:用 staging 的 Caddyfile + 刚同步的 sites ----
   # 通过才落地;不通过就把 sites 原地恢复,线上文件一个字节不动。
   cp "${TMP}/docker/Caddyfile"          ./Caddyfile.staged
