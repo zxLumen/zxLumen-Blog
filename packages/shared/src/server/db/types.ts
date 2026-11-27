@@ -108,8 +108,12 @@ export interface Db {
   setFeedbackStatus(id: number, status: 'pending' | 'sent' | 'failed'): void
   /** 记录埋点事件(访问/项目点击/简历下载) */
   addEvent(input: NewEventInput): void
+  /** 批量写埋点:一个事务,避免高并发下每条一次 fsync 把事件循环堵住 */
+  addEvents(inputs: NewEventInput[]): void
   /** 同上但按 (cid, day, type, target) 去重(同一人同一天同一目标只记一次),返回是否真的写入 */
   addEventOnce(input: NewEventInput): boolean
+  /** 批量去重写(单事务;用于 vlog_play 这类需要 dedup 的事件) */
+  addEventsOnce(inputs: NewEventInput[]): void
   /** 应用卡片漏斗:最近 days 天按应用 id 聚合曝光 / 点击 / s3 / r7(应用流 /apps 排序用) */
   appFunnel(days?: number): AppFunnelRow[]
   /** 某访客最近 days 天点开过的应用(打开次数 + 最后一次的北京日) */
@@ -212,7 +216,7 @@ export type CommentStore = Pick<
 export type UsageStore = Pick<Db, 'listUsage' | 'allUsage' | 'addUsage'>
 export type AiUsageStore = Pick<Db, 'addAiUsage' | 'listAiUsage' | 'resetAiUsage'>
 export type FeedbackStore = Pick<Db, 'addFeedback' | 'setFeedbackStatus'>
-export type EventStore = Pick<Db, 'addEvent' | 'addEventOnce' | 'appFunnel' | 'viewerAppHistory'>
+export type EventStore = Pick<Db, 'addEvent' | 'addEvents' | 'addEventOnce' | 'addEventsOnce' | 'appFunnel' | 'viewerAppHistory'>
 export type StatsStore = Pick<Db, 'stats'>
 export type MetaStore = Pick<Db, 'getMeta' | 'setMeta' | 'delMeta' | 'listMetaKeys'>
 export type VisitorStore = Pick<Db, 'getVisitorAlias' | 'listVisitorAliases' | 'setVisitorAlias'>

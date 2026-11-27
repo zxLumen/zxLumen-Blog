@@ -26,4 +26,11 @@ describe('埋点上报', () => {
   it('超长 target 被截断,不报错 → 204', async () => {
     expect((await send({ type: 'project_click', target: 'x'.repeat(5000) })).status).toBe(204)
   })
+
+  it('50 并发上报全部 204(写库失败也不会升级成 5xx)', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 50 }, (_, i) => send({ type: 'visit', target: `/burst-${i}`, ref: '/' })),
+    )
+    expect(results.every((r) => r.status === 204)).toBe(true)
+  })
 })

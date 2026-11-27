@@ -25,6 +25,17 @@ export function eventStore(db: SqliteDb): EventStore {
       ).run(params(input))
     },
 
+    addEvents(inputs: NewEventInput[]) {
+      if (inputs.length === 0) return
+      const insert = db.prepare(
+        `INSERT INTO events (ts, day, cid, type, target, ua, referrer, dwell, session, pos)
+         VALUES (@ts, @day, @cid, @type, @target, @ua, @referrer, @dwell, @session, @pos)`,
+      )
+      db.transaction((rows: NewEventInput[]) => {
+        for (const row of rows) insert.run(params(row))
+      })(inputs)
+    },
+
     /**
      * 去重写入:同一 `(cid, day, type, target)` 已存在则不写,返回是否真的写入。
      * 用 `INSERT ... SELECT ... WHERE NOT EXISTS` 单条 SQL 完成,天然抗并发重复
@@ -42,6 +53,21 @@ export function eventStore(db: SqliteDb): EventStore {
         )
         .run(params(input))
       return info.changes > 0
+    },
+
+    addEventsOnce(inputs: NewEventInput[]) {
+      if (inputs.length === 0) return
+      const insert = db.prepare(
+        `INSERT INTO events (ts, day, cid, type, target, ua, referrer, dwell, session, pos)
+         SELECT @ts, @day, @cid, @type, @target, @ua, @referrer, @dwell, @session, @pos
+         WHERE NOT EXISTS (
+           SELECT 1 FROM events
+           WHERE type=@type AND cid=@cid AND day=@day AND target=@target
+         )`,
+      )
+      db.transaction((rows: NewEventInput[]) => {
+        for (const row of rows) insert.run(params(row))
+      })(inputs)
     },
 
     /**
